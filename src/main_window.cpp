@@ -1,13 +1,17 @@
 #include "main_window.h"
 
+#include "default_palette.h"
 #include "lev_reader.h"
 #include "lev_writer.h"
 #include "level_canvas.h"
+#include "palette_io.h"
+#include "palette_rules.h"
 #include "palette_widget.h"
 
 #include <QAction>
 #include <QButtonGroup>
 #include <QCloseEvent>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -19,22 +23,69 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPainter>
-#include <QPixmap>
-#include <QPolygon>
+#include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QValidator>
 #include <QWidget>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
+
+class PaletteIndexSpinBox final : public QSpinBox {
+public:
+    using QSpinBox::QSpinBox;
+
+protected:
+    void stepBy(const int steps) override
+    {
+        const int direction = steps < 0 ? -1 : 1;
+        int candidate = value();
+        for (int step = 0; step < std::abs(steps); ++step) {
+            do {
+                candidate += direction;
+            } while (candidate >= minimum() && candidate <= maximum() &&
+                     isReservedPaletteIndex(candidate));
+            candidate = std::clamp(candidate, minimum(), maximum());
+        }
+        setValue(candidate);
+    }
+
+    QValidator::State validate(QString& input, int& position) const override
+    {
+        const QValidator::State state = QSpinBox::validate(input, position);
+        if (state == QValidator::Acceptable &&
+            isReservedPaletteIndex(input.toInt())) {
+            return QValidator::Intermediate;
+        }
+        return state;
+    }
+
+    void fixup(QString& input) const override
+    {
+        bool valid = false;
+        int value = input.toInt(&valid);
+        if (valid && isReservedPaletteIndex(value)) {
+            while (value <= maximum() && isReservedPaletteIndex(value)) {
+                ++value;
+            }
+            input = QString::number(std::min(value, maximum()));
+            return;
+        }
+        QSpinBox::fixup(input);
+    }
+};
 
 std::filesystem::path toPath(const QString& path)
 {
@@ -48,8 +99,7 @@ QString toQString(const std::filesystem::path& path)
 
 QString materialDescription(const int index)
 {
-    if ((index >= 2 && index <= 15) || index == 31 || index == 38 ||
-        index == 47) {
+    if (isReservedPaletteIndex(index)) {
         return QStringLiteral("Reserved (do not use)");
     }
     if (index >= 20 && index <= 30) {
@@ -142,66 +192,105 @@ QString materialDescription(const int index)
     }
 }
 
+enum class PaletteGroup {
+    AllUsable,
+    Background,
+    Water,
+    FlyThrough,
+    Font,
+    Special,
+    NormalTerrain,
+    Burnable,
+    Underwater,
+    Indestructible,
+    Turrets,
+};
+
+void appendRange(std::vector<std::uint8_t>& indices, const int first,
+                 const int last)
+{
+    for (int index = first; index <= last; ++index) {
+        indices.push_back(static_cast<std::uint8_t>(index));
+    }
+}
+
+std::vector<std::uint8_t> paletteIndices(const PaletteGroup group)
+{
+    std::vector<std::uint8_t> indices;
+    indices.reserve(256);
+    switch (group) {
+    case PaletteGroup::AllUsable:
+        indices.push_back(1);
+        appendRange(indices, 16, 30);
+        appendRange(indices, 32, 37);
+        appendRange(indices, 39, 46);
+        appendRange(indices, 48, 52);
+        appendRange(indices, 56, 174);
+        appendRange(indices, 176, 199);
+        appendRange(indices, 201, 219);
+        appendRange(indices, 221, 255);
+        break;
+    case PaletteGroup::Background:
+        indices.push_back(1);
+        break;
+    case PaletteGroup::Water:
+        appendRange(indices, 16, 19);
+        break;
+    case PaletteGroup::FlyThrough:
+        appendRange(indices, 20, 30);
+        break;
+    case PaletteGroup::Font:
+        appendRange(indices, 32, 37);
+        break;
+    case PaletteGroup::Special:
+        appendRange(indices, 39, 46);
+        appendRange(indices, 48, 52);
+        indices.push_back(56);
+        break;
+    case PaletteGroup::NormalTerrain:
+        appendRange(indices, 57, 149);
+        break;
+    case PaletteGroup::Burnable:
+        appendRange(indices, 150, 174);
+        appendRange(indices, 176, 199);
+        break;
+    case PaletteGroup::Underwater:
+        appendRange(indices, 201, 219);
+        break;
+    case PaletteGroup::Indestructible:
+        appendRange(indices, 221, 243);
+        appendRange(indices, 248, 255);
+        break;
+    case PaletteGroup::Turrets:
+        appendRange(indices, 244, 247);
+        break;
+    }
+    return indices;
+}
+
 QIcon toolIcon(const DrawTool tool)
 {
-    QPixmap pixmap(28, 28);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(pixmap.rect().adjusted(1, 1, -1, -1),
-                     QColor(245, 245, 245));
-    painter.setPen(QPen(QColor(150, 150, 150), 1));
-    painter.drawRect(pixmap.rect().adjusted(1, 1, -2, -2));
-    painter.setPen(QPen(Qt::black, 2));
-    painter.setBrush(Qt::NoBrush);
-
     switch (tool) {
     case DrawTool::Pencil:
-        painter.drawLine(6, 22, 21, 7);
-        painter.drawLine(8, 24, 23, 9);
-        painter.drawLine(6, 22, 8, 24);
-        break;
-    case DrawTool::Eraser: {
-        QPolygon polygon;
-        polygon << QPoint(5, 18) << QPoint(14, 7) << QPoint(23, 14)
-                << QPoint(14, 23);
-        painter.setBrush(QColor(245, 170, 180));
-        painter.drawPolygon(polygon);
-        break;
-    }
+        return QIcon(QStringLiteral(":/icons/icons/pencil.svg"));
+    case DrawTool::Eraser:
+        return QIcon(QStringLiteral(":/icons/icons/eraser.svg"));
     case DrawTool::Line:
-        painter.drawLine(5, 23, 23, 5);
-        break;
+        return QIcon(QStringLiteral(":/icons/icons/line.svg"));
     case DrawTool::Rectangle:
-        painter.drawRect(5, 6, 18, 16);
-        break;
+        return QIcon(QStringLiteral(":/icons/icons/rectangle.svg"));
     case DrawTool::FilledRectangle:
-        painter.setBrush(QColor(80, 80, 80));
-        painter.drawRect(5, 6, 18, 16);
-        break;
-    case DrawTool::FloodFill: {
-        QPolygon bucket;
-        bucket << QPoint(6, 9) << QPoint(16, 7) << QPoint(21, 17)
-               << QPoint(11, 21);
-        painter.drawPolygon(bucket);
-        painter.setBrush(QColor(70, 130, 220));
-        painter.drawEllipse(20, 20, 4, 4);
-        break;
-    }
+        return QIcon(QStringLiteral(":/icons/icons/rectangle-filled.svg"));
+    case DrawTool::FloodFill:
+        return QIcon(QStringLiteral(":/icons/icons/bucket-droplet.svg"));
     case DrawTool::Eyedropper:
-        painter.drawLine(7, 22, 21, 8);
-        painter.drawEllipse(18, 5, 6, 6);
-        painter.drawLine(5, 24, 9, 20);
-        break;
+        return QIcon(QStringLiteral(":/icons/icons/color-picker.svg"));
     case DrawTool::Ellipse:
-        painter.drawEllipse(4, 6, 20, 16);
-        break;
+        return QIcon(QStringLiteral(":/icons/icons/ellipse.svg"));
     case DrawTool::FilledEllipse:
-        painter.setBrush(QColor(80, 80, 80));
-        painter.drawEllipse(4, 6, 20, 16);
-        break;
+        return QIcon(QStringLiteral(":/icons/icons/ellipse-filled.svg"));
     }
-    return QIcon(pixmap);
+    return {};
 }
 
 } // namespace
@@ -210,10 +299,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), level_(std::make_unique<Level>())
 {
     level_->name = "UNTITLED";
-    for (std::size_t index = 0; index < level_->palette.size(); ++index) {
-        const auto value = static_cast<std::uint8_t>(index);
-        level_->palette[index] = RGB{value, value, value};
-    }
+    level_->palette = defaultVWingPalette();
 
     canvas_ = new LevelCanvas(this);
     canvas_->setLevel(level_.get());
@@ -310,6 +396,11 @@ void MainWindow::createMaterialDock()
         button->setIcon(toolIcon(tool));
         button->setIconSize(QSize(28, 28));
         button->setFixedSize(42, 42);
+        button->setStyleSheet(QStringLiteral(
+            "QToolButton { background: #f5f5f5; border: 1px solid #808080; }"
+            "QToolButton:hover { background: #e8f2ff; }"
+            "QToolButton:checked { background: #b9d9ff; border: 2px inset "
+            "#5078a0; }"));
         button->setToolTip(tr(label));
         button->setAccessibleName(tr(label));
         toolGroup->addButton(button, static_cast<int>(tool));
@@ -323,33 +414,100 @@ void MainWindow::createMaterialDock()
     layout->addWidget(toolGrid);
     auto* activeToolLabel = new QLabel(tr("Pencil"), contents);
     layout->addWidget(activeToolLabel);
-    connect(toolGroup, &QButtonGroup::idClicked, this,
-            [this, activeToolLabel, tools](const int id) {
-                canvas_->setDrawTool(static_cast<DrawTool>(id));
-                for (const auto& [label, tool] : tools) {
-                    if (static_cast<int>(tool) == id) {
-                        activeToolLabel->setText(tr(label));
-                        break;
-                    }
+
+    auto* thicknessLayout = new QHBoxLayout();
+    thicknessLayout->addWidget(new QLabel(tr("Thickness:"), contents));
+    auto* thicknessSpinBox = new QSpinBox(contents);
+    thicknessSpinBox->setRange(1, 32);
+    thicknessSpinBox->setSuffix(tr(" px"));
+    thicknessSpinBox->setValue(canvas_->toolThickness(DrawTool::Pencil));
+    thicknessLayout->addWidget(thicknessSpinBox);
+    layout->addLayout(thicknessLayout);
+    connect(
+        toolGroup, &QButtonGroup::idClicked, this,
+        [this, activeToolLabel, thicknessSpinBox, tools](const int id) {
+            const auto selectedTool = static_cast<DrawTool>(id);
+            canvas_->setDrawTool(selectedTool);
+            for (const auto& [label, tool] : tools) {
+                if (static_cast<int>(tool) == id) {
+                    activeToolLabel->setText(tr(label));
+                    break;
                 }
+            }
+            const bool supportsThickness = selectedTool == DrawTool::Pencil ||
+                                           selectedTool == DrawTool::Eraser ||
+                                           selectedTool == DrawTool::Line;
+            const QSignalBlocker blocker(thicknessSpinBox);
+            thicknessSpinBox->setEnabled(supportsThickness);
+            thicknessSpinBox->setValue(canvas_->toolThickness(selectedTool));
+        });
+    connect(thicknessSpinBox, &QSpinBox::valueChanged, this,
+            [this, toolGroup](const int value) {
+                canvas_->setToolThickness(
+                    static_cast<DrawTool>(toolGroup->checkedId()), value);
             });
 
     layout->addSpacing(6);
     layout->addWidget(new QLabel(tr("Palette"), contents));
+    auto* paletteGroupCombo = new QComboBox(contents);
+    const std::array<std::pair<const char*, PaletteGroup>, 11> paletteGroups{{
+        {"All documented usable", PaletteGroup::AllUsable},
+        {"Background (1)", PaletteGroup::Background},
+        {"Water (16-19)", PaletteGroup::Water},
+        {"Fly through (20-30)", PaletteGroup::FlyThrough},
+        {"Font (32-37)", PaletteGroup::Font},
+        {"Special materials (39-56)", PaletteGroup::Special},
+        {"Normal terrain (57-149)", PaletteGroup::NormalTerrain},
+        {"Burnable (150-199)", PaletteGroup::Burnable},
+        {"Underwater (201-219)", PaletteGroup::Underwater},
+        {"Indestructible (221-243, 248-255)", PaletteGroup::Indestructible},
+        {"Turrets (244-247)", PaletteGroup::Turrets},
+    }};
+    for (const auto& [label, group] : paletteGroups) {
+        paletteGroupCombo->addItem(tr(label), static_cast<int>(group));
+    }
+    layout->addWidget(paletteGroupCombo);
     paletteWidget_ = new PaletteWidget(contents);
     paletteWidget_->setLevel(level_.get());
+    paletteWidget_->setIndices(paletteIndices(PaletteGroup::AllUsable));
     layout->addWidget(paletteWidget_);
 
     auto* indexLayout = new QHBoxLayout();
     indexLayout->addWidget(new QLabel(tr("Index:"), contents));
-    materialIndexSpinBox_ = new QSpinBox(contents);
+    materialIndexSpinBox_ = new PaletteIndexSpinBox(contents);
     materialIndexSpinBox_->setRange(0, 255);
     materialIndexSpinBox_->setValue(57);
+    materialIndexSpinBox_->setToolTip(
+        tr("Reserved Color Chart indices cannot be selected"));
     indexLayout->addWidget(materialIndexSpinBox_);
     layout->addLayout(indexLayout);
     materialDetailsLabel_ = new QLabel(contents);
     layout->addWidget(materialDetailsLabel_);
+    auto* editColorButton =
+        new QPushButton(tr("Edit selected color..."), contents);
+    layout->addWidget(editColorButton);
+    auto* paletteFileLayout = new QHBoxLayout();
+    auto* loadPaletteButton = new QPushButton(tr("Load palette..."), contents);
+    auto* savePaletteButton = new QPushButton(tr("Save palette..."), contents);
+    paletteFileLayout->addWidget(loadPaletteButton);
+    paletteFileLayout->addWidget(savePaletteButton);
+    layout->addLayout(paletteFileLayout);
     layout->addStretch();
+    connect(paletteGroupCombo, &QComboBox::currentIndexChanged, this,
+            [this, paletteGroupCombo](const int index) {
+                auto indices = paletteIndices(static_cast<PaletteGroup>(
+                    paletteGroupCombo->itemData(index).toInt()));
+                const auto selected =
+                    static_cast<std::uint8_t>(materialIndexSpinBox_->value());
+                const bool selectionVisible =
+                    std::find(indices.begin(), indices.end(), selected) !=
+                    indices.end();
+                const int firstIndex = indices.empty() ? 0 : indices.front();
+                paletteWidget_->setIndices(std::move(indices));
+                if (!selectionVisible) {
+                    materialIndexSpinBox_->setValue(firstIndex);
+                }
+            });
     connect(materialIndexSpinBox_, &QSpinBox::valueChanged, this,
             [this](const int value) {
                 canvas_->setSelectedIndex(static_cast<std::uint8_t>(value));
@@ -361,6 +519,24 @@ void MainWindow::createMaterialDock()
             &QSpinBox::setValue);
     connect(paletteWidget_, &PaletteWidget::indexSelected,
             materialIndexSpinBox_, &QSpinBox::setValue);
+    connect(paletteWidget_, &PaletteWidget::indexEditRequested, this,
+            [this](const int index) {
+                materialIndexSpinBox_->setValue(index);
+                editSelectedPaletteColor();
+            });
+    connect(editColorButton, &QPushButton::clicked, this,
+            &MainWindow::editSelectedPaletteColor);
+    connect(loadPaletteButton, &QPushButton::clicked, this,
+            &MainWindow::loadPalette);
+    connect(savePaletteButton, &QPushButton::clicked, this,
+            &MainWindow::savePalette);
+    connect(canvas_, &LevelCanvas::paletteColorChanged, this,
+            [this](const int index) {
+                paletteWidget_->update();
+                if (index < 0 || index == materialIndexSpinBox_->value()) {
+                    updateMaterialDetails(materialIndexSpinBox_->value());
+                }
+            });
     updateMaterialDetails(materialIndexSpinBox_->value());
 
     dock->setWidget(contents);
@@ -487,6 +663,58 @@ bool MainWindow::writeLevel(const std::filesystem::path& path)
     setModified(false);
     statusBar()->showMessage(tr("Saved %1").arg(toQString(path)), 3000);
     return true;
+}
+
+void MainWindow::editSelectedPaletteColor()
+{
+    const int index = materialIndexSpinBox_->value();
+    const RGB& current = level_->palette[static_cast<std::size_t>(index)];
+    const QColor selected =
+        QColorDialog::getColor(QColor(current.r, current.g, current.b), this,
+                               tr("Palette index %1").arg(index));
+    if (!selected.isValid()) {
+        return;
+    }
+    canvas_->setPaletteColor(static_cast<std::uint8_t>(index),
+                             RGB{static_cast<std::uint8_t>(selected.red()),
+                                 static_cast<std::uint8_t>(selected.green()),
+                                 static_cast<std::uint8_t>(selected.blue())});
+}
+
+void MainWindow::loadPalette()
+{
+    const QString filename = QFileDialog::getOpenFileName(
+        this, tr("Load palette"), QString(), tr("JASC palettes (*.pal)"));
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    std::array<RGB, 256> palette{};
+    std::string error;
+    if (!loadJascPalette(toPath(filename), palette, error)) {
+        QMessageBox::critical(this, tr("Palette load failed"),
+                              QString::fromStdString(error));
+        return;
+    }
+    canvas_->setPalette(palette);
+    statusBar()->showMessage(tr("Loaded palette %1").arg(filename), 3000);
+}
+
+void MainWindow::savePalette()
+{
+    const QString filename = QFileDialog::getSaveFileName(
+        this, tr("Save palette"), QString(), tr("JASC palettes (*.pal)"));
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    std::string error;
+    if (!saveJascPalette(toPath(filename), level_->palette, error)) {
+        QMessageBox::critical(this, tr("Palette save failed"),
+                              QString::fromStdString(error));
+        return;
+    }
+    statusBar()->showMessage(tr("Saved palette %1").arg(filename), 3000);
 }
 
 void MainWindow::setModified(const bool modified)

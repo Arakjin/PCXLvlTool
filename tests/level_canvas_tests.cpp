@@ -2,6 +2,7 @@
 #include "palette_widget.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QImage>
 #include <QMouseEvent>
 
@@ -61,7 +62,7 @@ int main(int argc, char* argv[])
     LevelCanvas canvas;
     canvas.resize(320, 240);
     canvas.setLevel(&level);
-    canvas.setSelectedIndex(7);
+    canvas.setSelectedIndex(57);
     canvas.show();
     application.processEvents();
 
@@ -70,9 +71,9 @@ int main(int argc, char* argv[])
 
     bool ok = true;
     const std::size_t rowOffset = Level::Width;
-    ok &= expect(level.pixels[rowOffset + 1] == 7 &&
-                     level.pixels[rowOffset + 2] == 7 &&
-                     level.pixels[rowOffset + 3] == 7,
+    ok &= expect(level.pixels[rowOffset + 1] == 57 &&
+                     level.pixels[rowOffset + 2] == 57 &&
+                     level.pixels[rowOffset + 3] == 57,
                  "a drag should draw every pixel along the stroke");
     ok &= expect(canvas.undoStack()->count() == 1,
                  "one drag should create one undo command");
@@ -88,9 +89,9 @@ int main(int argc, char* argv[])
                  "undoing the first stroke should restore the clean state");
 
     canvas.undoStack()->redo();
-    ok &= expect(level.pixels[rowOffset + 1] == 7 &&
-                     level.pixels[rowOffset + 2] == 7 &&
-                     level.pixels[rowOffset + 3] == 7,
+    ok &= expect(level.pixels[rowOffset + 1] == 57 &&
+                     level.pixels[rowOffset + 2] == 57 &&
+                     level.pixels[rowOffset + 3] == 57,
                  "redo should reapply every pixel in the stroke");
 
     click(viewport, {2.5, 1.5});
@@ -100,20 +101,20 @@ int main(int argc, char* argv[])
     canvas.setLevel(nullptr);
     level = Level{};
     canvas.setLevel(&level);
-    canvas.setSelectedIndex(8);
+    canvas.setSelectedIndex(58);
     canvas.setDrawTool(DrawTool::Line);
     drag(viewport, {10.5, 10.5}, {13.5, 10.5});
-    ok &= expect(level.pixels[offset(10, 10)] == 8 &&
-                     level.pixels[offset(11, 10)] == 8 &&
-                     level.pixels[offset(12, 10)] == 8 &&
-                     level.pixels[offset(13, 10)] == 8,
+    ok &= expect(level.pixels[offset(10, 10)] == 58 &&
+                     level.pixels[offset(11, 10)] == 58 &&
+                     level.pixels[offset(12, 10)] == 58 &&
+                     level.pixels[offset(13, 10)] == 58,
                  "line should draw both endpoints and the pixels between them");
     ok &= expect(canvas.undoStack()->count() == 1,
                  "line should create one undo command");
 
     canvas.setLevel(nullptr);
     level = Level{};
-    level.palette[8] = RGB{255, 0, 0};
+    level.palette[58] = RGB{255, 0, 0};
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Line);
     const QImage beforePreview = viewport->grab().toImage();
@@ -135,8 +136,8 @@ int main(int argc, char* argv[])
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Rectangle);
     drag(viewport, {20.5, 20.5}, {22.5, 22.5});
-    ok &= expect(level.pixels[offset(20, 20)] == 8 &&
-                     level.pixels[offset(22, 22)] == 8 &&
+    ok &= expect(level.pixels[offset(20, 20)] == 58 &&
+                     level.pixels[offset(22, 22)] == 58 &&
                      level.pixels[offset(21, 21)] == 0,
                  "rectangle should draw an unfilled outline");
 
@@ -145,9 +146,9 @@ int main(int argc, char* argv[])
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::FilledRectangle);
     drag(viewport, {30.5, 30.5}, {32.5, 32.5});
-    ok &= expect(level.pixels[offset(30, 30)] == 8 &&
-                     level.pixels[offset(31, 31)] == 8 &&
-                     level.pixels[offset(32, 32)] == 8,
+    ok &= expect(level.pixels[offset(30, 30)] == 58 &&
+                     level.pixels[offset(31, 31)] == 58 &&
+                     level.pixels[offset(32, 32)] == 58,
                  "filled rectangle should also draw its interior");
 
     canvas.setLevel(nullptr);
@@ -155,7 +156,7 @@ int main(int argc, char* argv[])
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Ellipse);
     drag(viewport, {35.5, 35.5}, {41.5, 41.5});
-    ok &= expect(level.pixels[offset(38, 35)] == 8 &&
+    ok &= expect(level.pixels[offset(38, 35)] == 58 &&
                      level.pixels[offset(38, 38)] == 0,
                  "ellipse should draw an unfilled outline");
 
@@ -164,7 +165,7 @@ int main(int argc, char* argv[])
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::FilledEllipse);
     drag(viewport, {45.5, 45.5}, {51.5, 51.5});
-    ok &= expect(level.pixels[offset(48, 48)] == 8,
+    ok &= expect(level.pixels[offset(48, 48)] == 58,
                  "filled ellipse should draw its interior");
 
     canvas.setLevel(nullptr);
@@ -176,11 +177,11 @@ int main(int argc, char* argv[])
         level.pixels[offset(64, coordinate)] = 1;
     }
     canvas.setLevel(&level);
-    canvas.setSelectedIndex(9);
+    canvas.setSelectedIndex(59);
     canvas.setDrawTool(DrawTool::FloodFill);
     click(viewport, {62.5, 62.5});
-    ok &= expect(level.pixels[offset(61, 61)] == 9 &&
-                     level.pixels[offset(63, 63)] == 9 &&
+    ok &= expect(level.pixels[offset(61, 61)] == 59 &&
+                     level.pixels[offset(63, 63)] == 59 &&
                      level.pixels[offset(60, 62)] == 1 &&
                      level.pixels[offset(59, 62)] == 0,
                  "flood fill should stop at a different palette index");
@@ -193,7 +194,7 @@ int main(int argc, char* argv[])
     level = Level{};
     level.pixels[offset(40, 40)] = 123;
     canvas.setLevel(&level);
-    canvas.setSelectedIndex(9);
+    canvas.setSelectedIndex(59);
     int pickedIndex = -1;
     QObject::connect(&canvas, &LevelCanvas::selectedIndexChanged,
                      [&pickedIndex](const int index) { pickedIndex = index; });
@@ -216,6 +217,74 @@ int main(int argc, char* argv[])
     ok &= expect(level.pixels[offset(50, 50)] == 77,
                  "eraser should restore the old index when undone");
 
+    canvas.setLevel(nullptr);
+    level = Level{};
+    level.palette[42] = RGB{1, 2, 3};
+    canvas.setLevel(&level);
+    int changedPaletteIndex = -1;
+    QObject::connect(&canvas, &LevelCanvas::paletteColorChanged,
+                     [&changedPaletteIndex](const int index) {
+                         changedPaletteIndex = index;
+                     });
+    canvas.setPaletteColor(42, RGB{10, 20, 30});
+    ok &= expect(level.palette[42] == RGB{10, 20, 30} &&
+                     changedPaletteIndex == 42,
+                 "palette color edit should update the exact index");
+    canvas.undoStack()->undo();
+    ok &= expect(level.palette[42] == RGB{1, 2, 3},
+                 "palette color edit should be undoable");
+    canvas.undoStack()->redo();
+    ok &= expect(level.palette[42] == RGB{10, 20, 30},
+                 "palette color edit should be redoable");
+    auto replacementPalette = level.palette;
+    replacementPalette[16] = RGB{40, 80, 160};
+    canvas.setPalette(replacementPalette);
+    ok &= expect(level.palette[16] == RGB{40, 80, 160},
+                 "complete palette replacement should apply every entry");
+    canvas.undoStack()->undo();
+    ok &= expect(level.palette[16] == RGB{},
+                 "complete palette replacement should be undoable");
+
+    canvas.setLevel(nullptr);
+    level = Level{};
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Pencil);
+    canvas.setSelectedIndex(58);
+    canvas.setSelectedIndex(2);
+    canvas.setToolThickness(DrawTool::Pencil, 3);
+    click(viewport, {80.5, 80.5});
+    ok &= expect(level.pixels[offset(79, 79)] == 58 &&
+                     level.pixels[offset(81, 81)] == 58,
+                 "thick pencil should paint its configured square footprint");
+    ok &= expect(canvas.toolThickness(DrawTool::Pencil) == 3,
+                 "pencil should remember its own thickness");
+
+    canvas.setLevel(nullptr);
+    level = Level{};
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Line);
+    canvas.setSelectedIndex(59);
+    canvas.setToolThickness(DrawTool::Line, 3);
+    drag(viewport, {90.5, 90.5}, {94.5, 90.5});
+    ok &= expect(level.pixels[offset(92, 89)] == 59 &&
+                     level.pixels[offset(92, 91)] == 59,
+                 "line should use its configured thickness");
+
+    canvas.setLevel(nullptr);
+    level = Level{};
+    for (int y = 99; y <= 102; ++y) {
+        for (int x = 99; x <= 102; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Eraser);
+    canvas.setToolThickness(DrawTool::Eraser, 4);
+    click(viewport, {100.5, 100.5});
+    ok &= expect(level.pixels[offset(99, 99)] == 0 &&
+                     level.pixels[offset(102, 102)] == 0,
+                 "eraser should use its independently configured thickness");
+
     PaletteWidget palette;
     palette.setLevel(&level);
     palette.show();
@@ -229,6 +298,29 @@ int main(int argc, char* argv[])
                      1.0 + 7 * paletteCell + paletteCell / 2.0});
     ok &= expect(paletteIndex == 125,
                  "palette click should preserve the exact grid index");
+    palette.setIndices({16, 17, 18, 19});
+    paletteIndex = -1;
+    application.processEvents();
+    click(&palette,
+          {1.0 + 2 * paletteCell + paletteCell / 2.0, 1.0 + paletteCell / 2.0});
+    ok &= expect(paletteIndex == 18,
+                 "filtered palette should map cells to their original indices");
+
+    int editRequestedIndex = -1;
+    QObject::connect(
+        &palette, &PaletteWidget::indexEditRequested,
+        [&editRequestedIndex](const int index) { editRequestedIndex = index; });
+    sendMouseEvent(
+        &palette, QEvent::MouseButtonDblClick,
+        {1.0 + 3 * paletteCell + paletteCell / 2.0, 1.0 + paletteCell / 2.0},
+        Qt::LeftButton, Qt::LeftButton);
+    ok &= expect(editRequestedIndex == 19,
+                 "palette double-click should edit the exact filtered index");
+
+    ok &= expect(
+        !QIcon(QStringLiteral(":/icons/icons/pencil.svg")).isNull() &&
+            !QIcon(QStringLiteral(":/icons/icons/bucket-droplet.svg")).isNull(),
+        "embedded Tabler tool icons should load from resources");
 
     if (ok) {
         std::cout << "All level canvas tests passed\n";

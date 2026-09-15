@@ -105,8 +105,14 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   Paint-style pencil, eraser, line, outline/filled rectangle, outline/filled
   ellipse, flood-fill, and eyedropper tools are implemented. Shape tools have
   a live preview. The palette viewer exposes all 256 exact indices, RGB values,
-  and converter-documented material meanings. Canvas and palette interaction
-  paths are covered by offscreen tests.
+  and converter-documented material meanings. It can filter to documented,
+  usable Color Chart groups without reserved indices, while direct index input
+  rejects the chart's reserved entries. Individual RGB entries and complete
+  JASC-PAL files can be edited, loaded, and saved; palette changes use the same
+  undo history as pixel edits. Untitled levels receive an explicitly
+  editor-designed starter palette. Pencil, eraser, and line thicknesses are
+  independently configurable. Canvas and palette interaction paths are covered
+  by offscreen tests.
 
 ## Questions to investigate
 

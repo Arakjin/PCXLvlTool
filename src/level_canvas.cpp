@@ -1,5 +1,7 @@
 #include "level_canvas.h"
 
+#include "palette_rules.h"
+
 #include <QEvent>
 #include <QImage>
 #include <QMouseEvent>
@@ -45,6 +47,45 @@ private:
     LevelCanvas* canvas_;
 };
 
+class PaletteEditCommand final : public QUndoCommand {
+public:
+    PaletteEditCommand(LevelCanvas* canvas, const std::uint8_t index,
+                       const RGB oldColor, const RGB newColor)
+        : canvas_(canvas), index_(index), oldColor_(oldColor),
+          newColor_(newColor)
+    {
+        setText(QObject::tr("Change palette color"));
+    }
+
+    void undo() override { canvas_->applyPaletteColor(index_, oldColor_); }
+    void redo() override { canvas_->applyPaletteColor(index_, newColor_); }
+
+private:
+    LevelCanvas* canvas_;
+    std::uint8_t index_;
+    RGB oldColor_;
+    RGB newColor_;
+};
+
+class PaletteReplaceCommand final : public QUndoCommand {
+public:
+    PaletteReplaceCommand(LevelCanvas* canvas, std::array<RGB, 256> oldPalette,
+                          std::array<RGB, 256> newPalette)
+        : canvas_(canvas), oldPalette_(std::move(oldPalette)),
+          newPalette_(std::move(newPalette))
+    {
+        setText(QObject::tr("Load palette"));
+    }
+
+    void undo() override { canvas_->applyPalette(oldPalette_); }
+    void redo() override { canvas_->applyPalette(newPalette_); }
+
+private:
+    LevelCanvas* canvas_;
+    std::array<RGB, 256> oldPalette_;
+    std::array<RGB, 256> newPalette_;
+};
+
 } // namespace
 
 LevelCanvas::LevelCanvas(QWidget* parent) : QAbstractScrollArea(parent)
@@ -87,7 +128,7 @@ void LevelCanvas::setZoom(const double zoom)
 
 void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 {
-    if (selectedIndex_ == index) {
+    if (selectedIndex_ == index || isReservedPaletteIndex(index)) {
         return;
     }
     selectedIndex_ = index;
@@ -95,6 +136,69 @@ void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 }
 
 void LevelCanvas::setDrawTool(const DrawTool tool) { drawTool_ = tool; }
+
+void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
+{
+    const int value = std::clamp(thickness, 1, 32);
+    if (tool == DrawTool::Pencil) {
+        pencilThickness_ = value;
+    } else if (tool == DrawTool::Eraser) {
+        eraserThickness_ = value;
+    } else if (tool == DrawTool::Line) {
+        lineThickness_ = value;
+    }
+}
+
+int LevelCanvas::toolThickness(const DrawTool tool) const
+{
+    if (tool == DrawTool::Pencil) {
+        return pencilThickness_;
+    }
+    if (tool == DrawTool::Eraser) {
+        return eraserThickness_;
+    }
+    if (tool == DrawTool::Line) {
+        return lineThickness_;
+    }
+    return 1;
+}
+
+void LevelCanvas::setPaletteColor(const std::uint8_t index, const RGB color)
+{
+    if (level_ == nullptr || level_->palette[index] == color) {
+        return;
+    }
+    undoStack_.push(
+        new PaletteEditCommand(this, index, level_->palette[index], color));
+}
+
+void LevelCanvas::applyPaletteColor(const std::uint8_t index, const RGB color)
+{
+    if (level_ == nullptr) {
+        return;
+    }
+    level_->palette[index] = color;
+    viewport()->update();
+    emit paletteColorChanged(index);
+}
+
+void LevelCanvas::setPalette(const std::array<RGB, 256>& palette)
+{
+    if (level_ == nullptr || level_->palette == palette) {
+        return;
+    }
+    undoStack_.push(new PaletteReplaceCommand(this, level_->palette, palette));
+}
+
+void LevelCanvas::applyPalette(const std::array<RGB, 256>& palette)
+{
+    if (level_ == nullptr) {
+        return;
+    }
+    level_->palette = palette;
+    viewport()->update();
+    emit paletteColorChanged(-1);
+}
 
 QUndoStack* LevelCanvas::undoStack() { return &undoStack_; }
 
@@ -153,6 +257,7 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
             strokeStartPoint_ = point;
             strokeTool_ = drawTool_;
             strokePaintIndex_ = paintIndex();
+            strokeThickness_ = toolThickness(strokeTool_);
 
             if (strokeTool_ == DrawTool::Eyedropper) {
                 const std::size_t offset =
@@ -169,7 +274,8 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                                       strokeTool_ == DrawTool::Eraser;
                 beginStroke(commandText());
                 if (freehand) {
-                    setPixel(point.x(), point.y(), strokePaintIndex_);
+                    setBrushPixel(point.x(), point.y(), strokePaintIndex_,
+                                  strokeThickness_);
                     viewport()->update();
                 }
             }
@@ -201,7 +307,8 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
         if (drawing_ && (event->buttons() & Qt::LeftButton) &&
             (strokeTool_ == DrawTool::Pencil ||
              strokeTool_ == DrawTool::Eraser)) {
-            drawLine(lastImagePoint_, point, strokePaintIndex_);
+            drawLine(lastImagePoint_, point, strokePaintIndex_,
+                     strokeThickness_);
             lastImagePoint_ = point;
         } else if (drawing_ && (event->buttons() & Qt::LeftButton)) {
             lastImagePoint_ = point;
@@ -229,7 +336,8 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
                 lastImagePoint_ = releasePoint;
             }
             if (strokeTool_ == DrawTool::Line) {
-                drawLine(strokeStartPoint_, lastImagePoint_, strokePaintIndex_);
+                drawLine(strokeStartPoint_, lastImagePoint_, strokePaintIndex_,
+                         strokeThickness_);
             } else if (strokeTool_ == DrawTool::Rectangle) {
                 drawRectangle(strokeStartPoint_, lastImagePoint_,
                               strokePaintIndex_, false);
@@ -295,8 +403,26 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
     return true;
 }
 
+bool LevelCanvas::setBrushPixel(const int x, const int y,
+                                const std::uint8_t index, const int thickness)
+{
+    const int lower = (thickness - 1) / 2;
+    const int upper = thickness / 2;
+    bool changed = false;
+    for (int brushY = y - lower; brushY <= y + upper; ++brushY) {
+        for (int brushX = x - lower; brushX <= x + upper; ++brushX) {
+            if (brushX >= 0 && brushY >= 0 &&
+                brushX < static_cast<int>(Level::Width) &&
+                brushY < static_cast<int>(Level::Height)) {
+                changed |= setPixel(brushX, brushY, index);
+            }
+        }
+    }
+    return changed;
+}
+
 void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
-                           const std::uint8_t index)
+                           const std::uint8_t index, const int thickness)
 {
     int x0 = from.x();
     int y0 = from.y();
@@ -310,7 +436,7 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
     bool changed = false;
 
     while (true) {
-        changed |= setPixel(x0, y0, index);
+        changed |= setBrushPixel(x0, y0, index, thickness);
         if (x0 == x1 && y0 == y1) {
             break;
         }
@@ -362,7 +488,7 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
     const int height = bottom - top + 1;
 
     if (width == 1 || height == 1) {
-        drawLine({left, top}, {right, bottom}, index);
+        drawLine({left, top}, {right, bottom}, index, 1);
         return;
     }
 
@@ -415,7 +541,9 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     const qreal height =
         (std::abs(lastImagePoint_.y() - strokeStartPoint_.y()) + 1) * zoom_;
     const QRectF bounds(left, top, width, height);
-    const qreal strokeWidth = std::max<qreal>(1.0, zoom_);
+    const int previewThickness =
+        strokeTool_ == DrawTool::Line ? strokeThickness_ : 1;
+    const qreal strokeWidth = std::max<qreal>(1.0, zoom_ * previewThickness);
 
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, false);

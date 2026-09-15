@@ -32,6 +32,9 @@ private:
     bool saveLevelAs();
     bool maybeSave();
     bool writeLevel(const std::filesystem::path& path);
+    void editSelectedPaletteColor();
+    void loadPalette();
+    void savePalette();
     void setModified(bool modified);
     void updateMaterialDetails(int index);
     void updateWindowTitle();

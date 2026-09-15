@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.16)
 
 project(VWingLevTools LANGUAGES CXX)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
 add_library(vwing_level_format
+    src/default_palette.cpp
     src/lev_reader.cpp
     src/lev_writer.cpp
+    src/palette_io.cpp
     src/pcx_writer.cpp
 )
 target_include_directories(vwing_level_format PUBLIC src)
@@ -42,12 +44,17 @@ add_executable(VWingLevelEditor WIN32
     src/level_canvas.h
     src/palette_widget.cpp
     src/palette_widget.h
+    resources/icons.qrc
 )
 target_link_libraries(VWingLevelEditor PRIVATE
     vwing_level_format
+    Qt6::Svg
     Qt6::Widgets
 )
-set_target_properties(VWingLevelEditor PROPERTIES AUTOMOC ON)
+set_target_properties(VWingLevelEditor PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+)
 
 foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx levroundtrip VWingLevelEditor)
     target_compile_features(${target} PRIVATE cxx_std_17)
@@ -109,6 +116,21 @@ if(BUILD_TESTING)
 
     add_test(NAME lev_writer_tests COMMAND lev_writer_tests)
 
+    add_executable(palette_tests
+        tests/palette_tests.cpp
+    )
+    target_link_libraries(palette_tests PRIVATE vwing_level_format)
+    target_compile_features(palette_tests PRIVATE cxx_std_17)
+    set_target_properties(palette_tests PROPERTIES CXX_EXTENSIONS OFF)
+
+    if(MSVC)
+        target_compile_options(palette_tests PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(palette_tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME palette_tests COMMAND palette_tests)
+
     add_test(NAME gui_smoke_test COMMAND VWingLevelEditor --smoke-test)
     set_tests_properties(gui_smoke_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
@@ -120,12 +142,14 @@ if(BUILD_TESTING)
         src/level_canvas.h
         src/palette_widget.cpp
         src/palette_widget.h
+        resources/icons.qrc
     )
-    target_link_libraries(level_canvas_tests PRIVATE Qt6::Widgets)
+    target_link_libraries(level_canvas_tests PRIVATE Qt6::Svg Qt6::Widgets)
     target_include_directories(level_canvas_tests PRIVATE src)
     target_compile_features(level_canvas_tests PRIVATE cxx_std_17)
     set_target_properties(level_canvas_tests PROPERTIES
         AUTOMOC ON
+        AUTORCC ON
         CXX_EXTENSIONS OFF
     )
 

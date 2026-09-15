@@ -10,8 +10,8 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The only required dependencies are Qt 6 Widgets, a C++17 compiler, CMake, and
-the C++ standard library.
+The only required dependencies are Qt 6 Widgets and SVG, a C++17 compiler,
+CMake, and the C++ standard library.
 
 ## Minimal editor
 
@@ -28,16 +28,26 @@ The current milestone supports:
 - panning with the middle mouse button
 - Paint-style two-column toolbox with pencil, eraser, line, rectangle, filled
   rectangle, ellipse, filled ellipse, flood-fill, and eyedropper tools
+- independently remembered 1-32 pixel thickness for pencil, eraser, and line
 - live, non-destructive previews while dragging line and shape tools
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
   documented V-Wing material information
+- palette-area filtering that omits reserved and "do not use" indices;
+  reserved Color Chart indices are also blocked in direct material selection
+- per-index RGB editing with undo, plus reusable 256-color JASC-PAL load/save
 - cursor coordinates and the current pixel index in the status bar
 - prompts before discarding unsaved edits
 
 The editor always writes the converter 1.91-compatible classic header. Keep a
 backup of levels used for testing. The original reference files in the parent
 V-Wing directory are read-only research material and must not be modified.
+
+Untitled levels start with an editor-designed material palette that visually
+separates water, explosives, normal terrain, burnable terrain, underwater
+materials, indestructible terrain, and turret parts. It is a practical starter
+palette, not a claim about one canonical V-Wing palette. Opening a `.LEV` file
+always uses that file's embedded palette unchanged.
 
 ## Command-line tools
 
@@ -50,3 +60,9 @@ V-Wing directory are read-only research material and must not be modified.
 Format evidence and research status are documented in
 [`docs/lev-format.md`](docs/lev-format.md) and
 [`docs/reverse-engineering.md`](docs/reverse-engineering.md).
+
+## Third-party artwork
+
+Tool icons come from [Tabler Icons v3.46.0](https://github.com/tabler/tabler-icons/tree/v3.46.0)
+and are used under the MIT License. The bundled license is in
+[`third_party/tabler-icons/LICENSE`](third_party/tabler-icons/LICENSE).
