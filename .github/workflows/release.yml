@@ -15,7 +15,7 @@ jobs:
   validate-version:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Match tag to CMake project version
         shell: bash
         run: |
@@ -33,7 +33,11 @@ jobs:
     needs: validate-version
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Configure MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -84,7 +88,7 @@ jobs:
     needs: validate-version
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -143,7 +147,7 @@ jobs:
     needs: [windows, linux]
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           pattern: "*-package"
