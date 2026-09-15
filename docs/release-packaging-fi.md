@@ -46,15 +46,17 @@ Copy-Item CONV.EXE, CONVERT.TXT, FILE_ID.DIZ `
   package\PCXLvlTool\VWingConverter\
 New-Item -ItemType Directory -Force `
   package\PCXLvlTool\licenses | Out-Null
-Copy-Item -Recurse "$QtDir\LICENSES" package\PCXLvlTool\licenses\Qt
+Copy-Item -Recurse third_party\qt\LICENSES `
+  package\PCXLvlTool\licenses\Qt
 Compress-Archive package\PCXLvlTool\* `
   PCXLvlTool-<versio>-Windows-x86_64.zip
 ```
 
 `windeployqt` tutkii ohjelman riippuvuudet ja rakentaa Qt:n tarvitsemat DLL- ja
 plugin-kansiot. Tarkista erityisesti, että paketissa on
-`platforms/qwindows.dll` ja Qt:n `LICENSES`-hakemisto. Testaa lopullinen ZIP
-puhtaalla Windows-koneella, jossa ei ole Qt SDK:ta tai kehitysympäristöä.
+`platforms/qwindows.dll` ja repossa olevan Qt:n `LICENSES`-hakemiston kopio.
+Testaa lopullinen ZIP puhtaalla Windows-koneella, jossa ei ole Qt SDK:ta tai
+kehitysympäristöä.
 
 ## Linux-paketin tekeminen
 

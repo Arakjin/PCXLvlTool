@@ -21,11 +21,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      - name: Configure MSVC environment
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -38,8 +33,12 @@ jobs:
           version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt_arch }}
           cache: true
-      - name: Configure
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
       - name: Build (Linux)
         if: runner.os == 'Linux'
         run: cmake --build build --parallel
@@ -47,7 +46,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $buildOutput = & cmake --build build --parallel 2>&1
+          $buildOutput = & cmake --build build --config Release --parallel 2>&1
           $buildExitCode = $LASTEXITCODE
           $buildOutput | ForEach-Object { Write-Output $_ }
           if ($buildExitCode -ne 0) {
@@ -65,7 +64,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $testOutput = & ctest --test-dir build --output-on-failure 2>&1
+          $testOutput = & ctest --test-dir build -C Release `
+            --output-on-failure 2>&1
           $testExitCode = $LASTEXITCODE
           $testOutput | ForEach-Object { Write-Output $_ }
           if ($testExitCode -ne 0) {

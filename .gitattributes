@@ -1,0 +1,2 @@
+# Preserve upstream license texts verbatim, including intentional whitespace.
+third_party/qt/LICENSES/* -whitespace

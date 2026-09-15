@@ -128,7 +128,11 @@ install(FILES
 install(DIRECTORY
     third_party/kolourpaint
     third_party/tabler-icons
+    third_party/qt
     DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool/third_party
+)
+install(DIRECTORY third_party/qt/LICENSES/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool/licenses/Qt
 )
 
 include(CTest)
