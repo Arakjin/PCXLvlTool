@@ -165,6 +165,21 @@ int main(int argc, char *argv[])
 
     canvas.setLevel(nullptr);
     clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setSecondaryIndex(60);
+    canvas.setDrawTool(DrawTool::Pencil);
+    sendMouseEvent(viewport, QEvent::MouseButtonPress, {15.5, 15.5},
+                   Qt::RightButton, Qt::RightButton);
+    sendMouseEvent(viewport, QEvent::MouseMove, {17.5, 15.5}, Qt::NoButton,
+                   Qt::RightButton);
+    sendMouseEvent(viewport, QEvent::MouseButtonRelease, {17.5, 15.5},
+                   Qt::RightButton, Qt::NoButton);
+    ok &= expect(level.pixels[offset(15, 15)] == 60 &&
+                     level.pixels[offset(17, 15)] == 60,
+                 "right-button drawing should use the secondary index");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
     level.palette[58] = RGB{255, 0, 0};
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Line);
@@ -196,17 +211,18 @@ int main(int argc, char *argv[])
     clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Rectangle);
-    canvas.setShapeFilled(true);
+    canvas.setShapeMode(ShapeMode::OutlineAndFill);
+    canvas.setSecondaryIndex(59);
     drag(viewport, {30.5, 30.5}, {32.5, 32.5});
     ok &= expect(level.pixels[offset(30, 30)] == 58 &&
-                     level.pixels[offset(31, 31)] == 58 &&
+                     level.pixels[offset(31, 31)] == 59 &&
                      level.pixels[offset(32, 32)] == 58,
-                 "filled rectangle should also draw its interior");
+                 "rectangle should support a separate outline and fill index");
 
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setShapeFilled(false);
+    canvas.setShapeMode(ShapeMode::Outline);
     canvas.setDrawTool(DrawTool::Rectangle);
     canvas.setToolThickness(DrawTool::Rectangle, 2);
     canvas.setRectangleCornerRadius(0);
@@ -248,15 +264,17 @@ int main(int argc, char *argv[])
     clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Ellipse);
-    canvas.setShapeFilled(true);
+    canvas.setShapeMode(ShapeMode::FillOnly);
+    canvas.setSecondaryIndex(59);
     drag(viewport, {45.5, 45.5}, {51.5, 51.5});
-    ok &= expect(level.pixels[offset(48, 48)] == 58,
-                 "filled ellipse should draw its interior");
+    ok &= expect(level.pixels[offset(48, 48)] == 59 &&
+                     level.pixels[offset(48, 45)] == 59,
+                 "fill-only ellipse should use its fill index without outline");
 
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setShapeFilled(false);
+    canvas.setShapeMode(ShapeMode::Outline);
     canvas.setDrawTool(DrawTool::Ellipse);
     canvas.setToolThickness(DrawTool::Ellipse, 2);
     drag(viewport, {180.5, 120.5}, {190.5, 130.5});
@@ -268,7 +286,8 @@ int main(int argc, char *argv[])
     clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Ellipse);
-    canvas.setShapeFilled(true);
+    canvas.setShapeMode(ShapeMode::OutlineAndFill);
+    canvas.setSecondaryIndex(59);
     drag(viewport, {160.5, 110.5}, {166.5, 113.5}, Qt::ShiftModifier);
     ok &= expect(level.pixels[offset(163, 116)] == 58 &&
                      level.pixels[offset(166, 116)] == 0,
@@ -277,7 +296,7 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setShapeFilled(false);
+    canvas.setShapeMode(ShapeMode::Outline);
     canvas.setDrawTool(DrawTool::Polygon);
     click(viewport, {200.5, 200.5});
     click(viewport, {208.5, 200.5});
@@ -290,13 +309,15 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setShapeFilled(true);
+    canvas.setShapeMode(ShapeMode::OutlineAndFill);
+    canvas.setSecondaryIndex(59);
     canvas.setDrawTool(DrawTool::Polygon);
     click(viewport, {220.5, 200.5});
     click(viewport, {228.5, 200.5});
     sendMouseEvent(viewport, QEvent::MouseButtonDblClick, {224.5, 208.5},
                    Qt::LeftButton, Qt::LeftButton);
-    ok &= expect(level.pixels[offset(224, 203)] == 58,
+    ok &= expect(level.pixels[offset(224, 203)] == 59 &&
+                     level.pixels[offset(224, 200)] == 58,
                  "double-click should finish and fill a polygon");
 
     canvas.setLevel(nullptr);
@@ -628,6 +649,19 @@ int main(int argc, char *argv[])
           {1.0 + 2 * paletteCell + paletteCell / 2.0, 1.0 + paletteCell / 2.0});
     ok &= expect(paletteIndex == 18,
                  "filtered palette should map cells to their original indices");
+
+    int secondaryPaletteIndex = -1;
+    QObject::connect(
+        &palette, &PaletteWidget::secondaryIndexSelected,
+        [&secondaryPaletteIndex](const int index) {
+            secondaryPaletteIndex = index;
+        });
+    sendMouseEvent(
+        &palette, QEvent::MouseButtonPress,
+        {1.0 + paletteCell + paletteCell / 2.0, 1.0 + paletteCell / 2.0},
+        Qt::RightButton, Qt::RightButton);
+    ok &= expect(secondaryPaletteIndex == 17,
+                 "palette right click should select the secondary index");
 
     int editRequestedIndex = -1;
     QObject::connect(

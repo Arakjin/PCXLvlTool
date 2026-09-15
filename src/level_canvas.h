@@ -44,6 +44,12 @@ enum class DrawTool {
     BezierCurve,
 };
 
+enum class ShapeMode {
+    Outline,
+    OutlineAndFill,
+    FillOnly,
+};
+
 class LevelCanvas final : public QAbstractScrollArea {
     Q_OBJECT
 
@@ -54,13 +60,14 @@ public:
     void setZoom(double zoom);
     double zoom() const;
     void setSelectedIndex(std::uint8_t index);
+    void setSecondaryIndex(std::uint8_t index);
     void setDrawTool(DrawTool tool);
     void setToolThickness(DrawTool tool, int thickness);
     int toolThickness(DrawTool tool) const;
     void setRectangleCornerRadius(int radius);
     int rectangleCornerRadius() const;
-    void setShapeFilled(bool filled);
-    bool shapeFilled() const;
+    void setShapeMode(ShapeMode mode);
+    ShapeMode shapeMode() const;
     void setTextContent(const QString& text);
     void setTextPixelSize(int size);
     void setPaletteColor(std::uint8_t index, RGB color);
@@ -82,6 +89,7 @@ signals:
     void cursorPositionChanged(int x, int y, int index);
     void cursorLeftCanvas();
     void selectedIndexChanged(int index);
+    void secondaryIndexChanged(int index);
     void paletteColorChanged(int index);
     void pendingSelectionEditChanged(bool pending);
 
@@ -117,12 +125,15 @@ private:
     void sprayLine(const QPoint& from, const QPoint& to, std::uint8_t index,
                    int radius);
     void sprayAt(const QPoint& point, std::uint8_t index, int radius);
-    void drawRectangle(const QPoint& from, const QPoint& to, std::uint8_t index,
-                       int thickness, int cornerRadius, bool filled);
-    void drawEllipse(const QPoint& from, const QPoint& to, std::uint8_t index,
-                     int thickness, bool filled);
-    void drawPolygon(const std::vector<QPoint>& points, std::uint8_t index,
-                     int thickness, bool filled);
+    void drawRectangle(const QPoint& from, const QPoint& to,
+                       std::uint8_t outlineIndex, std::uint8_t fillIndex,
+                       int thickness, int cornerRadius, ShapeMode mode);
+    void drawEllipse(const QPoint& from, const QPoint& to,
+                     std::uint8_t outlineIndex, std::uint8_t fillIndex,
+                     int thickness, ShapeMode mode);
+    void drawPolygon(const std::vector<QPoint>& points,
+                     std::uint8_t outlineIndex, std::uint8_t fillIndex,
+                     int thickness, ShapeMode mode);
     void drawText(const QPoint& position, std::uint8_t index);
     void floodFill(const QPoint& point, std::uint8_t index);
     void paintShapePreview(QPainter& painter) const;
@@ -138,7 +149,7 @@ private:
     void commitPolygon();
     void beginStroke(const QString& commandText);
     void commitStroke();
-    std::uint8_t paintIndex() const;
+    std::uint8_t paintIndex(Qt::MouseButton button) const;
     QPoint constrainedShapePoint(const QPoint& point) const;
     QString commandText() const;
     void updateScrollBars();
@@ -147,6 +158,7 @@ private:
     Level* level_ = nullptr;
     double zoom_ = 1.0;
     std::uint8_t selectedIndex_ = 57;
+    std::uint8_t secondaryIndex_ = 58;
     DrawTool drawTool_ = DrawTool::Pencil;
     std::uint8_t strokePaintIndex_ = 57;
     DrawTool strokeTool_ = DrawTool::Pencil;
@@ -162,11 +174,13 @@ private:
     int polygonThickness_ = 1;
     int rectangleCornerRadius_ = 0;
     int strokeCornerRadius_ = 0;
-    bool shapeFilled_ = false;
-    bool strokeFilled_ = false;
+    ShapeMode shapeMode_ = ShapeMode::Outline;
+    ShapeMode strokeShapeMode_ = ShapeMode::Outline;
+    std::uint8_t strokeFillIndex_ = 58;
     QString textContent_;
     int textPixelSize_ = 12;
     bool drawing_ = false;
+    Qt::MouseButton strokeButton_ = Qt::LeftButton;
     bool panning_ = false;
     bool movingSelection_ = false;
     CurveStage curveStage_ = CurveStage::None;

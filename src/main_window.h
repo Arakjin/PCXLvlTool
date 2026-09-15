@@ -25,6 +25,7 @@ protected:
 
 private:
     void createActions();
+    void createToolBars();
     void createMaterialDock();
     void createZoomToolBar();
     void openLevel();
@@ -43,6 +44,7 @@ private:
     LevelCanvas* canvas_ = nullptr;
     PaletteWidget* paletteWidget_ = nullptr;
     QSpinBox* materialIndexSpinBox_ = nullptr;
+    QSpinBox* secondaryIndexSpinBox_ = nullptr;
     QLabel* materialDetailsLabel_ = nullptr;
     QLabel* positionLabel_ = nullptr;
     QAction* saveAction_ = nullptr;

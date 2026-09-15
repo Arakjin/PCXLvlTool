@@ -154,6 +154,15 @@ void LevelCanvas::setSelectedIndex(const std::uint8_t index)
     emit selectedIndexChanged(index);
 }
 
+void LevelCanvas::setSecondaryIndex(const std::uint8_t index)
+{
+    if (secondaryIndex_ == index || isReservedPaletteIndex(index)) {
+        return;
+    }
+    secondaryIndex_ = index;
+    emit secondaryIndexChanged(index);
+}
+
 void LevelCanvas::setDrawTool(const DrawTool tool)
 {
     if (drawTool_ == DrawTool::BezierCurve && tool != DrawTool::BezierCurve) {
@@ -227,9 +236,9 @@ int LevelCanvas::rectangleCornerRadius() const
     return rectangleCornerRadius_;
 }
 
-void LevelCanvas::setShapeFilled(const bool filled) { shapeFilled_ = filled; }
+void LevelCanvas::setShapeMode(const ShapeMode mode) { shapeMode_ = mode; }
 
-bool LevelCanvas::shapeFilled() const { return shapeFilled_; }
+ShapeMode LevelCanvas::shapeMode() const { return shapeMode_; }
 
 void LevelCanvas::setTextContent(const QString& text) { textContent_ = text; }
 
@@ -551,19 +560,28 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    if (event->button() == Qt::LeftButton && level_ != nullptr) {
+    if ((event->button() == Qt::LeftButton ||
+         event->button() == Qt::RightButton) &&
+        level_ != nullptr) {
         setFocus(Qt::MouseFocusReason);
         const QPoint point = imagePoint(event->position());
         if (point.x() >= 0) {
             if (drawTool_ == DrawTool::Polygon) {
                 if (!polygonActive_) {
+                    strokeButton_ = event->button();
                     strokeTool_ = drawTool_;
-                    strokePaintIndex_ = paintIndex();
+                    strokePaintIndex_ = paintIndex(strokeButton_);
                     strokeThickness_ = toolThickness(strokeTool_);
-                    strokeFilled_ = shapeFilled_;
+                    strokeShapeMode_ = shapeMode_;
+                    strokeFillIndex_ = strokeButton_ == Qt::LeftButton
+                                           ? secondaryIndex_
+                                           : selectedIndex_;
                     beginStroke(commandText());
                     polygonPoints_.clear();
                     polygonActive_ = true;
+                } else if (event->button() != strokeButton_) {
+                    event->accept();
+                    return;
                 }
                 if (polygonPoints_.empty() || polygonPoints_.back() != point) {
                     polygonPoints_.push_back(point);
@@ -575,6 +593,10 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                 return;
             }
             if (drawTool_ == DrawTool::MoveSelection) {
+                if (event->button() != Qt::LeftButton) {
+                    event->accept();
+                    return;
+                }
                 if (selectionContains(point.x(), point.y())) {
                     movingSelection_ = true;
                     selectionMoveAnchor_ = point;
@@ -587,11 +609,20 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                 return;
             }
 
+            if (isSelectionTool(drawTool_) &&
+                event->button() != Qt::LeftButton) {
+                event->accept();
+                return;
+            }
             if (isSelectionTool(drawTool_) && selectionActive_) {
                 commitSelection();
             }
             if (drawTool_ == DrawTool::BezierCurve &&
                 curveStage_ != CurveStage::None) {
+                if (event->button() != strokeButton_) {
+                    event->accept();
+                    return;
+                }
                 drawing_ = true;
                 lastImagePoint_ = point;
                 if (curveStage_ == CurveStage::FirstControl) {
@@ -606,14 +637,22 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
             }
             lastImagePoint_ = point;
             strokeStartPoint_ = point;
+            strokeButton_ = event->button();
             strokeTool_ = drawTool_;
-            strokePaintIndex_ = paintIndex();
+            strokePaintIndex_ = paintIndex(strokeButton_);
             strokeThickness_ = toolThickness(strokeTool_);
             strokeCornerRadius_ = rectangleCornerRadius_;
-            strokeFilled_ = shapeFilled_;
+            strokeShapeMode_ = shapeMode_;
+            strokeFillIndex_ = strokeButton_ == Qt::LeftButton
+                                   ? secondaryIndex_
+                                   : selectedIndex_;
 
             if (strokeTool_ == DrawTool::Eyedropper) {
-                setSelectedIndex(pixelAt(point.x(), point.y()));
+                if (strokeButton_ == Qt::LeftButton) {
+                    setSelectedIndex(pixelAt(point.x(), point.y()));
+                } else {
+                    setSecondaryIndex(pixelAt(point.x(), point.y()));
+                }
             } else if (strokeTool_ == DrawTool::FloodFill) {
                 beginStroke(tr("Flood fill"));
                 floodFill(point, strokePaintIndex_);
@@ -687,7 +726,7 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
             viewport()->update();
             return;
         }
-        if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+        if (drawing_ && (event->buttons() & strokeButton_) &&
             strokeTool_ == DrawTool::BezierCurve) {
             lastImagePoint_ = point;
             if (curveStage_ == CurveStage::Baseline) {
@@ -703,18 +742,18 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
             viewport()->update();
             return;
         }
-        if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+        if (drawing_ && (event->buttons() & strokeButton_) &&
             (strokeTool_ == DrawTool::Pencil ||
              strokeTool_ == DrawTool::Eraser)) {
             drawLine(lastImagePoint_, point, strokePaintIndex_,
                      strokeThickness_);
             lastImagePoint_ = point;
-        } else if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+        } else if (drawing_ && (event->buttons() & strokeButton_) &&
                    strokeTool_ == DrawTool::Spray) {
             sprayLine(lastImagePoint_, point, strokePaintIndex_,
                       strokeThickness_);
             lastImagePoint_ = point;
-        } else if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+        } else if (drawing_ && (event->buttons() & strokeButton_) &&
                    strokeTool_ == DrawTool::SelectFreehand) {
             if (freehandSelectionPoints_.empty() ||
                 freehandSelectionPoints_.back() != point) {
@@ -722,7 +761,7 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
             }
             lastImagePoint_ = point;
             viewport()->update();
-        } else if (drawing_ && (event->buttons() & Qt::LeftButton)) {
+        } else if (drawing_ && (event->buttons() & strokeButton_)) {
             lastImagePoint_ = event->modifiers() & Qt::ShiftModifier
                                   ? constrainedShapePoint(point)
                                   : point;
@@ -741,14 +780,14 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton) {
-        if (movingSelection_) {
-            movingSelection_ = false;
-            updateToolCursor();
-            viewport()->update();
-            event->accept();
-            return;
-        }
+    if (event->button() == Qt::LeftButton && movingSelection_) {
+        movingSelection_ = false;
+        updateToolCursor();
+        viewport()->update();
+        event->accept();
+        return;
+    }
+    if (event->button() == strokeButton_) {
         const bool wasDrawing = drawing_;
         drawing_ = false;
         if (wasDrawing) {
@@ -781,11 +820,13 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
                          strokeThickness_);
             } else if (strokeTool_ == DrawTool::Rectangle) {
                 drawRectangle(strokeStartPoint_, lastImagePoint_,
-                              strokePaintIndex_, strokeThickness_,
-                              strokeCornerRadius_, strokeFilled_);
+                              strokePaintIndex_, strokeFillIndex_,
+                              strokeThickness_, strokeCornerRadius_,
+                              strokeShapeMode_);
             } else if (strokeTool_ == DrawTool::Ellipse) {
                 drawEllipse(strokeStartPoint_, lastImagePoint_,
-                            strokePaintIndex_, strokeThickness_, strokeFilled_);
+                            strokePaintIndex_, strokeFillIndex_,
+                            strokeThickness_, strokeShapeMode_);
             } else if (isSelectionTool(strokeTool_)) {
                 if (strokeTool_ == DrawTool::SelectFreehand &&
                     (freehandSelectionPoints_.empty() ||
@@ -804,8 +845,8 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
 
 void LevelCanvas::mouseDoubleClickEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton && drawTool_ == DrawTool::Polygon &&
-        polygonActive_) {
+    if (event->button() == strokeButton_ &&
+        drawTool_ == DrawTool::Polygon && polygonActive_) {
         const QPoint point = imagePoint(event->position());
         if (point.x() >= 0 &&
             (polygonPoints_.empty() || polygonPoints_.back() != point)) {
@@ -1130,8 +1171,10 @@ void LevelCanvas::drawBezier(const QPoint& start, const QPoint& control1,
 }
 
 void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
-                                const std::uint8_t index, const int thickness,
-                                const int cornerRadius, const bool filled)
+                                const std::uint8_t outlineIndex,
+                                const std::uint8_t fillIndex,
+                                const int thickness, const int cornerRadius,
+                                const ShapeMode mode)
 {
     const int left = std::min(from.x(), to.x());
     const int right = std::max(from.x(), to.x());
@@ -1177,8 +1220,15 @@ void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
                 hasInterior &&
                 insideRounded(x, y, innerLeft, innerTop, innerRight,
                               innerBottom, innerRadius);
-            if (inside && (filled || !insideInterior)) {
-                changed |= setPixel(x, y, index);
+            if (!inside) {
+                continue;
+            }
+            if (mode == ShapeMode::FillOnly) {
+                changed |= setPixel(x, y, fillIndex);
+            } else if (!insideInterior) {
+                changed |= setPixel(x, y, outlineIndex);
+            } else if (mode == ShapeMode::OutlineAndFill) {
+                changed |= setPixel(x, y, fillIndex);
             }
         }
     }
@@ -1188,8 +1238,9 @@ void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
 }
 
 void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
-                              const std::uint8_t index, const int thickness,
-                              const bool filled)
+                              const std::uint8_t outlineIndex,
+                              const std::uint8_t fillIndex,
+                              const int thickness, const ShapeMode mode)
 {
     const int left = std::min(from.x(), to.x());
     const int right = std::max(from.x(), to.x());
@@ -1199,7 +1250,9 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
     const int height = bottom - top + 1;
 
     if (width == 1 || height == 1) {
-        drawLine({left, top}, {right, bottom}, index, thickness);
+        drawLine({left, top}, {right, bottom},
+                 mode == ShapeMode::FillOnly ? fillIndex : outlineIndex,
+                 thickness);
         return;
     }
 
@@ -1229,8 +1282,12 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
             if (!inside(x, y)) {
                 continue;
             }
-            if (filled || !insideInterior(x, y)) {
-                changed |= setPixel(x, y, index);
+            if (mode == ShapeMode::FillOnly) {
+                changed |= setPixel(x, y, fillIndex);
+            } else if (!insideInterior(x, y)) {
+                changed |= setPixel(x, y, outlineIndex);
+            } else if (mode == ShapeMode::OutlineAndFill) {
+                changed |= setPixel(x, y, fillIndex);
             }
         }
     }
@@ -1240,14 +1297,15 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
 }
 
 void LevelCanvas::drawPolygon(const std::vector<QPoint>& points,
-                              const std::uint8_t index, const int thickness,
-                              const bool filled)
+                              const std::uint8_t outlineIndex,
+                              const std::uint8_t fillIndex,
+                              const int thickness, const ShapeMode mode)
 {
     if (points.size() < 3) {
         return;
     }
 
-    if (filled) {
+    if (mode != ShapeMode::Outline) {
         QPolygon polygon;
         polygon.reserve(static_cast<qsizetype>(points.size()));
         for (const QPoint& point : points) {
@@ -1269,16 +1327,19 @@ void LevelCanvas::drawPolygon(const std::vector<QPoint>& points,
             for (int y = 0; y < bounds.height(); ++y) {
                 for (int x = 0; x < bounds.width(); ++x) {
                     if (mask.constScanLine(y)[x] != 0) {
-                        setPixel(bounds.left() + x, bounds.top() + y, index);
+                        setPixel(bounds.left() + x, bounds.top() + y,
+                                 fillIndex);
                     }
                 }
             }
         }
     }
 
-    for (std::size_t point = 0; point < points.size(); ++point) {
-        drawLine(points[point], points[(point + 1) % points.size()], index,
-                 thickness);
+    if (mode != ShapeMode::FillOnly) {
+        for (std::size_t point = 0; point < points.size(); ++point) {
+            drawLine(points[point], points[(point + 1) % points.size()],
+                     outlineIndex, thickness);
+        }
     }
     viewport()->update();
 }
@@ -1355,8 +1416,10 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         return;
     }
     if (polygonActive_ && !polygonPoints_.empty()) {
-        const RGB& rgb = level_->palette[strokePaintIndex_];
-        const QColor color(rgb.r, rgb.g, rgb.b);
+        const RGB& outlineRgb = level_->palette[strokePaintIndex_];
+        const RGB& fillRgb = level_->palette[strokeFillIndex_];
+        const QColor outlineColor(outlineRgb.r, outlineRgb.g, outlineRgb.b);
+        const QColor fillColor(fillRgb.r, fillRgb.g, fillRgb.b);
         QPolygonF polygon;
         polygon.reserve(static_cast<qsizetype>(polygonPoints_.size() + 1));
         for (const QPoint& point : polygonPoints_) {
@@ -1368,10 +1431,14 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
 
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.setPen(QPen(color,
-                            std::max<qreal>(1.0, zoom_ * strokeThickness_)));
-        painter.setBrush(strokeFilled_ && polygon.size() >= 3 ? color
-                                                              : Qt::NoBrush);
+        painter.setPen(strokeShapeMode_ == ShapeMode::FillOnly
+                           ? Qt::NoPen
+                           : QPen(outlineColor, std::max<qreal>(
+                                                    1.0, zoom_ * strokeThickness_)));
+        painter.setBrush(strokeShapeMode_ != ShapeMode::Outline &&
+                                 polygon.size() >= 3
+                             ? fillColor
+                             : Qt::NoBrush);
         painter.drawPolygon(polygon);
         QPen guidePen(palette().color(QPalette::BrightText), 1,
                       Qt::DashLine);
@@ -1389,8 +1456,10 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         return;
     }
 
-    const RGB& rgb = level_->palette[strokePaintIndex_];
-    const QColor color(rgb.r, rgb.g, rgb.b);
+    const RGB& outlineRgb = level_->palette[strokePaintIndex_];
+    const RGB& fillRgb = level_->palette[strokeFillIndex_];
+    const QColor outlineColor(outlineRgb.r, outlineRgb.g, outlineRgb.b);
+    const QColor fillColor(fillRgb.r, fillRgb.g, fillRgb.b);
     const qreal left =
         std::min(strokeStartPoint_.x(), lastImagePoint_.x()) * zoom_;
     const qreal top =
@@ -1432,7 +1501,7 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
 
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, false);
-    painter.setPen(QPen(color, strokeWidth));
+    painter.setPen(QPen(outlineColor, strokeWidth));
     painter.setBrush(Qt::NoBrush);
 
     if (strokeTool_ == DrawTool::Line) {
@@ -1441,10 +1510,18 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
                          QPointF((lastImagePoint_.x() + 0.5) * zoom_,
                                  (lastImagePoint_.y() + 0.5) * zoom_));
     } else if (strokeTool_ == DrawTool::Rectangle) {
-        painter.setBrush(strokeFilled_ ? color : Qt::NoBrush);
+        painter.setPen(strokeShapeMode_ == ShapeMode::FillOnly
+                           ? Qt::NoPen
+                           : QPen(outlineColor, strokeWidth));
+        painter.setBrush(strokeShapeMode_ == ShapeMode::Outline ? Qt::NoBrush
+                                                                : fillColor);
         painter.drawRoundedRect(bounds, cornerRadius, cornerRadius);
     } else if (strokeTool_ == DrawTool::Ellipse) {
-        painter.setBrush(strokeFilled_ ? color : Qt::NoBrush);
+        painter.setPen(strokeShapeMode_ == ShapeMode::FillOnly
+                           ? Qt::NoPen
+                           : QPen(outlineColor, strokeWidth));
+        painter.setBrush(strokeShapeMode_ == ShapeMode::Outline ? Qt::NoBrush
+                                                                : fillColor);
         painter.drawEllipse(bounds);
     }
 
@@ -1685,8 +1762,8 @@ void LevelCanvas::commitPolygon()
     }
     polygonActive_ = false;
     if (polygonPoints_.size() >= 3) {
-        drawPolygon(polygonPoints_, strokePaintIndex_, strokeThickness_,
-                    strokeFilled_);
+        drawPolygon(polygonPoints_, strokePaintIndex_, strokeFillIndex_,
+                    strokeThickness_, strokeShapeMode_);
         commitStroke();
     } else {
         strokeChanges_.clear();
@@ -1751,9 +1828,12 @@ void LevelCanvas::commitStroke()
     strokeChangeIndices_.clear();
 }
 
-std::uint8_t LevelCanvas::paintIndex() const
+std::uint8_t LevelCanvas::paintIndex(const Qt::MouseButton button) const
 {
-    return drawTool_ == DrawTool::Eraser ? 0 : selectedIndex_;
+    if (drawTool_ == DrawTool::Eraser) {
+        return 0;
+    }
+    return button == Qt::RightButton ? secondaryIndex_ : selectedIndex_;
 }
 
 QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
@@ -1792,19 +1872,23 @@ QString LevelCanvas::commandText() const
     case DrawTool::Line:
         return tr("Line");
     case DrawTool::Rectangle:
-        return strokeFilled_ ? tr("Filled rectangle") : tr("Rectangle");
+        return strokeShapeMode_ == ShapeMode::Outline
+                   ? tr("Rectangle")
+                   : tr("Filled rectangle");
     case DrawTool::FloodFill:
         return tr("Flood fill");
     case DrawTool::Eyedropper:
         return tr("Eyedropper");
     case DrawTool::Ellipse:
-        return strokeFilled_ ? tr("Filled ellipse") : tr("Ellipse");
+        return strokeShapeMode_ == ShapeMode::Outline ? tr("Ellipse")
+                                                      : tr("Filled ellipse");
     case DrawTool::Spray:
         return tr("Spray stroke");
     case DrawTool::Text:
         return tr("Text");
     case DrawTool::Polygon:
-        return strokeFilled_ ? tr("Filled polygon") : tr("Polygon");
+        return strokeShapeMode_ == ShapeMode::Outline ? tr("Polygon")
+                                                      : tr("Filled polygon");
     case DrawTool::SelectRectangle:
         return tr("Rectangle selection");
     case DrawTool::SelectEllipse:

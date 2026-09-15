@@ -13,7 +13,8 @@ PaletteWidget::PaletteWidget(QWidget* parent) : QWidget(parent)
     std::iota(indices_.begin(), indices_.end(), std::uint8_t{0});
     setFixedSize(Columns * CellSize + 2 * Margin,
                  Columns * CellSize + 2 * Margin);
-    setToolTip(tr("Click to select; double-click to edit the color"));
+    setToolTip(tr("Left click selects the primary index; right click selects "
+                  "the secondary index; double-click edits a color"));
 }
 
 void PaletteWidget::setIndices(std::vector<std::uint8_t> indices)
@@ -37,6 +38,15 @@ void PaletteWidget::setSelectedIndex(const std::uint8_t index)
         return;
     }
     selectedIndex_ = index;
+    update();
+}
+
+void PaletteWidget::setSecondaryIndex(const std::uint8_t index)
+{
+    if (secondaryIndex_ == index) {
+        return;
+    }
+    secondaryIndex_ = index;
     update();
 }
 
@@ -74,11 +84,24 @@ void PaletteWidget::paintEvent(QPaintEvent*)
         painter.setPen(QPen(Qt::black, 1));
         painter.drawRect(selection.adjusted(0, 0, -1, -1));
     }
+
+    const auto secondary =
+        std::find(indices_.begin(), indices_.end(), secondaryIndex_);
+    if (secondary != indices_.end()) {
+        const int position = static_cast<int>(secondary - indices_.begin());
+        const QRect selection(Margin + (position % Columns) * CellSize,
+                              Margin + (position / Columns) * CellSize,
+                              CellSize, CellSize);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(255, 220, 0), 2, Qt::DashLine));
+        painter.drawRect(selection.adjusted(3, 3, -4, -4));
+    }
 }
 
 void PaletteWidget::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() != Qt::LeftButton) {
+    if (event->button() != Qt::LeftButton &&
+        event->button() != Qt::RightButton) {
         QWidget::mousePressEvent(event);
         return;
     }
@@ -87,8 +110,13 @@ void PaletteWidget::mousePressEvent(QMouseEvent* event)
     if (index < 0) {
         return;
     }
-    setSelectedIndex(static_cast<std::uint8_t>(index));
-    emit indexSelected(selectedIndex_);
+    if (event->button() == Qt::LeftButton) {
+        setSelectedIndex(static_cast<std::uint8_t>(index));
+        emit indexSelected(selectedIndex_);
+    } else {
+        setSecondaryIndex(static_cast<std::uint8_t>(index));
+        emit secondaryIndexSelected(secondaryIndex_);
+    }
     event->accept();
 }
 

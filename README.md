@@ -27,9 +27,9 @@ The current milestone supports:
 - pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%,
   with `Ctrl+mouse wheel` zooming around the pointer
 - panning with the middle mouse button
-- Paint-style two-column toolbox with pencil, eraser, line, cubic Bezier curve,
-  rectangle, ellipse, polygon, text, spray, flood-fill, eyedropper, and
-  selection tools
+- Paint-style horizontal toolbox with pencil, eraser, line, cubic Bezier
+  curve, rectangle, ellipse, polygon, text, spray, flood-fill, eyedropper, and
+  selection tools, plus a separate horizontal options bar
 - independently remembered 1-32 pixel thickness for pencil, eraser, line,
   rectangle, ellipse, polygon, spray, and Bezier curve
 - sparse spray dragging with distance-based spacing, while a single click keeps
@@ -38,7 +38,9 @@ The current milestone supports:
 - Paint-style Bezier workflow: drag a baseline and then its two bend points;
   the completed curve is committed as one undo operation
 - `Shift`-constrained squares and circles, plus selectable sharp or rounded
-  rectangle corners; rectangle, ellipse, and polygon share a fill option
+  rectangle corners; rectangle, ellipse, and polygon support outline-only,
+  outline-and-fill, and fill-only modes using the primary index for outlines
+  and the secondary index for interiors
 - indexed text placement with editable content and 6-64 pixel size
 - Paint-style polygons made by clicking corners and completed with a double
   click or `Enter`; `Esc` cancels an unfinished polygon
@@ -49,7 +51,8 @@ The current milestone supports:
   640x800 canvas
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
-  documented V-Wing material information
+  documented V-Wing material information; left click selects the primary index
+  and right click selects the secondary index, which also works for drawing
 - palette-area filtering that omits reserved and "do not use" indices;
   reserved Color Chart indices are also blocked in direct material selection
 - reserved default colors derived per index from the most common RGB values in

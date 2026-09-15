@@ -19,9 +19,11 @@ public:
     void setLevel(const Level* level);
     void setIndices(std::vector<std::uint8_t> indices);
     void setSelectedIndex(std::uint8_t index);
+    void setSecondaryIndex(std::uint8_t index);
 
 signals:
     void indexSelected(int index);
+    void secondaryIndexSelected(int index);
     void indexEditRequested(int index);
 
 protected:
@@ -39,4 +41,5 @@ private:
     const Level* level_ = nullptr;
     std::vector<std::uint8_t> indices_;
     std::uint8_t selectedIndex_ = 57;
+    std::uint8_t secondaryIndex_ = 58;
 };

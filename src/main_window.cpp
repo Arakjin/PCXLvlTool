@@ -10,13 +10,11 @@
 
 #include <QAction>
 #include <QButtonGroup>
-#include <QCheckBox>
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
-#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
@@ -321,6 +319,7 @@ MainWindow::MainWindow(QWidget* parent)
     setCentralWidget(canvas_);
 
     createActions();
+    createToolBars();
     createMaterialDock();
     createZoomToolBar();
 
@@ -407,18 +406,13 @@ void MainWindow::createActions()
             &LevelCanvas::deleteSelection);
 }
 
-void MainWindow::createMaterialDock()
+void MainWindow::createToolBars()
 {
-    auto* dock = new QDockWidget(tr("Toolbox"), this);
-    auto* contents = new QWidget(dock);
-    auto* layout = new QVBoxLayout(contents);
-    layout->addWidget(new QLabel(tr("Tools"), contents));
-
-    auto* toolGrid = new QWidget(contents);
-    auto* grid = new QGridLayout(toolGrid);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setSpacing(2);
-    auto* toolGroup = new QButtonGroup(toolGrid);
+    auto* toolBar = new QToolBar(tr("Tools"), this);
+    toolBar->setMovable(false);
+    toolBar->setFloatable(false);
+    addToolBar(Qt::TopToolBarArea, toolBar);
+    auto* toolGroup = new QButtonGroup(toolBar);
     toolGroup->setExclusive(true);
     const std::array<std::pair<const char*, DrawTool>, 15> tools{{
         {"Pencil", DrawTool::Pencil},
@@ -437,13 +431,12 @@ void MainWindow::createMaterialDock()
         {"Freehand select", DrawTool::SelectFreehand},
         {"Move selection", DrawTool::MoveSelection},
     }};
-    for (std::size_t index = 0; index < tools.size(); ++index) {
-        const auto& [label, tool] = tools[index];
-        auto* button = new QToolButton(toolGrid);
+    for (const auto& [label, tool] : tools) {
+        auto* button = new QToolButton(toolBar);
         button->setCheckable(true);
         button->setIcon(toolIcon(tool));
         button->setIconSize(QSize(28, 28));
-        button->setFixedSize(42, 42);
+        button->setFixedSize(38, 38);
         button->setStyleSheet(QStringLiteral(
             "QToolButton { background: #f5f5f5; border: 1px solid #808080; }"
             "QToolButton:hover { background: #e8f2ff; }"
@@ -452,42 +445,39 @@ void MainWindow::createMaterialDock()
         button->setToolTip(tr(label));
         button->setAccessibleName(tr(label));
         toolGroup->addButton(button, static_cast<int>(tool));
-        grid->addWidget(button, static_cast<int>(index / 2),
-                        static_cast<int>(index % 2));
+        toolBar->addWidget(button);
         if (tool == DrawTool::Pencil) {
             button->setChecked(true);
         }
     }
-    grid->setColumnStretch(2, 1);
-    layout->addWidget(toolGrid);
-    auto* activeToolLabel = new QLabel(tr("Pencil"), contents);
-    layout->addWidget(activeToolLabel);
-    auto* selectionHelp = new QLabel(
-        tr("Selection: draw a mask, then use Move or another drawing tool. "
-           "Enter commits, Esc cancels, Del removes, Ctrl+C/V copies and "
-           "pastes; Ctrl+A selects all."),
-        contents);
-    selectionHelp->setWordWrap(true);
-    layout->addWidget(selectionHelp);
-    auto* curveHelp = new QLabel(
-        tr("Curve: drag the baseline, then drag both bend points. Polygon: "
-           "click corners, then double-click or press Enter to finish."),
-        contents);
-    curveHelp->setWordWrap(true);
-    layout->addWidget(curveHelp);
-
-    auto* thicknessLayout = new QHBoxLayout();
-    thicknessLayout->addWidget(new QLabel(tr("Thickness:"), contents));
-    auto* thicknessSpinBox = new QSpinBox(contents);
+    addToolBarBreak(Qt::TopToolBarArea);
+    auto* optionsBar = new QToolBar(tr("Tool options"), this);
+    optionsBar->setMovable(false);
+    optionsBar->setFloatable(false);
+    addToolBar(Qt::TopToolBarArea, optionsBar);
+    auto* activeToolLabel = new QLabel(tr("Pencil"), optionsBar);
+    activeToolLabel->setMinimumWidth(90);
+    optionsBar->addWidget(activeToolLabel);
+    optionsBar->addSeparator();
+    optionsBar->addWidget(new QLabel(tr("Thickness: "), optionsBar));
+    auto* thicknessSpinBox = new QSpinBox(optionsBar);
     thicknessSpinBox->setRange(1, 32);
     thicknessSpinBox->setSuffix(tr(" px"));
     thicknessSpinBox->setValue(canvas_->toolThickness(DrawTool::Pencil));
-    thicknessLayout->addWidget(thicknessSpinBox);
-    layout->addLayout(thicknessLayout);
-
-    auto* cornerLayout = new QHBoxLayout();
-    cornerLayout->addWidget(new QLabel(tr("Corners:"), contents));
-    auto* cornerRadiusCombo = new QComboBox(contents);
+    optionsBar->addWidget(thicknessSpinBox);
+    optionsBar->addSeparator();
+    optionsBar->addWidget(new QLabel(tr("Shape: "), optionsBar));
+    auto* shapeModeCombo = new QComboBox(optionsBar);
+    shapeModeCombo->addItem(tr("Outline"), static_cast<int>(ShapeMode::Outline));
+    shapeModeCombo->addItem(tr("Outline + fill"),
+                            static_cast<int>(ShapeMode::OutlineAndFill));
+    shapeModeCombo->addItem(tr("Fill only"),
+                            static_cast<int>(ShapeMode::FillOnly));
+    shapeModeCombo->setEnabled(false);
+    optionsBar->addWidget(shapeModeCombo);
+    optionsBar->addSeparator();
+    optionsBar->addWidget(new QLabel(tr("Corners: "), optionsBar));
+    auto* cornerRadiusCombo = new QComboBox(optionsBar);
     cornerRadiusCombo->addItem(tr("Sharp"), 0);
     cornerRadiusCombo->addItem(tr("2 px"), 2);
     cornerRadiusCombo->addItem(tr("4 px"), 4);
@@ -495,30 +485,24 @@ void MainWindow::createMaterialDock()
     cornerRadiusCombo->addItem(tr("16 px"), 16);
     cornerRadiusCombo->addItem(tr("32 px"), 32);
     cornerRadiusCombo->setEnabled(false);
-    cornerLayout->addWidget(cornerRadiusCombo);
-    layout->addLayout(cornerLayout);
-
-    auto* fillShapesCheckBox = new QCheckBox(tr("Filled shape"), contents);
-    fillShapesCheckBox->setEnabled(false);
-    layout->addWidget(fillShapesCheckBox);
-
-    auto* textLayout = new QHBoxLayout();
-    textLayout->addWidget(new QLabel(tr("Text:"), contents));
-    auto* textInput = new QLineEdit(contents);
+    optionsBar->addWidget(cornerRadiusCombo);
+    optionsBar->addSeparator();
+    optionsBar->addWidget(new QLabel(tr("Text: "), optionsBar));
+    auto* textInput = new QLineEdit(optionsBar);
     textInput->setPlaceholderText(tr("Text to place"));
     textInput->setEnabled(false);
-    textLayout->addWidget(textInput);
-    auto* textSizeSpinBox = new QSpinBox(contents);
+    textInput->setMaximumWidth(180);
+    optionsBar->addWidget(textInput);
+    auto* textSizeSpinBox = new QSpinBox(optionsBar);
     textSizeSpinBox->setRange(6, 64);
     textSizeSpinBox->setValue(12);
     textSizeSpinBox->setSuffix(tr(" px"));
     textSizeSpinBox->setEnabled(false);
-    textLayout->addWidget(textSizeSpinBox);
-    layout->addLayout(textLayout);
+    optionsBar->addWidget(textSizeSpinBox);
     connect(
         toolGroup, &QButtonGroup::idClicked, this,
         [this, activeToolLabel, thicknessSpinBox, cornerRadiusCombo,
-         fillShapesCheckBox, textInput, textSizeSpinBox, tools](const int id) {
+         shapeModeCombo, textInput, textSizeSpinBox, tools](const int id) {
             const auto selectedTool = static_cast<DrawTool>(id);
             canvas_->setDrawTool(selectedTool);
             for (const auto& [label, tool] : tools) {
@@ -548,7 +532,7 @@ void MainWindow::createMaterialDock()
             const bool supportsFill = selectedTool == DrawTool::Rectangle ||
                                       selectedTool == DrawTool::Ellipse ||
                                       selectedTool == DrawTool::Polygon;
-            fillShapesCheckBox->setEnabled(supportsFill);
+            shapeModeCombo->setEnabled(supportsFill);
             const bool supportsText = selectedTool == DrawTool::Text;
             textInput->setEnabled(supportsText);
             textSizeSpinBox->setEnabled(supportsText);
@@ -566,14 +550,23 @@ void MainWindow::createMaterialDock()
                 canvas_->setRectangleCornerRadius(
                     cornerRadiusCombo->itemData(index).toInt());
             });
-    connect(fillShapesCheckBox, &QCheckBox::toggled, canvas_,
-            &LevelCanvas::setShapeFilled);
+    connect(shapeModeCombo, &QComboBox::currentIndexChanged, this,
+            [this, shapeModeCombo](const int index) {
+                const auto mode = static_cast<ShapeMode>(
+                    shapeModeCombo->itemData(index).toInt());
+                canvas_->setShapeMode(mode);
+            });
     connect(textInput, &QLineEdit::textChanged, canvas_,
             &LevelCanvas::setTextContent);
     connect(textSizeSpinBox, &QSpinBox::valueChanged, canvas_,
             &LevelCanvas::setTextPixelSize);
+}
 
-    layout->addSpacing(6);
+void MainWindow::createMaterialDock()
+{
+    auto* dock = new QDockWidget(tr("Palette"), this);
+    auto* contents = new QWidget(dock);
+    auto* layout = new QVBoxLayout(contents);
     layout->addWidget(new QLabel(tr("Palette"), contents));
     auto* paletteGroupCombo = new QComboBox(contents);
     const std::array<std::pair<const char*, PaletteGroup>, 11> paletteGroups{{
@@ -599,7 +592,7 @@ void MainWindow::createMaterialDock()
     layout->addWidget(paletteWidget_);
 
     auto* indexLayout = new QHBoxLayout();
-    indexLayout->addWidget(new QLabel(tr("Index:"), contents));
+    indexLayout->addWidget(new QLabel(tr("Left index:"), contents));
     materialIndexSpinBox_ = new PaletteIndexSpinBox(contents);
     materialIndexSpinBox_->setRange(0, 255);
     materialIndexSpinBox_->setValue(57);
@@ -607,6 +600,15 @@ void MainWindow::createMaterialDock()
         tr("Reserved Color Chart indices cannot be selected"));
     indexLayout->addWidget(materialIndexSpinBox_);
     layout->addLayout(indexLayout);
+    auto* secondaryIndexLayout = new QHBoxLayout();
+    secondaryIndexLayout->addWidget(new QLabel(tr("Right index:"), contents));
+    secondaryIndexSpinBox_ = new PaletteIndexSpinBox(contents);
+    secondaryIndexSpinBox_->setRange(0, 255);
+    secondaryIndexSpinBox_->setValue(58);
+    secondaryIndexSpinBox_->setToolTip(
+        tr("Right-click drawing and filled-shape interior index"));
+    secondaryIndexLayout->addWidget(secondaryIndexSpinBox_);
+    layout->addLayout(secondaryIndexLayout);
     materialDetailsLabel_ = new QLabel(contents);
     layout->addWidget(materialDetailsLabel_);
     auto* editColorButton =
@@ -625,13 +627,21 @@ void MainWindow::createMaterialDock()
                     paletteGroupCombo->itemData(index).toInt()));
                 const auto selected =
                     static_cast<std::uint8_t>(materialIndexSpinBox_->value());
+                const auto secondary = static_cast<std::uint8_t>(
+                    secondaryIndexSpinBox_->value());
                 const bool selectionVisible =
                     std::find(indices.begin(), indices.end(), selected) !=
+                    indices.end();
+                const bool secondaryVisible =
+                    std::find(indices.begin(), indices.end(), secondary) !=
                     indices.end();
                 const int firstIndex = indices.empty() ? 0 : indices.front();
                 paletteWidget_->setIndices(std::move(indices));
                 if (!selectionVisible) {
                     materialIndexSpinBox_->setValue(firstIndex);
+                }
+                if (!secondaryVisible) {
+                    secondaryIndexSpinBox_->setValue(firstIndex);
                 }
             });
     connect(materialIndexSpinBox_, &QSpinBox::valueChanged, this,
@@ -643,8 +653,18 @@ void MainWindow::createMaterialDock()
             });
     connect(canvas_, &LevelCanvas::selectedIndexChanged, materialIndexSpinBox_,
             &QSpinBox::setValue);
+    connect(secondaryIndexSpinBox_, &QSpinBox::valueChanged, this,
+            [this](const int value) {
+                canvas_->setSecondaryIndex(static_cast<std::uint8_t>(value));
+                paletteWidget_->setSecondaryIndex(
+                    static_cast<std::uint8_t>(value));
+            });
+    connect(canvas_, &LevelCanvas::secondaryIndexChanged,
+            secondaryIndexSpinBox_, &QSpinBox::setValue);
     connect(paletteWidget_, &PaletteWidget::indexSelected,
             materialIndexSpinBox_, &QSpinBox::setValue);
+    connect(paletteWidget_, &PaletteWidget::secondaryIndexSelected,
+            secondaryIndexSpinBox_, &QSpinBox::setValue);
     connect(paletteWidget_, &PaletteWidget::indexEditRequested, this,
             [this](const int index) {
                 materialIndexSpinBox_->setValue(index);
