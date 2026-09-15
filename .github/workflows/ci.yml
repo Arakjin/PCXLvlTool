@@ -58,5 +58,21 @@ jobs:
             Write-Output "::error title=Windows build failed::$diagnostic"
             exit $buildExitCode
           }
-      - name: Test
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
         run: ctest --test-dir build --output-on-failure
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $testOutput = & ctest --test-dir build --output-on-failure 2>&1
+          $testExitCode = $LASTEXITCODE
+          $testOutput | ForEach-Object { Write-Output $_ }
+          if ($testExitCode -ne 0) {
+            $diagnostic = (($testOutput | Select-Object -Last 80) -join "`n")
+            $diagnostic = $diagnostic.Replace('%', '%25')
+            $diagnostic = $diagnostic.Replace("`r", '')
+            $diagnostic = $diagnostic.Replace("`n", '%0A')
+            Write-Output "::error title=Windows tests failed::$diagnostic"
+            exit $testExitCode
+          }
