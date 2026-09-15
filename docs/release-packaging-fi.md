@@ -82,10 +82,9 @@ Julkaise tarkistussummat samassa julkaisussa tiedostojen kanssa.
 
 ## Lisenssit ennen jakelua
 
-Repossa ei vielä ole PCX Level Toolin omaa ylätason `LICENSE`-tiedostoa. Valitse
-projektin lisenssi ennen ensimmäistä julkista binäärijakelua ja lisää se jokaiseen
-pakettiin. Säilytä myös KolourPaint- ja Tabler-kuvakkeiden mukana olevat
-lisenssit.
+PCX Level Tool on julkaistu MIT-lisenssillä. Lisää ylätason `LICENSE` jokaiseen
+lähdekoodi- ja binääripakettiin. Säilytä myös KolourPaint- ja Tabler-kuvakkeiden
+mukana olevat lisenssit.
 
 Jos Qt jaetaan avoimen lähdekoodin LGPL-ehtojen nojalla, varmista ennen
 julkaisua, että paketti ja jakelutapa täyttävät käytetyn Qt-version

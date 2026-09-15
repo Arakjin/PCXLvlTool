@@ -15,6 +15,12 @@ ctest --test-dir build --output-on-failure
 The only required dependencies are Qt 6 Widgets and SVG, a C++17 compiler,
 CMake, and the C++ standard library.
 
+## License
+
+PCX Level Tool is released under the [MIT License](LICENSE). Copyright (c)
+2026 Weckman. Third-party artwork retains its own licenses as documented
+below.
+
 ## Documentation
 
 - [Käyttöohje (suomi)](docs/user-guide-fi.md)
