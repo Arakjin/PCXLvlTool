@@ -78,6 +78,12 @@ Format evidence and research status are documented in
 
 ## Third-party artwork
 
-Tool icons come from [Tabler Icons v3.46.0](https://github.com/tabler/tabler-icons/tree/v3.46.0)
+Most toolbox icons come from
+[KolourPaint](https://invent.kde.org/graphics/kolourpaint) and are used under
+the BSD 2-Clause License. Source and license details are in
+[`third_party/kolourpaint/README.md`](third_party/kolourpaint/README.md).
+
+The filled-shape and move-selection icons come from
+[Tabler Icons v3.46.0](https://github.com/tabler/tabler-icons/tree/v3.46.0)
 and are used under the MIT License. The bundled license is in
 [`third_party/tabler-icons/LICENSE`](third_party/tabler-icons/LICENSE).

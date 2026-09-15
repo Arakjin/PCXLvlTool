@@ -1,19 +1,19 @@
 <RCC>
   <qresource prefix="/icons">
-    <file>icons/pencil.svg</file>
-    <file>icons/eraser.svg</file>
-    <file>icons/line.svg</file>
-    <file>icons/rectangle.svg</file>
+    <file>icons/kolourpaint/tool_pen.png</file>
+    <file>icons/kolourpaint/tool_eraser.png</file>
+    <file>icons/kolourpaint/tool_line.png</file>
+    <file>icons/kolourpaint/tool_rectangle.png</file>
     <file>icons/rectangle-filled.svg</file>
-    <file>icons/bucket-droplet.svg</file>
-    <file>icons/color-picker.svg</file>
-    <file>icons/ellipse.svg</file>
+    <file>icons/kolourpaint/tool_flood_fill.png</file>
+    <file>icons/kolourpaint/tool_color_picker.png</file>
+    <file>icons/kolourpaint/tool_ellipse.png</file>
     <file>icons/ellipse-filled.svg</file>
-    <file>icons/spray.svg</file>
-    <file>icons/select-rectangle.svg</file>
-    <file>icons/select-ellipse.svg</file>
-    <file>icons/lasso.svg</file>
+    <file>icons/kolourpaint/tool_spraycan.png</file>
+    <file>icons/kolourpaint/tool_rect_selection.png</file>
+    <file>icons/kolourpaint/tool_elliptical_selection.png</file>
+    <file>icons/kolourpaint/tool_free_form_selection.png</file>
     <file>icons/hand-move.svg</file>
-    <file>icons/bezier.svg</file>
+    <file>icons/kolourpaint/tool_curve.png</file>
   </qresource>
 </RCC>

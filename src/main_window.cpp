@@ -272,35 +272,35 @@ QIcon toolIcon(const DrawTool tool)
 {
     switch (tool) {
     case DrawTool::Pencil:
-        return QIcon(QStringLiteral(":/icons/icons/pencil.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_pen.png"));
     case DrawTool::Eraser:
-        return QIcon(QStringLiteral(":/icons/icons/eraser.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_eraser.png"));
     case DrawTool::Line:
-        return QIcon(QStringLiteral(":/icons/icons/line.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_line.png"));
     case DrawTool::Rectangle:
-        return QIcon(QStringLiteral(":/icons/icons/rectangle.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_rectangle.png"));
     case DrawTool::FilledRectangle:
         return QIcon(QStringLiteral(":/icons/icons/rectangle-filled.svg"));
     case DrawTool::FloodFill:
-        return QIcon(QStringLiteral(":/icons/icons/bucket-droplet.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_flood_fill.png"));
     case DrawTool::Eyedropper:
-        return QIcon(QStringLiteral(":/icons/icons/color-picker.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_color_picker.png"));
     case DrawTool::Ellipse:
-        return QIcon(QStringLiteral(":/icons/icons/ellipse.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_ellipse.png"));
     case DrawTool::FilledEllipse:
         return QIcon(QStringLiteral(":/icons/icons/ellipse-filled.svg"));
     case DrawTool::Spray:
-        return QIcon(QStringLiteral(":/icons/icons/spray.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_spraycan.png"));
     case DrawTool::SelectRectangle:
-        return QIcon(QStringLiteral(":/icons/icons/select-rectangle.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_rect_selection.png"));
     case DrawTool::SelectEllipse:
-        return QIcon(QStringLiteral(":/icons/icons/select-ellipse.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_elliptical_selection.png"));
     case DrawTool::SelectFreehand:
-        return QIcon(QStringLiteral(":/icons/icons/lasso.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_free_form_selection.png"));
     case DrawTool::MoveSelection:
         return QIcon(QStringLiteral(":/icons/icons/hand-move.svg"));
     case DrawTool::BezierCurve:
-        return QIcon(QStringLiteral(":/icons/icons/bezier.svg"));
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_curve.png"));
     }
     return {};
 }

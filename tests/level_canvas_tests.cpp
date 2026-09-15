@@ -580,11 +580,14 @@ int main(int argc, char *argv[])
                  "palette double-click should edit the exact filtered index");
 
     ok &=
-        expect(!QIcon(QStringLiteral(":/icons/icons/pencil.svg")).isNull() &&
-                   !QIcon(QStringLiteral(":/icons/icons/bucket-droplet.svg"))
+        expect(!QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_pen.png")).isNull() &&
+                   !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_flood_fill.png"))
                         .isNull() &&
-                   !QIcon(QStringLiteral(":/icons/icons/spray.svg")).isNull() &&
-                   !QIcon(QStringLiteral(":/icons/icons/lasso.svg")).isNull(),
+                   !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_spraycan.png"))
+                        .isNull() &&
+                   !QIcon(QStringLiteral(
+                              ":/icons/icons/kolourpaint/tool_free_form_selection.png"))
+                        .isNull(),
                "embedded toolbox icons should load from resources");
 
     if (ok) {
