@@ -35,7 +35,23 @@ jobs:
           cache: true
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Build
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
         run: cmake --build build --parallel
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $buildOutput = & cmake --build build --parallel 2>&1
+          $buildExitCode = $LASTEXITCODE
+          $buildOutput | ForEach-Object { Write-Output $_ }
+          if ($buildExitCode -ne 0) {
+            $diagnostic = (($buildOutput | Select-Object -Last 80) -join "`n")
+            $diagnostic = $diagnostic.Replace('%', '%25')
+            $diagnostic = $diagnostic.Replace("`r", '')
+            $diagnostic = $diagnostic.Replace("`n", '%0A')
+            Write-Output "::error title=Windows build failed::$diagnostic"
+            exit $buildExitCode
+          }
       - name: Test
         run: ctest --test-dir build --output-on-failure
