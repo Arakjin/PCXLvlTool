@@ -1,3 +1,5 @@
+#include "lev_reader.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <exception>
@@ -6,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -182,6 +185,18 @@ int main(int argc, char* argv[])
         const std::vector<std::uint8_t> bytes = readFile(path);
         std::cout << "File: " << path.string() << '\n';
         std::cout << "File size: " << bytes.size() << " bytes\n";
+
+        auto level = std::make_unique<Level>();
+        std::string decodeError;
+        if (loadLev(path, *level, decodeError)) {
+            std::cout << "LEV decode: valid 640 x 800 indexed image\n";
+            std::cout << "Level name: \"" << level->name << "\"\n";
+            std::cout << "Decoded pixels: " << level->pixels.size() << '\n';
+            std::cout << "Palette entries: " << level->palette.size() << '\n';
+        } else {
+            std::cout << "LEV decode: failed (" << decodeError << ")\n";
+        }
+
         printHexDump(bytes);
         printAsciiStrings(bytes);
         printRepeatedRuns(bytes);

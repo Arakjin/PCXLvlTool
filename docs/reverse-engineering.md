@@ -29,6 +29,7 @@ cmake --build build
 ./build/levdump ../LEVEL1.LEV
 ./build/levcompare ../LEVEL1.LEV ../LEVEL2.LEV
 ./build/pcxfixtures build/oracle
+./build/lev_tests build/oracle
 ```
 
 `levdump` currently reports only directly observable byte-level properties:
@@ -48,8 +49,10 @@ controlled converter experiments. Its DOS-compatible filenames cover uniform
 images, individual corner/ordering pixels, stripe and checkerboard patterns,
 long runs, deterministic random pixels, and a palette-only change.
 
-It does not identify or decode headers, dimensions, palettes, image data, or
-compression.
+The raw inspection sections do not assign format meanings to bytes. After
+those sections were implemented, controlled converter tests established the
+PCX-derived layout, and `levdump` was extended to report whether the strict LEV
+reader can decode the file as a 640 x 800 indexed image plus palette.
 
 Raw format observations are maintained in [`lev-format.md`](lev-format.md).
 
@@ -62,6 +65,15 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
 | Confirmed | Comparison | Different levels produce thousands of alternating equal/different byte ranges, so these transitions cannot by themselves be treated as format blocks. | `levcompare LEVEL1.LEV LEVEL2.LEV`. |
 | Confirmed | `0x0080` through EOF | Converter 1.91 copies the PCX byte stream unchanged after replacing its 128-byte header. | Byte-for-byte comparisons of 15 controlled converter outputs. |
 | Confirmed | EOF - 769 through EOF | A `0C` PCX palette marker and 768-byte RGB palette terminate every reference level. | Corpus inspection and controlled palette-change test. |
+| Confirmed | Decoded data | All ten reference levels decode to exactly 512,000 palette indices and 256 RGB entries without crossing scanline boundaries. | Strict reader corpus run. |
+| Confirmed | Pixel order | Controlled corner pixels, stripes, checkerboard, long runs, and deterministic random pixels decode byte-for-byte to the generated source indices. | `lev_tests build/oracle`. |
+
+## Milestone status
+
+- Milestone 1, format research: complete for the data stream, compression, and
+  palette; some header fields remain intentionally unknown.
+- Milestone 2, LEV reader: implemented and validated against the ten-file
+  reference corpus and controlled converter outputs.
 
 ## Questions to investigate
 

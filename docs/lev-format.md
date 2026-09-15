@@ -84,10 +84,8 @@ must not be silently translated into a parser rule.
 
 ## Next confirmation tests
 
-1. Decode all controlled outputs as 640 x 800 scanline-oriented PCX RLE and
-   compare every index against its source fixture.
-2. Decode all ten freeware levels and reconstruct standard PCX files for an
+1. Decode all ten freeware levels and reconstruct standard PCX files for an
    independent image decoder.
-3. Test level-name lengths 0, 19, and 20 to determine termination and padding.
-4. Determine whether the freeware header difference represents a distinct
+2. Test level-name lengths 0, 19, and 20 to determine termination and padding.
+3. Determine whether the freeware header difference represents a distinct
    format version or only different converter behavior.
