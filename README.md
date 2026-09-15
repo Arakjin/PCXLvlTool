@@ -19,7 +19,9 @@ CMake, and the C++ standard library.
 
 PCX Level Tool is released under the [MIT License](LICENSE). Copyright (c)
 2026 Panu Weckman. Third-party artwork retains its own licenses as documented
-below.
+below. The bundled original V-Wing converter and all other third-party
+materials retain their own terms; see
+[Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Documentation
 
@@ -137,3 +139,12 @@ The move-selection icon comes from
 [Tabler Icons v3.46.0](https://github.com/tabler/tabler-icons/tree/v3.46.0)
 and is used under the MIT License. The bundled license is in
 [`third_party/tabler-icons/LICENSE`](third_party/tabler-icons/LICENSE).
+
+## Original V-Wing converter
+
+The repository contains the original V-Wing Level Converter 1.91 files
+`CONV.EXE`, `CONVERT.TXT`, and `FILE_ID.DIZ`. The converter is FreeWare, not
+MIT-licensed. Its original terms allow redistribution only while the converter
+and its documentation remain together and unmodified. See
+[`CONVERT.TXT`](CONVERT.TXT) and the
+[third-party notices](THIRD_PARTY_NOTICES.md).

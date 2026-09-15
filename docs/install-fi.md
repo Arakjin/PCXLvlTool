@@ -29,6 +29,11 @@ julkaisusivulta ja että tarkistussumma täsmää ennen kuin valitset varoitukse
 Ohjelman voi poistaa sulkemalla sen ja poistamalla puretun ohjelmakansion.
 Muualla olevia `.LEV`-, `.vwp`- ja `.pal`-tiedostoja ei poisteta.
 
+Windows-paketin `VWingConverter`-alikansiossa on alkuperäinen DOS-ohjelma
+`CONV.EXE` sekä sen dokumentit. PCX Level Tool ei tarvitse converteria
+toimiakseen. Jos säilytät tai jaat converterin edelleen, pidä kaikki alikansion
+tiedostot muuttamattomina yhdessä.
+
 ## Linux x86_64
 
 Suositeltu julkaisutiedosto on:
@@ -56,6 +61,11 @@ purkavana vaihtoehtona:
 
 Ohjelman voi poistaa sulkemalla sen ja poistamalla AppImage-tiedoston. Muualla
 olevat käyttäjän kentät ja projektit säilyvät.
+
+Alkuperäinen V-Wing-converter toimitetaan Linux-julkaisun yhteydessä erillisenä
+`VWing-Level-Converter-1.91.zip`-tiedostona. Se on DOS-ohjelma ja tarvitsee
+Linuxissa esimerkiksi DOSBoxin. Converter ei ole välttämätön PCX Level Toolin
+käyttämiseen.
 
 ## Linux: kääntäminen lähdekoodista
 

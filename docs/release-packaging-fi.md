@@ -5,6 +5,7 @@ Suositellut x86_64-julkaisuartefaktit ovat:
 ```text
 PCXLvlTool-<versio>-Windows-x86_64.zip
 PCXLvlTool-<versio>-x86_64.AppImage
+VWing-Level-Converter-1.91.zip
 SHA256SUMS.txt
 ```
 
@@ -36,9 +37,14 @@ Copy-Item build-windows\Release\PCXLvlTool.exe package\PCXLvlTool\
   package\PCXLvlTool\PCXLvlTool.exe
 Copy-Item README.md package\PCXLvlTool\
 Copy-Item LICENSE package\PCXLvlTool\
+Copy-Item THIRD_PARTY_NOTICES.md package\PCXLvlTool\
 Copy-Item docs\install-fi.md package\PCXLvlTool\
 Copy-Item docs\user-guide-fi.md package\PCXLvlTool\
 Copy-Item -Recurse third_party package\PCXLvlTool\third_party
+New-Item -ItemType Directory -Force `
+  package\PCXLvlTool\VWingConverter | Out-Null
+Copy-Item CONV.EXE, CONVERT.TXT, FILE_ID.DIZ `
+  package\PCXLvlTool\VWingConverter\
 Compress-Archive package\PCXLvlTool\* `
   PCXLvlTool-<versio>-Windows-x86_64.zip
 ```
@@ -69,13 +75,30 @@ Paketoinnin vaiheet ovat:
 AppImage tarvitsee lisäksi projektin sovelluskuvakkeen ja `.desktop`-tiedoston.
 Ne kannattaa lisätä ennen automatisoidun Linux-paketoinnin toteuttamista.
 
+## Alkuperäisen V-Wing-converterin paketointi
+
+`CONVERT.TXT`:n jakeluehdon mukaan `CONV.EXE`:ä saa levittää FreeWarena, kun
+ohjelma pysyy muuttamattomana ja muuttamaton dokumentti pysyy sen mukana. Älä
+muokkaa näitä alkuperäistiedostoja. Pakkaa kaikki kolme yhdessä:
+
+```powershell
+Compress-Archive CONV.EXE, CONVERT.TXT, FILE_ID.DIZ `
+  VWing-Level-Converter-1.91.zip
+```
+
+Windowsin PCX Level Tool -ZIP sisältää samat tiedostot `VWingConverter`-
+alikansiossa. Linux-julkaisussa converter-ZIP julkaistaan AppImagen rinnalla,
+koska AppImage pitää jakaa sellaisenaan. Converter on DOS-ohjelma eikä PCX
+Level Tool käytä sitä suorituksen aikana.
+
 ## Tarkistussummat
 
 Kun artefaktit ovat valmiit:
 
 ```sh
 sha256sum PCXLvlTool-<versio>-Windows-x86_64.zip \
-  PCXLvlTool-<versio>-x86_64.AppImage > SHA256SUMS.txt
+  PCXLvlTool-<versio>-x86_64.AppImage \
+  VWing-Level-Converter-1.91.zip > SHA256SUMS.txt
 ```
 
 Julkaise tarkistussummat samassa julkaisussa tiedostojen kanssa.
@@ -84,7 +107,12 @@ Julkaise tarkistussummat samassa julkaisussa tiedostojen kanssa.
 
 PCX Level Tool on julkaistu MIT-lisenssillä. Lisää ylätason `LICENSE` jokaiseen
 lähdekoodi- ja binääripakettiin. Säilytä myös KolourPaint- ja Tabler-kuvakkeiden
-mukana olevat lisenssit.
+mukana olevat lisenssit sekä `THIRD_PARTY_NOTICES.md`.
+
+Alkuperäinen `CONV.EXE` ei kuulu MIT-lisenssin alle. Sen oma jakeluehto on
+muuttamattomassa `CONVERT.TXT`:ssä, jonka pitää aina seurata muuttamattoman
+ohjelman mukana. `FILE_ID.DIZ` säilytetään lisäksi osana alkuperäistä
+jakelukokonaisuutta.
 
 Jos Qt jaetaan avoimen lähdekoodin LGPL-ehtojen nojalla, varmista ennen
 julkaisua, että paketti ja jakelutapa täyttävät käytetyn Qt-version
