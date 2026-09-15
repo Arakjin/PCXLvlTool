@@ -31,6 +31,7 @@ private:
     void createMaterialDock();
     void createLayerDock();
     void createZoomToolBar();
+    void newLevel();
     void openLevel();
     bool saveProject();
     bool saveProjectAs();
@@ -38,6 +39,7 @@ private:
     bool maybeSave();
     bool writeProject(const std::filesystem::path& path);
     bool writePublishedLevel(const std::filesystem::path& path);
+    void uppercaseLevelName();
     void refreshLayerList();
     void editSelectedPaletteColor();
     void loadPalette();

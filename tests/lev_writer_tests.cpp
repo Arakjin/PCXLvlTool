@@ -88,6 +88,13 @@ int main()
     ok &= expect(decoded->palette == source->palette,
                  "palette did not round-trip");
 
+    source->name = "Mixed case name";
+    ok &= expect(saveLev(file.path(), *source, error),
+                 "mixed-case level name could not be written: " + error);
+    ok &= expect(loadLev(file.path(), *decoded, error) &&
+                     decoded->name == "MIXED CASE NAME",
+                 "writer did not force the saved level name to uppercase");
+
     source->name = "123456789012345678901";
     error.clear();
     ok &= expect(!saveLev(file.path(), *source, error),

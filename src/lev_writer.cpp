@@ -47,7 +47,11 @@ std::array<std::uint8_t, 128> makeHeader(const std::string& name)
               header.begin() + kNameOffset + kMaximumNameLength + 1, 0x20);
     std::transform(name.begin(), name.end(), header.begin() + kNameOffset,
                    [](const char character) {
-                       return static_cast<std::uint8_t>(character);
+                       const char uppercase =
+                           character >= 'a' && character <= 'z'
+                               ? static_cast<char>(character - 'a' + 'A')
+                               : character;
+                       return static_cast<std::uint8_t>(uppercase);
                    });
     header[kNameOffset + name.size()] = 0;
     std::copy(kClassicHeaderTail.begin(), kClassicHeaderTail.end(),

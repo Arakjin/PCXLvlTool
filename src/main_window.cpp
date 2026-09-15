@@ -373,6 +373,10 @@ void MainWindow::closeEvent(QCloseEvent* event)
 void MainWindow::createActions()
 {
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+    QAction* newAction = fileMenu->addAction(tr("&New level"));
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, &MainWindow::newLevel);
+
     QAction* openAction = fileMenu->addAction(tr("&Open..."));
     openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openLevel);
@@ -1004,6 +1008,37 @@ void MainWindow::openLevel()
     statusBar()->showMessage(tr("Opened %1").arg(filename), 3000);
 }
 
+void MainWindow::newLevel()
+{
+    if (!maybeSave()) {
+        return;
+    }
+
+    auto fresh = std::make_unique<Level>();
+    fresh->name = "UNTITLED";
+    fresh->palette = defaultVWingPalette();
+    fresh->pixels.fill(0);
+
+    // Drop commands while their old Level target is still alive.
+    canvas_->undoStack()->clear();
+    level_ = std::move(fresh);
+    projectPath_.clear();
+    publishPath_.clear();
+    canvas_->setLevel(level_.get());
+    paletteWidget_->setLevel(level_.get());
+    {
+        const QSignalBlocker blocker(levelNameEdit_);
+        levelNameEdit_->setText(QStringLiteral("UNTITLED"));
+    }
+    updateMaterialDetails(
+        paletteIndexFromColorChart(materialIndexSpinBox_->value()));
+    refreshLayerList();
+    canvas_->undoStack()->setClean();
+    nonUndoModified_ = false;
+    setModified(false);
+    statusBar()->showMessage(tr("Created a new level"), 3000);
+}
+
 void MainWindow::updateMaterialDetails(const int index)
 {
     const RGB& color = level_->palette[static_cast<std::size_t>(index)];
@@ -1062,6 +1097,7 @@ bool MainWindow::maybeSave()
 bool MainWindow::writeProject(const std::filesystem::path& path)
 {
     canvas_->commitSelection();
+    uppercaseLevelName();
     std::string error;
     if (!::saveProject(path, *level_, error)) {
         QMessageBox::critical(this, tr("Save failed"),
@@ -1098,6 +1134,7 @@ bool MainWindow::publishLevel()
 bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
 {
     canvas_->commitSelection();
+    uppercaseLevelName();
     canvas_->refreshImage();
     std::string error;
     if (!saveLev(path, *level_, error)) {
@@ -1108,6 +1145,21 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
     publishPath_ = path;
     statusBar()->showMessage(tr("Published %1").arg(toQString(path)), 3000);
     return true;
+}
+
+void MainWindow::uppercaseLevelName()
+{
+    std::transform(level_->name.begin(), level_->name.end(),
+                   level_->name.begin(), [](const char character) {
+                       return character >= 'a' && character <= 'z'
+                                  ? static_cast<char>(character - 'a' + 'A')
+                                  : character;
+                   });
+    const QSignalBlocker blocker(levelNameEdit_);
+    levelNameEdit_->setText(
+        QString::fromLatin1(level_->name.data(),
+                            static_cast<int>(level_->name.size())));
+    updateWindowTitle();
 }
 
 void MainWindow::editSelectedPaletteColor()

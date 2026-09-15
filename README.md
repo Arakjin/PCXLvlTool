@@ -25,9 +25,10 @@ Run:
 The current milestone supports:
 
 - opening `.LEV` levels and layered `.vwp` projects
+- creating a fresh level with **File > New level** (`Ctrl+N`)
 - editing the in-game level-menu name directly in the top toolbar; LEV names
   are limited to 20 printable ASCII characters, so non-ASCII letters such as
-  `ä`, `ö`, and `å` are blocked
+  `ä`, `ö`, and `å` are blocked, and the name is forced to uppercase when saved
 - saving editable work as `.vwp`, plus a separate **Publish LEV** action that
   flattens the visible layers into a game-compatible `.LEV` file
 - up to five reorderable, binary visible/hidden layers; transparent pixels in
