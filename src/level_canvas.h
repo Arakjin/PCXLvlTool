@@ -142,6 +142,7 @@ private:
     int rectangleThickness_ = 1;
     int ellipseThickness_ = 1;
     int sprayThickness_ = 8;
+    double sprayDistanceRemainder_ = 0.0;
     int curveThickness_ = 1;
     int rectangleCornerRadius_ = 0;
     int strokeCornerRadius_ = 0;

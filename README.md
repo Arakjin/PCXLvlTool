@@ -31,6 +31,8 @@ The current milestone supports:
   eyedropper, and selection tools
 - independently remembered 1-32 pixel thickness for pencil, eraser, line,
   rectangle outline, and ellipse outline
+- sparse spray dragging with distance-based spacing, while a single click keeps
+  the full spray dab
 - live, non-destructive previews while dragging line and shape tools
 - Paint-style Bezier workflow: drag a baseline and then its two bend points;
   the completed curve is committed as one undo operation

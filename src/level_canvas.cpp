@@ -571,6 +571,7 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                     curveControl2_ = point;
                     viewport()->update();
                 } else if (strokeTool_ == DrawTool::Spray) {
+                    sprayDistanceRemainder_ = 0.0;
                     sprayAt(point, strokePaintIndex_, strokeThickness_);
                     viewport()->update();
                 } else if (freehand) {
@@ -893,28 +894,24 @@ bool LevelCanvas::selectionContains(const int x, const int y) const
 void LevelCanvas::sprayLine(const QPoint& from, const QPoint& to,
                             const std::uint8_t index, const int radius)
 {
-    int x = from.x();
-    int y = from.y();
-    const int dx = std::abs(to.x() - x);
-    const int sx = x < to.x() ? 1 : -1;
-    const int dy = -std::abs(to.y() - y);
-    const int sy = y < to.y() ? 1 : -1;
-    int error = dx + dy;
-    while (true) {
-        sprayAt({x, y}, index, radius);
-        if (x == to.x() && y == to.y()) {
-            break;
-        }
-        const int twiceError = 2 * error;
-        if (twiceError >= dy) {
-            error += dy;
-            x += sx;
-        }
-        if (twiceError <= dx) {
-            error += dx;
-            y += sy;
-        }
+    const double deltaX = to.x() - from.x();
+    const double deltaY = to.y() - from.y();
+    const double distance = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+    if (distance <= 0.0) {
+        return;
     }
+
+    const double spacing = std::max(2.0, radius * 0.75);
+    double nextDistance = spacing - sprayDistanceRemainder_;
+    while (nextDistance <= distance) {
+        const double position = nextDistance / distance;
+        sprayAt({static_cast<int>(std::round(from.x() + deltaX * position)),
+                 static_cast<int>(std::round(from.y() + deltaY * position))},
+                index, radius);
+        nextDistance += spacing;
+    }
+    sprayDistanceRemainder_ =
+        std::fmod(sprayDistanceRemainder_ + distance, spacing);
     viewport()->update();
 }
 

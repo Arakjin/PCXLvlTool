@@ -7,6 +7,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <vector>
@@ -407,6 +408,19 @@ int main(int argc, char *argv[])
                  "spray should always paint its center pixel");
     ok &= expect(canvas.undoStack()->count() == 1,
                  "one spray gesture should create one undo command");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setSelectedIndex(60);
+    canvas.setDrawTool(DrawTool::Spray);
+    canvas.setToolThickness(DrawTool::Spray, 8);
+    drag(viewport, {20.5, 180.5}, {220.5, 180.5});
+    const std::size_t sprayedPixels = static_cast<std::size_t>(
+        std::count_if(level.pixels.begin(), level.pixels.end(),
+                      [](const std::uint8_t value) { return value == 60; }));
+    ok &= expect(sprayedPixels > 0 && sprayedPixels <= 600,
+                 "a long spray drag should remain sparse");
 
     canvas.setLevel(nullptr);
     clearLevel(level);
