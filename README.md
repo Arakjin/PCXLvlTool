@@ -24,20 +24,24 @@ Run:
 The current milestone supports:
 
 - opening, saving, and saving `.LEV` files under a new name
-- pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%
+- pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%,
+  with `Ctrl+mouse wheel` zooming around the pointer
 - panning with the middle mouse button
 - Paint-style two-column toolbox with pencil, eraser, line, cubic Bezier curve,
-  rectangle, filled rectangle, ellipse, filled ellipse, spray, flood-fill,
-  eyedropper, and selection tools
+  rectangle, ellipse, polygon, text, spray, flood-fill, eyedropper, and
+  selection tools
 - independently remembered 1-32 pixel thickness for pencil, eraser, line,
-  rectangle outline, and ellipse outline
+  rectangle, ellipse, polygon, spray, and Bezier curve
 - sparse spray dragging with distance-based spacing, while a single click keeps
   the full spray dab
 - live, non-destructive previews while dragging line and shape tools
 - Paint-style Bezier workflow: drag a baseline and then its two bend points;
   the completed curve is committed as one undo operation
 - `Shift`-constrained squares and circles, plus selectable sharp or rounded
-  rectangle corners
+  rectangle corners; rectangle, ellipse, and polygon share a fill option
+- indexed text placement with editable content and 6-64 pixel size
+- Paint-style polygons made by clicking corners and completed with a double
+  click or `Enter`; `Esc` cancels an unfinished polygon
 - rectangular, elliptical, and freehand selections stored as temporary indexed
   layers; selections can be moved, deleted, or edited with the drawing tools
 - lossless indexed selection copy/paste with `Ctrl+C` and `Ctrl+V`; `Enter`
@@ -83,7 +87,7 @@ Most toolbox icons come from
 the BSD 2-Clause License. Source and license details are in
 [`third_party/kolourpaint/README.md`](third_party/kolourpaint/README.md).
 
-The filled-shape and move-selection icons come from
+The move-selection icon comes from
 [Tabler Icons v3.46.0](https://github.com/tabler/tabler-icons/tree/v3.46.0)
-and are used under the MIT License. The bundled license is in
+and is used under the MIT License. The bundled license is in
 [`third_party/tabler-icons/LICENSE`](third_party/tabler-icons/LICENSE).

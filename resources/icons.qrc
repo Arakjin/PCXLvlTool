@@ -4,12 +4,12 @@
     <file>icons/kolourpaint/tool_eraser.png</file>
     <file>icons/kolourpaint/tool_line.png</file>
     <file>icons/kolourpaint/tool_rectangle.png</file>
-    <file>icons/rectangle-filled.svg</file>
     <file>icons/kolourpaint/tool_flood_fill.png</file>
     <file>icons/kolourpaint/tool_color_picker.png</file>
     <file>icons/kolourpaint/tool_ellipse.png</file>
-    <file>icons/ellipse-filled.svg</file>
     <file>icons/kolourpaint/tool_spraycan.png</file>
+    <file>icons/kolourpaint/tool_text.png</file>
+    <file>icons/kolourpaint/tool_polygon.png</file>
     <file>icons/kolourpaint/tool_rect_selection.png</file>
     <file>icons/kolourpaint/tool_elliptical_selection.png</file>
     <file>icons/kolourpaint/tool_free_form_selection.png</file>

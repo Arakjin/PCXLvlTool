@@ -10,6 +10,7 @@
 
 #include <QAction>
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QComboBox>
@@ -20,10 +21,12 @@
 #include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -279,18 +282,18 @@ QIcon toolIcon(const DrawTool tool)
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_line.png"));
     case DrawTool::Rectangle:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_rectangle.png"));
-    case DrawTool::FilledRectangle:
-        return QIcon(QStringLiteral(":/icons/icons/rectangle-filled.svg"));
     case DrawTool::FloodFill:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_flood_fill.png"));
     case DrawTool::Eyedropper:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_color_picker.png"));
     case DrawTool::Ellipse:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_ellipse.png"));
-    case DrawTool::FilledEllipse:
-        return QIcon(QStringLiteral(":/icons/icons/ellipse-filled.svg"));
     case DrawTool::Spray:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_spraycan.png"));
+    case DrawTool::Text:
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_text.png"));
+    case DrawTool::Polygon:
+        return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_polygon.png"));
     case DrawTool::SelectRectangle:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_rect_selection.png"));
     case DrawTool::SelectEllipse:
@@ -424,11 +427,11 @@ void MainWindow::createMaterialDock()
         {"Line", DrawTool::Line},
         {"Bezier curve", DrawTool::BezierCurve},
         {"Rectangle", DrawTool::Rectangle},
-        {"Filled rectangle", DrawTool::FilledRectangle},
         {"Ellipse", DrawTool::Ellipse},
-        {"Filled ellipse", DrawTool::FilledEllipse},
+        {"Polygon", DrawTool::Polygon},
         {"Flood fill", DrawTool::FloodFill},
         {"Eyedropper", DrawTool::Eyedropper},
+        {"Text", DrawTool::Text},
         {"Rectangle select", DrawTool::SelectRectangle},
         {"Ellipse select", DrawTool::SelectEllipse},
         {"Freehand select", DrawTool::SelectFreehand},
@@ -467,7 +470,9 @@ void MainWindow::createMaterialDock()
     selectionHelp->setWordWrap(true);
     layout->addWidget(selectionHelp);
     auto* curveHelp = new QLabel(
-        tr("Curve: drag the baseline, then drag both bend points."), contents);
+        tr("Curve: drag the baseline, then drag both bend points. Polygon: "
+           "click corners, then double-click or press Enter to finish."),
+        contents);
     curveHelp->setWordWrap(true);
     layout->addWidget(curveHelp);
 
@@ -492,10 +497,28 @@ void MainWindow::createMaterialDock()
     cornerRadiusCombo->setEnabled(false);
     cornerLayout->addWidget(cornerRadiusCombo);
     layout->addLayout(cornerLayout);
+
+    auto* fillShapesCheckBox = new QCheckBox(tr("Filled shape"), contents);
+    fillShapesCheckBox->setEnabled(false);
+    layout->addWidget(fillShapesCheckBox);
+
+    auto* textLayout = new QHBoxLayout();
+    textLayout->addWidget(new QLabel(tr("Text:"), contents));
+    auto* textInput = new QLineEdit(contents);
+    textInput->setPlaceholderText(tr("Text to place"));
+    textInput->setEnabled(false);
+    textLayout->addWidget(textInput);
+    auto* textSizeSpinBox = new QSpinBox(contents);
+    textSizeSpinBox->setRange(6, 64);
+    textSizeSpinBox->setValue(12);
+    textSizeSpinBox->setSuffix(tr(" px"));
+    textSizeSpinBox->setEnabled(false);
+    textLayout->addWidget(textSizeSpinBox);
+    layout->addLayout(textLayout);
     connect(
         toolGroup, &QButtonGroup::idClicked, this,
         [this, activeToolLabel, thicknessSpinBox, cornerRadiusCombo,
-         tools](const int id) {
+         fillShapesCheckBox, textInput, textSizeSpinBox, tools](const int id) {
             const auto selectedTool = static_cast<DrawTool>(id);
             canvas_->setDrawTool(selectedTool);
             for (const auto& [label, tool] : tools) {
@@ -510,18 +533,27 @@ void MainWindow::createMaterialDock()
                 selectedTool == DrawTool::Line ||
                 selectedTool == DrawTool::Rectangle ||
                 selectedTool == DrawTool::Ellipse ||
+                selectedTool == DrawTool::Polygon ||
                 selectedTool == DrawTool::Spray ||
                 selectedTool == DrawTool::BezierCurve;
             const QSignalBlocker blocker(thicknessSpinBox);
             thicknessSpinBox->setEnabled(supportsThickness);
             thicknessSpinBox->setValue(canvas_->toolThickness(selectedTool));
-            const bool supportsCorners =
-                selectedTool == DrawTool::Rectangle ||
-                selectedTool == DrawTool::FilledRectangle;
+            const bool supportsCorners = selectedTool == DrawTool::Rectangle;
             cornerRadiusCombo->setEnabled(supportsCorners);
             if (supportsCorners) {
                 cornerRadiusCombo->setCurrentIndex(cornerRadiusCombo->findData(
                     canvas_->rectangleCornerRadius()));
+            }
+            const bool supportsFill = selectedTool == DrawTool::Rectangle ||
+                                      selectedTool == DrawTool::Ellipse ||
+                                      selectedTool == DrawTool::Polygon;
+            fillShapesCheckBox->setEnabled(supportsFill);
+            const bool supportsText = selectedTool == DrawTool::Text;
+            textInput->setEnabled(supportsText);
+            textSizeSpinBox->setEnabled(supportsText);
+            if (supportsText) {
+                textInput->setFocus();
             }
         });
     connect(thicknessSpinBox, &QSpinBox::valueChanged, this,
@@ -534,6 +566,12 @@ void MainWindow::createMaterialDock()
                 canvas_->setRectangleCornerRadius(
                     cornerRadiusCombo->itemData(index).toInt());
             });
+    connect(fillShapesCheckBox, &QCheckBox::toggled, canvas_,
+            &LevelCanvas::setShapeFilled);
+    connect(textInput, &QLineEdit::textChanged, canvas_,
+            &LevelCanvas::setTextContent);
+    connect(textSizeSpinBox, &QSpinBox::valueChanged, canvas_,
+            &LevelCanvas::setTextPixelSize);
 
     layout->addSpacing(6);
     layout->addWidget(new QLabel(tr("Palette"), contents));
@@ -627,7 +665,11 @@ void MainWindow::createMaterialDock()
             });
     updateMaterialDetails(materialIndexSpinBox_->value());
 
-    dock->setWidget(contents);
+    auto* scrollArea = new QScrollArea(dock);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setWidget(contents);
+    dock->setWidget(scrollArea);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
 }
 
@@ -651,6 +693,11 @@ void MainWindow::createZoomToolBar()
     connect(zoomCombo, &QComboBox::currentIndexChanged, this,
             [this, zoomCombo](const int index) {
                 canvas_->setZoom(zoomCombo->itemData(index).toDouble());
+            });
+    connect(canvas_, &LevelCanvas::zoomChanged, zoomCombo,
+            [zoomCombo](const double zoom) {
+                const QSignalBlocker blocker(zoomCombo);
+                zoomCombo->setCurrentIndex(zoomCombo->findData(zoom));
             });
     toolBar->addWidget(zoomCombo);
 }

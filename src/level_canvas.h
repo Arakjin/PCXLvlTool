@@ -18,6 +18,7 @@ class QKeyEvent;
 class QPainter;
 class QPaintEvent;
 class QResizeEvent;
+class QWheelEvent;
 
 struct PixelChange {
     std::size_t offset;
@@ -30,12 +31,12 @@ enum class DrawTool {
     Eraser,
     Line,
     Rectangle,
-    FilledRectangle,
     FloodFill,
     Eyedropper,
     Ellipse,
-    FilledEllipse,
     Spray,
+    Text,
+    Polygon,
     SelectRectangle,
     SelectEllipse,
     SelectFreehand,
@@ -51,12 +52,17 @@ public:
 
     void setLevel(Level* level);
     void setZoom(double zoom);
+    double zoom() const;
     void setSelectedIndex(std::uint8_t index);
     void setDrawTool(DrawTool tool);
     void setToolThickness(DrawTool tool, int thickness);
     int toolThickness(DrawTool tool) const;
     void setRectangleCornerRadius(int radius);
     int rectangleCornerRadius() const;
+    void setShapeFilled(bool filled);
+    bool shapeFilled() const;
+    void setTextContent(const QString& text);
+    void setTextPixelSize(int size);
     void setPaletteColor(std::uint8_t index, RGB color);
     void applyPaletteColor(std::uint8_t index, RGB color);
     void setPalette(const std::array<RGB, 256>& palette);
@@ -72,6 +78,7 @@ public:
     void refreshImage();
 
 signals:
+    void zoomChanged(double zoom);
     void cursorPositionChanged(int x, int y, int index);
     void cursorLeftCanvas();
     void selectedIndexChanged(int index);
@@ -84,6 +91,8 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void leaveEvent(QEvent* event) override;
 
@@ -112,6 +121,9 @@ private:
                        int thickness, int cornerRadius, bool filled);
     void drawEllipse(const QPoint& from, const QPoint& to, std::uint8_t index,
                      int thickness, bool filled);
+    void drawPolygon(const std::vector<QPoint>& points, std::uint8_t index,
+                     int thickness, bool filled);
+    void drawText(const QPoint& position, std::uint8_t index);
     void floodFill(const QPoint& point, std::uint8_t index);
     void paintShapePreview(QPainter& painter) const;
     void paintSelection(QPainter& painter) const;
@@ -122,6 +134,8 @@ private:
     void updateToolCursor();
     void cancelCurve();
     void commitCurve();
+    void cancelPolygon();
+    void commitPolygon();
     void beginStroke(const QString& commandText);
     void commitStroke();
     std::uint8_t paintIndex() const;
@@ -145,8 +159,13 @@ private:
     int sprayThickness_ = 8;
     double sprayDistanceRemainder_ = 0.0;
     int curveThickness_ = 1;
+    int polygonThickness_ = 1;
     int rectangleCornerRadius_ = 0;
     int strokeCornerRadius_ = 0;
+    bool shapeFilled_ = false;
+    bool strokeFilled_ = false;
+    QString textContent_;
+    int textPixelSize_ = 12;
     bool drawing_ = false;
     bool panning_ = false;
     bool movingSelection_ = false;
@@ -163,6 +182,8 @@ private:
     QPoint curveEndPoint_;
     QPoint curveControl1_;
     QPoint curveControl2_;
+    bool polygonActive_ = false;
+    std::vector<QPoint> polygonPoints_;
     QRect selectionBounds_;
     bool selectionActive_ = false;
     bool selectionHasSource_ = false;

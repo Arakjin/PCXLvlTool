@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cstddef>
@@ -74,6 +75,15 @@ void sendKey(QWidget *target, const int key,
     QApplication::sendEvent(target, &event);
 }
 
+void sendWheel(QWidget *target, const QPointF position, const int delta,
+               const Qt::KeyboardModifiers modifiers)
+{
+    const QPointF globalPosition(target->mapToGlobal(position.toPoint()));
+    QWheelEvent event(position, globalPosition, {}, {0, delta}, Qt::NoButton,
+                      modifiers, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(target, &event);
+}
+
 std::size_t offset(const int x, const int y)
 {
     return static_cast<std::size_t>(y) * Level::Width +
@@ -102,9 +112,15 @@ int main(int argc, char *argv[])
     application.processEvents();
 
     QWidget *viewport = canvas.viewport();
+    bool ok = true;
+    sendWheel(viewport, {100.0, 100.0}, 120, Qt::ControlModifier);
+    ok &= expect(canvas.zoom() == 2.0,
+                 "Ctrl+wheel up should increase the canvas zoom");
+    sendWheel(viewport, {100.0, 100.0}, -120, Qt::ControlModifier);
+    ok &= expect(canvas.zoom() == 1.0,
+                 "Ctrl+wheel down should decrease the canvas zoom");
     drag(viewport, {1.5, 1.5}, {3.5, 1.5});
 
-    bool ok = true;
     const std::size_t rowOffset = Level::Width;
     ok &= expect(level.pixels[rowOffset + 1] == 57 &&
                      level.pixels[rowOffset + 2] == 57 &&
@@ -179,7 +195,8 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setDrawTool(DrawTool::FilledRectangle);
+    canvas.setDrawTool(DrawTool::Rectangle);
+    canvas.setShapeFilled(true);
     drag(viewport, {30.5, 30.5}, {32.5, 32.5});
     ok &= expect(level.pixels[offset(30, 30)] == 58 &&
                      level.pixels[offset(31, 31)] == 58 &&
@@ -189,6 +206,7 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
+    canvas.setShapeFilled(false);
     canvas.setDrawTool(DrawTool::Rectangle);
     canvas.setToolThickness(DrawTool::Rectangle, 2);
     canvas.setRectangleCornerRadius(0);
@@ -229,7 +247,8 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setDrawTool(DrawTool::FilledEllipse);
+    canvas.setDrawTool(DrawTool::Ellipse);
+    canvas.setShapeFilled(true);
     drag(viewport, {45.5, 45.5}, {51.5, 51.5});
     ok &= expect(level.pixels[offset(48, 48)] == 58,
                  "filled ellipse should draw its interior");
@@ -237,6 +256,7 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
+    canvas.setShapeFilled(false);
     canvas.setDrawTool(DrawTool::Ellipse);
     canvas.setToolThickness(DrawTool::Ellipse, 2);
     drag(viewport, {180.5, 120.5}, {190.5, 130.5});
@@ -247,11 +267,52 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setDrawTool(DrawTool::FilledEllipse);
+    canvas.setDrawTool(DrawTool::Ellipse);
+    canvas.setShapeFilled(true);
     drag(viewport, {160.5, 110.5}, {166.5, 113.5}, Qt::ShiftModifier);
     ok &= expect(level.pixels[offset(163, 116)] == 58 &&
                      level.pixels[offset(166, 116)] == 0,
                  "Shift should constrain an ellipse to a circle");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setShapeFilled(false);
+    canvas.setDrawTool(DrawTool::Polygon);
+    click(viewport, {200.5, 200.5});
+    click(viewport, {208.5, 200.5});
+    click(viewport, {204.5, 208.5});
+    sendKey(&canvas, Qt::Key_Return);
+    ok &= expect(level.pixels[offset(200, 200)] == 58 &&
+                     level.pixels[offset(204, 204)] == 0,
+                 "polygon should close its outline when Enter is pressed");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setShapeFilled(true);
+    canvas.setDrawTool(DrawTool::Polygon);
+    click(viewport, {220.5, 200.5});
+    click(viewport, {228.5, 200.5});
+    sendMouseEvent(viewport, QEvent::MouseButtonDblClick, {224.5, 208.5},
+                   Qt::LeftButton, Qt::LeftButton);
+    ok &= expect(level.pixels[offset(224, 203)] == 58,
+                 "double-click should finish and fill a polygon");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setTextContent(QStringLiteral("Test"));
+    canvas.setTextPixelSize(12);
+    canvas.setDrawTool(DrawTool::Text);
+    click(viewport, {240.5, 200.5});
+    const bool textPixelsWritten = std::any_of(
+        level.pixels.begin(), level.pixels.end(),
+        [](const std::uint8_t value) { return value == 58; });
+    ok &= expect(textPixelsWritten,
+                 "text tool should rasterize text to the selected index");
+    ok &= expect(canvas.undoStack()->count() == 1,
+                 "placing text should create one undo command");
 
     canvas.setLevel(nullptr);
     clearLevel(level);
@@ -587,6 +648,10 @@ int main(int argc, char *argv[])
                         .isNull() &&
                    !QIcon(QStringLiteral(
                               ":/icons/icons/kolourpaint/tool_free_form_selection.png"))
+                        .isNull() &&
+                   !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_text.png"))
+                        .isNull() &&
+                   !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_polygon.png"))
                         .isNull(),
                "embedded toolbox icons should load from resources");
 
