@@ -54,6 +54,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     createActions();
     createMaterialDock();
+    createDrawToolBar();
     createZoomToolBar();
 
     positionLabel_ = new QLabel(tr("Ready"), this);
@@ -127,9 +128,36 @@ void MainWindow::createMaterialDock()
             [this](const int value) {
                 canvas_->setSelectedIndex(static_cast<std::uint8_t>(value));
             });
+    connect(canvas_, &LevelCanvas::selectedIndexChanged, indexSpinBox,
+            &QSpinBox::setValue);
 
     dock->setWidget(contents);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
+}
+
+void MainWindow::createDrawToolBar()
+{
+    QToolBar* toolBar = addToolBar(tr("Tools"));
+    toolBar->addWidget(new QLabel(tr("Tool: "), toolBar));
+    auto* toolCombo = new QComboBox(toolBar);
+    const std::array<std::pair<const char*, DrawTool>, 7> tools{{
+        {"Pencil", DrawTool::Pencil},
+        {"Eraser", DrawTool::Eraser},
+        {"Line", DrawTool::Line},
+        {"Rectangle", DrawTool::Rectangle},
+        {"Filled rectangle", DrawTool::FilledRectangle},
+        {"Flood fill", DrawTool::FloodFill},
+        {"Eyedropper", DrawTool::Eyedropper},
+    }};
+    for (const auto& [label, tool] : tools) {
+        toolCombo->addItem(tr(label), static_cast<int>(tool));
+    }
+    connect(toolCombo, &QComboBox::currentIndexChanged, this,
+            [this, toolCombo](const int index) {
+                canvas_->setDrawTool(static_cast<DrawTool>(
+                    toolCombo->itemData(index).toInt()));
+            });
+    toolBar->addWidget(toolCombo);
 }
 
 void MainWindow::createZoomToolBar()

@@ -101,6 +101,9 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   status, and unsaved-change prompts are present. Interactive testing confirmed
   that levels open, can be drawn on and saved, and the GUI-saved output opens
   correctly in the original game.
+- Milestone 6, usable editor: in progress. Stroke-based undo/redo and the
+  pencil, eraser, line, outline/filled rectangle, flood-fill, and eyedropper
+  tools are implemented and covered by offscreen canvas interaction tests.
 
 ## Questions to investigate
 

@@ -24,6 +24,7 @@ protected:
 private:
     void createActions();
     void createMaterialDock();
+    void createDrawToolBar();
     void createZoomToolBar();
     void openLevel();
     bool saveLevel();

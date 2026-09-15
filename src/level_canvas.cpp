@@ -17,10 +17,10 @@ namespace {
 class PixelEditCommand final : public QUndoCommand {
 public:
     PixelEditCommand(Level* level, std::vector<PixelChange> changes,
-                     LevelCanvas* canvas)
+                     LevelCanvas* canvas, QString commandText)
         : level_(level), changes_(std::move(changes)), canvas_(canvas)
     {
-        setText(QObject::tr("Pencil stroke"));
+        setText(commandText);
     }
 
     void undo() override
@@ -87,7 +87,16 @@ void LevelCanvas::setZoom(const double zoom)
 
 void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 {
+    if (selectedIndex_ == index) {
+        return;
+    }
     selectedIndex_ = index;
+    emit selectedIndexChanged(index);
+}
+
+void LevelCanvas::setDrawTool(const DrawTool tool)
+{
+    drawTool_ = tool;
 }
 
 QUndoStack* LevelCanvas::undoStack()
@@ -147,11 +156,30 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
     if (event->button() == Qt::LeftButton && level_ != nullptr) {
         const QPoint point = imagePoint(event->position());
         if (point.x() >= 0) {
-            drawing_ = true;
             lastImagePoint_ = point;
-            beginStroke();
-            setPixel(point.x(), point.y());
-            viewport()->update();
+            strokeStartPoint_ = point;
+            strokeTool_ = drawTool_;
+            strokePaintIndex_ = paintIndex();
+
+            if (strokeTool_ == DrawTool::Eyedropper) {
+                const std::size_t offset =
+                    static_cast<std::size_t>(point.y()) * Level::Width +
+                    static_cast<std::size_t>(point.x());
+                setSelectedIndex(level_->pixels[offset]);
+            } else if (strokeTool_ == DrawTool::FloodFill) {
+                beginStroke(tr("Flood fill"));
+                floodFill(point, strokePaintIndex_);
+                commitStroke();
+            } else {
+                drawing_ = true;
+                const bool freehand = strokeTool_ == DrawTool::Pencil ||
+                                      strokeTool_ == DrawTool::Eraser;
+                beginStroke(commandText());
+                if (freehand) {
+                    setPixel(point.x(), point.y(), strokePaintIndex_);
+                    viewport()->update();
+                }
+            }
             reportPosition(point);
         }
         event->accept();
@@ -176,8 +204,12 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
     const QPoint point = imagePoint(event->position());
     if (point.x() >= 0) {
         reportPosition(point);
-        if (drawing_ && (event->buttons() & Qt::LeftButton)) {
-            drawLine(lastImagePoint_, point);
+        if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+            (strokeTool_ == DrawTool::Pencil ||
+             strokeTool_ == DrawTool::Eraser)) {
+            drawLine(lastImagePoint_, point, strokePaintIndex_);
+            lastImagePoint_ = point;
+        } else if (drawing_ && (event->buttons() & Qt::LeftButton)) {
             lastImagePoint_ = point;
         }
     } else {
@@ -197,6 +229,19 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         const bool wasDrawing = drawing_;
         drawing_ = false;
         if (wasDrawing) {
+            const QPoint releasePoint = imagePoint(event->position());
+            if (releasePoint.x() >= 0) {
+                lastImagePoint_ = releasePoint;
+            }
+            if (strokeTool_ == DrawTool::Line) {
+                drawLine(strokeStartPoint_, lastImagePoint_, strokePaintIndex_);
+            } else if (strokeTool_ == DrawTool::Rectangle) {
+                drawRectangle(strokeStartPoint_, lastImagePoint_,
+                              strokePaintIndex_, false);
+            } else if (strokeTool_ == DrawTool::FilledRectangle) {
+                drawRectangle(strokeStartPoint_, lastImagePoint_,
+                              strokePaintIndex_, true);
+            }
             commitStroke();
         }
         event->accept();
@@ -229,11 +274,12 @@ QPoint LevelCanvas::imagePoint(const QPointF& viewportPoint) const
     return {x, y};
 }
 
-bool LevelCanvas::setPixel(const int x, const int y)
+bool LevelCanvas::setPixel(const int x, const int y,
+                           const std::uint8_t index)
 {
     const std::size_t offset = static_cast<std::size_t>(y) * Level::Width +
                                static_cast<std::size_t>(x);
-    if (level_->pixels[offset] == selectedIndex_) {
+    if (level_->pixels[offset] == index) {
         return false;
     }
     const auto existing = strokeChangeIndices_.find(offset);
@@ -242,16 +288,17 @@ bool LevelCanvas::setPixel(const int x, const int y)
         strokeChanges_.push_back(PixelChange{
             offset,
             level_->pixels[offset],
-            selectedIndex_,
+            index,
         });
     } else {
-        strokeChanges_[existing->second].newValue = selectedIndex_;
+        strokeChanges_[existing->second].newValue = index;
     }
-    level_->pixels[offset] = selectedIndex_;
+    level_->pixels[offset] = index;
     return true;
 }
 
-void LevelCanvas::drawLine(const QPoint& from, const QPoint& to)
+void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
+                           const std::uint8_t index)
 {
     int x0 = from.x();
     int y0 = from.y();
@@ -265,7 +312,7 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to)
     bool changed = false;
 
     while (true) {
-        changed |= setPixel(x0, y0);
+        changed |= setPixel(x0, y0, index);
         if (x0 == x1 && y0 == y1) {
             break;
         }
@@ -285,20 +332,106 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to)
     }
 }
 
-void LevelCanvas::beginStroke()
+void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
+                                const std::uint8_t index, const bool filled)
+{
+    const int left = std::min(from.x(), to.x());
+    const int right = std::max(from.x(), to.x());
+    const int top = std::min(from.y(), to.y());
+    const int bottom = std::max(from.y(), to.y());
+    bool changed = false;
+
+    for (int y = top; y <= bottom; ++y) {
+        for (int x = left; x <= right; ++x) {
+            if (filled || y == top || y == bottom || x == left || x == right) {
+                changed |= setPixel(x, y, index);
+            }
+        }
+    }
+    if (changed) {
+        viewport()->update();
+    }
+}
+
+void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
+{
+    const auto startOffset = static_cast<std::size_t>(point.y()) * Level::Width +
+                             static_cast<std::size_t>(point.x());
+    const std::uint8_t target = level_->pixels[startOffset];
+    if (target == index) {
+        return;
+    }
+
+    std::vector<QPoint> pending{point};
+    setPixel(point.x(), point.y(), index);
+    while (!pending.empty()) {
+        const QPoint current = pending.back();
+        pending.pop_back();
+        const QPoint neighbours[] = {
+            {current.x() - 1, current.y()},
+            {current.x() + 1, current.y()},
+            {current.x(), current.y() - 1},
+            {current.x(), current.y() + 1},
+        };
+        for (const QPoint& neighbour : neighbours) {
+            if (neighbour.x() < 0 || neighbour.y() < 0 ||
+                neighbour.x() >= static_cast<int>(Level::Width) ||
+                neighbour.y() >= static_cast<int>(Level::Height)) {
+                continue;
+            }
+            const auto offset =
+                static_cast<std::size_t>(neighbour.y()) * Level::Width +
+                static_cast<std::size_t>(neighbour.x());
+            if (level_->pixels[offset] == target) {
+                setPixel(neighbour.x(), neighbour.y(), index);
+                pending.push_back(neighbour);
+            }
+        }
+    }
+    viewport()->update();
+}
+
+void LevelCanvas::beginStroke(const QString& commandText)
 {
     strokeChanges_.clear();
     strokeChangeIndices_.clear();
+    strokeCommandText_ = commandText;
 }
 
 void LevelCanvas::commitStroke()
 {
     if (!strokeChanges_.empty()) {
-        undoStack_.push(
-            new PixelEditCommand(level_, std::move(strokeChanges_), this));
+        undoStack_.push(new PixelEditCommand(level_, std::move(strokeChanges_),
+                                             this, strokeCommandText_));
     }
     strokeChanges_.clear();
     strokeChangeIndices_.clear();
+}
+
+std::uint8_t LevelCanvas::paintIndex() const
+{
+    return drawTool_ == DrawTool::Eraser ? 0 : selectedIndex_;
+}
+
+QString LevelCanvas::commandText() const
+{
+    switch (strokeTool_) {
+    case DrawTool::Pencil:
+        return tr("Pencil stroke");
+    case DrawTool::Eraser:
+        return tr("Eraser stroke");
+    case DrawTool::Line:
+        return tr("Line");
+    case DrawTool::Rectangle:
+        return tr("Rectangle");
+    case DrawTool::FilledRectangle:
+        return tr("Filled rectangle");
+    case DrawTool::FloodFill:
+        return tr("Flood fill");
+    case DrawTool::Eyedropper:
+        return tr("Eyedropper");
+    }
+    return tr("Edit");
 }
 
 void LevelCanvas::updateScrollBars()

@@ -4,6 +4,7 @@
 
 #include <QAbstractScrollArea>
 #include <QPoint>
+#include <QString>
 #include <QUndoStack>
 
 #include <cstddef>
@@ -21,6 +22,16 @@ struct PixelChange {
     std::uint8_t newValue;
 };
 
+enum class DrawTool {
+    Pencil,
+    Eraser,
+    Line,
+    Rectangle,
+    FilledRectangle,
+    FloodFill,
+    Eyedropper,
+};
+
 class LevelCanvas final : public QAbstractScrollArea {
     Q_OBJECT
 
@@ -30,12 +41,14 @@ public:
     void setLevel(Level* level);
     void setZoom(double zoom);
     void setSelectedIndex(std::uint8_t index);
+    void setDrawTool(DrawTool tool);
     QUndoStack* undoStack();
     void refreshImage();
 
 signals:
     void cursorPositionChanged(int x, int y, int index);
     void cursorLeftCanvas();
+    void selectedIndexChanged(int index);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -47,19 +60,29 @@ protected:
 
 private:
     QPoint imagePoint(const QPointF& viewportPoint) const;
-    bool setPixel(int x, int y);
-    void drawLine(const QPoint& from, const QPoint& to);
-    void beginStroke();
+    bool setPixel(int x, int y, std::uint8_t index);
+    void drawLine(const QPoint& from, const QPoint& to, std::uint8_t index);
+    void drawRectangle(const QPoint& from, const QPoint& to,
+                       std::uint8_t index, bool filled);
+    void floodFill(const QPoint& point, std::uint8_t index);
+    void beginStroke(const QString& commandText);
     void commitStroke();
+    std::uint8_t paintIndex() const;
+    QString commandText() const;
     void updateScrollBars();
     void reportPosition(const QPoint& point);
 
     Level* level_ = nullptr;
     double zoom_ = 1.0;
     std::uint8_t selectedIndex_ = 57;
+    DrawTool drawTool_ = DrawTool::Pencil;
+    std::uint8_t strokePaintIndex_ = 57;
+    DrawTool strokeTool_ = DrawTool::Pencil;
     bool drawing_ = false;
     bool panning_ = false;
     QPoint lastImagePoint_;
+    QPoint strokeStartPoint_;
+    QString strokeCommandText_;
     QPoint lastPanPoint_;
     QUndoStack undoStack_;
     std::vector<PixelChange> strokeChanges_;
