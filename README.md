@@ -15,6 +15,12 @@ ctest --test-dir build --output-on-failure
 The only required dependencies are Qt 6 Widgets and SVG, a C++17 compiler,
 CMake, and the C++ standard library.
 
+## Documentation
+
+- [Käyttöohje (suomi)](docs/user-guide-fi.md)
+- [Windows- ja Linux-asennusohje (suomi)](docs/install-fi.md)
+- [Julkaisupakettien tekeminen (suomi)](docs/release-packaging-fi.md)
+
 ## Minimal editor
 
 Run:
