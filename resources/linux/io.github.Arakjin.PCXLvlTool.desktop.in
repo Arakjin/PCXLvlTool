@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PCX Level Tool
+Comment=Edit indexed PCX-based game levels
+Exec=PCXLvlTool
+Icon=pcxlvltool
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+StartupNotify=true
+StartupWMClass=PCXLvlTool

@@ -35,9 +35,8 @@ Copy-Item build-windows\Release\PCXLvlTool.exe package\PCXLvlTool\
 & "$QtDir\bin\windeployqt.exe" `
   --release --compiler-runtime --dir package\PCXLvlTool `
   package\PCXLvlTool\PCXLvlTool.exe
-Copy-Item README.md package\PCXLvlTool\
-Copy-Item LICENSE package\PCXLvlTool\
-Copy-Item THIRD_PARTY_NOTICES.md package\PCXLvlTool\
+Copy-Item LICENSE, CHANGELOG.md, README.md, QT-LGPL-NOTICE.md, `
+  THIRD_PARTY_NOTICES.md package\PCXLvlTool\
 Copy-Item docs\install-fi.md package\PCXLvlTool\
 Copy-Item docs\user-guide-fi.md package\PCXLvlTool\
 Copy-Item -Recurse third_party package\PCXLvlTool\third_party
@@ -45,14 +44,17 @@ New-Item -ItemType Directory -Force `
   package\PCXLvlTool\VWingConverter | Out-Null
 Copy-Item CONV.EXE, CONVERT.TXT, FILE_ID.DIZ `
   package\PCXLvlTool\VWingConverter\
+New-Item -ItemType Directory -Force `
+  package\PCXLvlTool\licenses | Out-Null
+Copy-Item -Recurse "$QtDir\LICENSES" package\PCXLvlTool\licenses\Qt
 Compress-Archive package\PCXLvlTool\* `
   PCXLvlTool-<versio>-Windows-x86_64.zip
 ```
 
 `windeployqt` tutkii ohjelman riippuvuudet ja rakentaa Qt:n tarvitsemat DLL- ja
 plugin-kansiot. Tarkista erityisesti, että paketissa on
-`platforms/qwindows.dll`. Testaa lopullinen ZIP puhtaalla Windows-koneella,
-jossa ei ole Qt SDK:ta tai kehitysympäristöä.
+`platforms/qwindows.dll` ja Qt:n `LICENSES`-hakemisto. Testaa lopullinen ZIP
+puhtaalla Windows-koneella, jossa ei ole Qt SDK:ta tai kehitysympäristöä.
 
 ## Linux-paketin tekeminen
 
@@ -73,7 +75,10 @@ Paketoinnin vaiheet ovat:
    Linux-jakelulla.
 
 AppImage tarvitsee lisäksi projektin sovelluskuvakkeen ja `.desktop`-tiedoston.
-Ne kannattaa lisätä ennen automatisoidun Linux-paketoinnin toteuttamista.
+Ne ovat repossa hakemistoissa `pcxlvltool-icon-pack` ja `resources/linux`.
+
+Tagista käynnistyvä `.github/workflows/release.yml` automatisoi Windows- ja
+Linux-käännökset, testit, paketoinnin, tarkistussummat ja GitHub Releasen.
 
 ## Alkuperäisen V-Wing-converterin paketointi
 
@@ -107,7 +112,8 @@ Julkaise tarkistussummat samassa julkaisussa tiedostojen kanssa.
 
 PCX Level Tool on julkaistu MIT-lisenssillä. Lisää ylätason `LICENSE` jokaiseen
 lähdekoodi- ja binääripakettiin. Säilytä myös KolourPaint- ja Tabler-kuvakkeiden
-mukana olevat lisenssit sekä `THIRD_PARTY_NOTICES.md`.
+mukana olevat lisenssit sekä `THIRD_PARTY_NOTICES.md` ja
+`QT-LGPL-NOTICE.md`.
 
 Alkuperäinen `CONV.EXE` ei kuulu MIT-lisenssin alle. Sen oma jakeluehto on
 muuttamattomassa `CONVERT.TXT`:ssä, jonka pitää aina seurata muuttamattoman
@@ -126,3 +132,17 @@ Viralliset lähteet:
 - [Qt deployment CMake-projekteissa](https://doc.qt.io/qt-6/cmake-deployment.html)
 - [Qt:n avoimen lähdekoodin lisenssivelvoitteet](https://www.qt.io/development/open-source-lgpl-obligations)
 - [AppImagen paketointiopas](https://docs.appimage.org/packaging-guide/index.html)
+
+## Julkaisun käynnistäminen
+
+Varmista ensin, että `CMakeLists.txt`:n versio ja `CHANGELOG.md` ovat oikein ja
+että main-haara on puskettu. Luo ja puske sen jälkeen annotoitu tagi:
+
+```sh
+git tag -a v0.1.0 -m "PCX Level Tool 0.1.0"
+git push origin v0.1.0
+```
+
+Tagin pusku käynnistää julkaisu-workflow'n. GitHub Release luodaan vasta, jos
+sekä Windows- että Linux-käännös ja kaikki testit sekä paketointivaiheet
+onnistuvat.

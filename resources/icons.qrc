@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/icons">
+    <file alias="app/pcxlvltool.svg">../pcxlvltool-icon-pack/pcxlvltool.svg</file>
     <file>icons/kolourpaint/tool_pen.png</file>
     <file>icons/kolourpaint/tool_eraser.png</file>
     <file>icons/kolourpaint/tool_line.png</file>

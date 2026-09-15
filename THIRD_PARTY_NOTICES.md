@@ -41,4 +41,5 @@ and [`third_party/tabler-icons/README.md`](third_party/tabler-icons/README.md).
 Binary release packages include Qt runtime libraries. Qt and its third-party
 components retain their respective licenses. The exact notices and license
 texts supplied with the Qt version used for a release must be included in that
-binary release.
+binary release. See [`QT-LGPL-NOTICE.md`](QT-LGPL-NOTICE.md) for the Qt version
+used by official 0.1.x packages and its corresponding source location.

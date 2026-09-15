@@ -23,11 +23,16 @@ below. The bundled original V-Wing converter and all other third-party
 materials retain their own terms; see
 [Third-party notices](THIRD_PARTY_NOTICES.md).
 
+The PCX Level Tool application icon in `pcxlvltool-icon-pack` is original
+project artwork generated with ChatGPT and is distributed under the same MIT
+License as the application.
+
 ## Documentation
 
 - [Käyttöohje (suomi)](docs/user-guide-fi.md)
 - [Windows- ja Linux-asennusohje (suomi)](docs/install-fi.md)
 - [Julkaisupakettien tekeminen (suomi)](docs/release-packaging-fi.md)
+- [Muutoshistoria](CHANGELOG.md)
 
 ## Minimal editor
 

@@ -62,7 +62,8 @@ purkavana vaihtoehtona:
 Ohjelman voi poistaa sulkemalla sen ja poistamalla AppImage-tiedoston. Muualla
 olevat käyttäjän kentät ja projektit säilyvät.
 
-Alkuperäinen V-Wing-converter toimitetaan Linux-julkaisun yhteydessä erillisenä
+Alkuperäinen V-Wing-converter sisältyy myös AppImageen ja toimitetaan Linux-
+julkaisun yhteydessä helpommin avattavana erillisenä
 `VWing-Level-Converter-1.91.zip`-tiedostona. Se on DOS-ohjelma ja tarvitsee
 Linuxissa esimerkiksi DOSBoxin. Converter ei ole välttämätön PCX Level Toolin
 käyttämiseen.

@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: "6.8.3"
+
+jobs:
+  validate-version:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Match tag to CMake project version
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          cmake_version="$(sed -nE 's/^project\(PCXLvlTool VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)"
+          test -n "$cmake_version"
+          test "$tag_version" = "$cmake_version"
+          printf '%s  %s\n' \
+            2c2db3d4183e57e9bd854b76240ca4f87e3c06b39e4494ae43633c1936dbdcaa CONV.EXE \
+            47c2bf6a518e8857c5042796c940d78154316490775869128ab4edebbe7bfdda CONVERT.TXT \
+            95d521505496e477994efa0dde9b5e716f278defce3fe51e6fbd695a6feecf00 FILE_ID.DIZ \
+            | sha256sum --check --strict
+
+  windows:
+    needs: validate-version
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Assemble portable ZIP
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $packageRoot = "package\PCXLvlTool-$version-Windows-x86_64"
+          New-Item -ItemType Directory -Force $packageRoot | Out-Null
+          Copy-Item build\PCXLvlTool.exe $packageRoot\
+          windeployqt --release --compiler-runtime --dir $packageRoot `
+            "$packageRoot\PCXLvlTool.exe"
+          Copy-Item LICENSE, CHANGELOG.md, README.md, `
+            QT-LGPL-NOTICE.md, THIRD_PARTY_NOTICES.md $packageRoot\
+          Copy-Item docs\install-fi.md, docs\user-guide-fi.md $packageRoot\
+          Copy-Item -Recurse third_party "$packageRoot\third_party"
+          New-Item -ItemType Directory -Force `
+            "$packageRoot\VWingConverter" | Out-Null
+          Copy-Item CONV.EXE, CONVERT.TXT, FILE_ID.DIZ `
+            "$packageRoot\VWingConverter\"
+          if (Test-Path "$env:QT_ROOT_DIR\LICENSES") {
+            New-Item -ItemType Directory -Force `
+              "$packageRoot\licenses" | Out-Null
+            Copy-Item -Recurse "$env:QT_ROOT_DIR\LICENSES" `
+              "$packageRoot\licenses\Qt"
+          } else {
+            throw "Qt license directory was not found"
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path $packageRoot -DestinationPath `
+            "dist\PCXLvlTool-$version-Windows-x86_64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    needs: validate-version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ninja-build libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0 libfuse2
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Install AppDir
+        run: |
+          DESTDIR="$PWD/AppDir" cmake --install build --prefix /usr --strip
+          if [ -d "$QT_ROOT_DIR/LICENSES" ]; then
+            mkdir -p AppDir/usr/share/doc/PCXLvlTool/licenses
+            cp -a "$QT_ROOT_DIR/LICENSES" \
+              AppDir/usr/share/doc/PCXLvlTool/licenses/Qt
+          else
+            echo "Qt license directory was not found" >&2
+            exit 1
+          fi
+      - name: Build AppImage
+        shell: bash
+        run: |
+          curl --fail --location --output linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl --fail --location --output linuxdeploy-plugin-qt-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage \
+            linuxdeploy-plugin-qt-x86_64.AppImage
+          export PATH="$PWD:$PATH"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          export EXTRA_QT_MODULES="svg;"
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            --plugin qt --output appimage
+          version="${GITHUB_REF_NAME#v}"
+          generated="$(find . -maxdepth 1 -type f -name '*.AppImage' \
+            ! -name 'linuxdeploy*' -print -quit)"
+          test -n "$generated"
+          mkdir -p dist
+          mv "$generated" "dist/PCXLvlTool-$version-x86_64.AppImage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-package"
+          path: dist
+          merge-multiple: true
+      - name: Package original V-Wing converter
+        run: zip -j dist/VWing-Level-Converter-1.91.zip CONV.EXE CONVERT.TXT FILE_ID.DIZ
+      - name: Create checksums
+        working-directory: dist
+        run: sha256sum PCXLvlTool-* VWing-Level-Converter-1.91.zip > SHA256SUMS.txt
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag

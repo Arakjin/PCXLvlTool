@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(PCXLvlTool LANGUAGES CXX)
+project(PCXLvlTool VERSION 0.1.0 LANGUAGES CXX)
+
+include(GNUInstallDirs)
 
 find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
@@ -48,10 +50,23 @@ add_executable(PCXLvlTool WIN32
     src/palette_widget.h
     resources/icons.qrc
 )
+if(WIN32)
+    configure_file(
+        resources/windows/pcxlvltool.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/pcxlvltool.rc
+        @ONLY
+    )
+    target_sources(PCXLvlTool PRIVATE
+        ${CMAKE_CURRENT_BINARY_DIR}/pcxlvltool.rc
+    )
+endif()
 target_link_libraries(PCXLvlTool PRIVATE
     vwing_level_format
     Qt6::Svg
     Qt6::Widgets
+)
+target_compile_definitions(PCXLvlTool PRIVATE
+    PCXLVLTOOL_VERSION="${PROJECT_VERSION}"
 )
 set_target_properties(PCXLvlTool PROPERTIES
     AUTOMOC ON
@@ -70,6 +85,51 @@ foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx levroun
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endforeach()
+
+configure_file(
+    resources/linux/io.github.Arakjin.PCXLvlTool.desktop.in
+    ${CMAKE_CURRENT_BINARY_DIR}/io.github.Arakjin.PCXLvlTool.desktop
+    @ONLY
+)
+
+install(TARGETS PCXLvlTool
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/io.github.Arakjin.PCXLvlTool.desktop
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
+install(FILES pcxlvltool-icon-pack/pcxlvltool.svg
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+    RENAME pcxlvltool.svg
+)
+foreach(icon_size 16 24 32 48 64 128 256 512 1024)
+    install(FILES pcxlvltool-icon-pack/pcxlvltool-${icon_size}.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${icon_size}x${icon_size}/apps
+        RENAME pcxlvltool.png
+    )
+endforeach()
+install(FILES
+    LICENSE
+    CHANGELOG.md
+    README.md
+    QT-LGPL-NOTICE.md
+    THIRD_PARTY_NOTICES.md
+    docs/install-fi.md
+    docs/user-guide-fi.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool
+)
+install(FILES
+    CONV.EXE
+    CONVERT.TXT
+    FILE_ID.DIZ
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/PCXLvlTool/VWingConverter
+)
+install(DIRECTORY
+    third_party/kolourpaint
+    third_party/tabler-icons
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool/third_party
+)
 
 include(CTest)
 if(BUILD_TESTING)
