@@ -10,7 +10,11 @@ add_executable(levcompare
     tools/levcompare/main.cpp
 )
 
-foreach(target levdump levcompare)
+add_executable(pcxfixtures
+    tools/pcxfixtures/main.cpp
+)
+
+foreach(target levdump levcompare pcxfixtures)
     target_compile_features(${target} PRIVATE cxx_std_17)
     set_target_properties(${target} PROPERTIES
         CXX_EXTENSIONS OFF

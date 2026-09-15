@@ -32,14 +32,43 @@ The files are read from the parent V-Wing directory and remain unmodified.
 
 | Offset | Size | Status | Observation |
 |-------:|-----:|--------|-------------|
-| `0x0000` | 2 | Confirmed bytes, unknown meaning | Every corpus file begins with `76 07`. |
-| `0x0002` | variable/unknown | Confirmed content, layout unknown | Printable uppercase text matching the displayed level names begins here in every corpus file. Shorter names are followed by spaces. The field boundary and termination rules are not yet established. |
-| EOF - 768 | 768 | Strongly suspected | Candidate 256-entry RGB palette. The length is exactly `256 * 3`, the bytes form color-like triplets, and the converter documentation says the 256-color input palette is user-defined. Controlled converter tests are still required. |
-| other | variable | Unknown | No header fields, image-data boundary, compression method, or offset table has been confirmed. |
+| `0x0000` | 2 | Confirmed bytes, unknown meaning | Every corpus file and every converter output begins with `76 07`. |
+| `0x0002` | variable/unknown | Confirmed content, layout partly unknown | Printable uppercase text matching the displayed level name begins here. Changing only one name character changes only the corresponding byte in the output. Shorter names are followed by a NUL and spaces, but the complete field boundary is not yet established. |
+| `0x0000` | 128 | Confirmed | V-Wing-specific header written in place of the input PCX header. |
+| `0x0080` | variable | Confirmed for converter 1.91 output | PCX RLE image stream. The converter copies every byte from input PCX offset 128 through EOF without changes. |
+| EOF - 769 | 1 | Confirmed | Standard 256-color PCX palette marker `0C`. It is copied unchanged by the converter and is present in all ten reference levels. |
+| EOF - 768 | 768 | Confirmed | 256 RGB palette entries, copied byte-for-byte from the PCX input by converter 1.91. |
 
 The `LEVEL3.LEV` name area differs from the other nine samples around offsets
 `0x0015` through `0x0018`. This is recorded as an anomaly only; it is not yet
 evidence for a variable-length field.
+
+Nine freeware levels begin the post-name constant byte sequence at offset
+`0x0018`, while `LEVEL3.LEV` and all controlled converter 1.91 outputs begin
+the corresponding sequence at `0x0019`. This is evidence of a header-layout
+difference, but it is not yet enough to assign version identifiers or field
+meanings.
+
+## Controlled converter results
+
+The original `CONV.EXE` was run under DOSBox against 15 deterministic fixtures:
+
+- uniform indices 0, 1, and 57
+- a single changed pixel at `(0,0)`, `(1,0)`, `(639,0)`, `(0,1)`, `(0,799)`,
+  and `(639,799)`
+- vertical stripes, horizontal stripes, checkerboard, long runs, and
+  deterministic random pixels
+- identical pixels with one palette entry changed
+
+For every fixture, the `.LEV` output size equals the PCX input size and the
+entire range from offset `0x0080` through EOF is byte-for-byte identical. This
+confirms that converter 1.91 preserves the standard PCX RLE stream, palette
+marker, and palette while replacing only the 128-byte header.
+
+Two conversions of the same PCX with level names `NAME A` and `NAME B` differ
+at exactly offset `0x0007`; all other bytes are identical. The documented
+20-character maximum still needs boundary tests before the name-field layout
+can be considered complete.
 
 ## Converter documentation facts
 
@@ -55,14 +84,10 @@ must not be silently translated into a parser rule.
 
 ## Next confirmation tests
 
-Use the original converter to produce controlled files from PCX fixtures:
-
-1. uniform images using palette indices 0, 1, and 57
-2. one changed pixel at each image corner and at `(1, 0)`
-3. horizontal stripes, vertical stripes, checkerboard, long runs, and random
-   pixels
-4. identical pixel data with one palette entry changed
-5. identical image and palette with only the level name changed
-
-Compare each output byte-for-byte. These tests should establish name layout,
-pixel order, compressed-data boundaries, compression, and palette storage.
+1. Decode all controlled outputs as 640 x 800 scanline-oriented PCX RLE and
+   compare every index against its source fixture.
+2. Decode all ten freeware levels and reconstruct standard PCX files for an
+   independent image decoder.
+3. Test level-name lengths 0, 19, and 20 to determine termination and padding.
+4. Determine whether the freeware header difference represents a distinct
+   format version or only different converter behavior.
