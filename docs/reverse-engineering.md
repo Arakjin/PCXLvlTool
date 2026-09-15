@@ -27,6 +27,7 @@ Build and run the initial inspection tool with:
 cmake -S . -B build
 cmake --build build
 ./build/levdump ../LEVEL1.LEV
+./build/levcompare ../LEVEL1.LEV ../LEVEL2.LEV
 ```
 
 `levdump` currently reports only directly observable byte-level properties:
@@ -36,14 +37,23 @@ cmake --build build
 - printable ASCII strings at least four bytes long
 - repeated runs of the same byte longer than 16 bytes
 
+`levcompare` reports the input sizes, first differing byte, and contiguous
+same/different ranges. If the files have different lengths, it also reports
+the trailing range that exists in only one file. These range transitions are
+byte-level comparison boundaries, not assumed format block boundaries.
+
 It does not identify or decode headers, dimensions, palettes, image data, or
 compression.
+
+Raw format observations are maintained in [`lev-format.md`](lev-format.md).
 
 ## Observations
 
 | Status | Offset or range | Observation | Evidence |
 |--------|-----------------|-------------|----------|
-| Unknown | — | No format structure has been established yet. | Initial project state. |
+| Confirmed | Entire files | All ten reference files can be read by both GCC and Clang builds of `levdump`. | Corpus run on `LEVEL1.LEV` through `LEVEL10.LEV`. |
+| Confirmed | Entire files | The corpus file sizes range from 55,939 to 150,591 bytes. | `levdump` file-size output. |
+| Confirmed | Comparison | Different levels produce thousands of alternating equal/different byte ranges, so these transitions cannot by themselves be treated as format blocks. | `levcompare LEVEL1.LEV LEVEL2.LEV`. |
 
 ## Questions to investigate
 
