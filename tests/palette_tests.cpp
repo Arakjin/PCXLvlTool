@@ -12,8 +12,9 @@
 
 namespace {
 
-class TestFile {
-public:
+class TestFile
+{
+  public:
     explicit TestFile(std::filesystem::path path) : path_(std::move(path)) {}
 
     ~TestFile()
@@ -22,13 +23,16 @@ public:
         std::filesystem::remove(path_, ignored);
     }
 
-    const std::filesystem::path& path() const { return path_; }
+    const std::filesystem::path &path() const
+    {
+        return path_;
+    }
 
-private:
+  private:
     std::filesystem::path path_;
 };
 
-bool expect(const bool condition, const std::string& message)
+bool expect(const bool condition, const std::string &message)
 {
     if (!condition) {
         std::cerr << "FAIL: " << message << '\n';
@@ -51,6 +55,20 @@ int main()
     ok &= expect(isReservedPaletteIndex(2) && isReservedPaletteIndex(55) &&
                      !isReservedPaletteIndex(16) && !isReservedPaletteIndex(57),
                  "reserved Color Chart index rules are incorrect");
+    const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
+        {2, {0, 171, 0}},     {3, {0, 171, 171}},    {4, {171, 0, 0}},
+        {5, {171, 0, 171}},   {6, {171, 87, 0}},     {7, {171, 171, 171}},
+        {8, {87, 87, 87}},    {9, {87, 87, 255}},    {10, {87, 255, 87}},
+        {11, {87, 255, 255}}, {12, {255, 87, 87}},   {13, {255, 87, 255}},
+        {14, {255, 255, 87}}, {15, {255, 255, 255}}, {31, {255, 255, 255}},
+        {38, {255, 0, 127}},  {47, {67, 255, 0}},    {53, {0, 191, 255}},
+        {54, {0, 127, 255}},  {55, {0, 67, 255}},
+    }};
+    for (const auto &[index, color] : reservedDefaults) {
+        ok &= expect(palette[index] == color,
+                     "reserved palette index " + std::to_string(index) +
+                         " should use its most common reference color");
+    }
 
     const TestFile valid(std::filesystem::current_path() / "palette-test.pal");
     std::string error;

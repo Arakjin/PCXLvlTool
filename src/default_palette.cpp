@@ -1,7 +1,5 @@
 #include "default_palette.h"
 
-#include "palette_rules.h"
-
 #include <cstddef>
 #include <cstdint>
 
@@ -19,7 +17,7 @@ std::uint8_t interpolate(const std::uint8_t from, const std::uint8_t to,
     return static_cast<std::uint8_t>(value);
 }
 
-void fillGradient(std::array<RGB, 256>& palette, const int first,
+void fillGradient(std::array<RGB, 256> &palette, const int first,
                   const int last, const RGB from, const RGB to)
 {
     const int count = last - first + 1;
@@ -45,21 +43,43 @@ std::array<RGB, 256> defaultVWingPalette()
 
     palette[0] = RGB{0, 0, 0};
     palette[1] = RGB{0, 0, 0};
-    fillGradient(palette, 2, 15, RGB{80, 0, 80}, RGB{255, 0, 255});
+    // Per-index modes from the palettes embedded in LEVEL1.LEV-LEVEL11.LEV.
+    // These entries remain unavailable for painting, but retain representative
+    // game palette values instead of editor warning colors.
+    palette[2] = RGB{0, 171, 0};
+    palette[3] = RGB{0, 171, 171};
+    palette[4] = RGB{171, 0, 0};
+    palette[5] = RGB{171, 0, 171};
+    palette[6] = RGB{171, 87, 0};
+    palette[7] = RGB{171, 171, 171};
+    palette[8] = RGB{87, 87, 87};
+    palette[9] = RGB{87, 87, 255};
+    palette[10] = RGB{87, 255, 87};
+    palette[11] = RGB{87, 255, 255};
+    palette[12] = RGB{255, 87, 87};
+    palette[13] = RGB{255, 87, 255};
+    palette[14] = RGB{255, 255, 87};
+    palette[15] = RGB{255, 255, 255};
     palette[16] = RGB{20, 85, 190};
     palette[17] = RGB{45, 170, 235};
     palette[18] = RGB{20, 120, 220};
     palette[19] = RGB{15, 70, 165};
     fillGradient(palette, 20, 30, RGB{25, 35, 55}, RGB{115, 155, 190});
+    palette[31] = RGB{255, 255, 255};
     fillGradient(palette, 32, 37, RGB{245, 245, 245}, RGB{125, 125, 125});
+    palette[38] = RGB{255, 0, 127};
     palette[39] = RGB{175, 235, 255};
     fillGradient(palette, 40, 45, RGB{255, 210, 20}, RGB{205, 25, 15});
     palette[46] = RGB{135, 90, 45};
+    palette[47] = RGB{67, 255, 0};
     palette[48] = RGB{155, 0, 20};
     palette[49] = RGB{145, 90, 55};
     palette[50] = RGB{70, 105, 145};
     palette[51] = RGB{75, 75, 75};
     palette[52] = RGB{245, 250, 255};
+    palette[53] = RGB{0, 191, 255};
+    palette[54] = RGB{0, 127, 255};
+    palette[55] = RGB{0, 67, 255};
     palette[56] = RGB{90, 210, 240};
 
     fillGradient(palette, 57, 79, RGB{70, 45, 25}, RGB{185, 130, 70});
@@ -82,10 +102,5 @@ std::array<RGB, 256> defaultVWingPalette()
     palette[246] = RGB{220, 210, 125};
     palette[247] = RGB{70, 80, 90};
     fillGradient(palette, 248, 255, RGB{65, 65, 70}, RGB{210, 210, 215});
-    for (std::size_t index = 0; index < palette.size(); ++index) {
-        if (isReservedPaletteIndex(static_cast<int>(index))) {
-            palette[index] = RGB{255, 0, 255};
-        }
-    }
     return palette;
 }

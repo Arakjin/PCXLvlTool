@@ -38,6 +38,8 @@ The current milestone supports:
   documented V-Wing material information
 - palette-area filtering that omits reserved and "do not use" indices;
   reserved Color Chart indices are also blocked in direct material selection
+- reserved default colors derived per index from the most common RGB values in
+  the original `LEVEL1.LEV` through `LEVEL11.LEV` palettes
 - per-index RGB editing with undo, plus reusable 256-color JASC-PAL load/save
 - cursor coordinates and the current pixel index in the status bar
 - prompts before discarding unsaved edits
