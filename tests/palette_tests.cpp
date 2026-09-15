@@ -47,22 +47,27 @@ int main()
 {
     bool ok = true;
     const auto palette = defaultVWingPalette();
-    ok &= expect(palette[1] == RGB{0, 0, 0},
+    ok &= expect(palette[0] == RGB{0, 0, 0},
                  "default background should be black");
-    ok &=
-        expect(!(palette[16] == palette[17]) && !(palette[57] == palette[149]),
+    ok &= expect(!(palette[15] == palette[16]) &&
+                     !(palette[56] == palette[148]),
                "default material ranges should contain useful color choices");
-    ok &= expect(isReservedPaletteIndex(2) && isReservedPaletteIndex(55) &&
-                     !isReservedPaletteIndex(16) && !isReservedPaletteIndex(57),
+    ok &= expect(isReservedPaletteIndex(1) && isReservedPaletteIndex(54) &&
+                     !isReservedPaletteIndex(15) &&
+                     !isReservedPaletteIndex(56),
                  "reserved Color Chart index rules are incorrect");
+    ok &= expect(colorChartNumber(0) == 1 &&
+                     colorChartNumber(255) == 256 &&
+                     paletteIndexFromColorChart(57) == 56,
+                 "Color Chart and file-index conversion is incorrect");
     const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
-        {2, {0, 171, 0}},     {3, {0, 171, 171}},    {4, {171, 0, 0}},
-        {5, {171, 0, 171}},   {6, {171, 87, 0}},     {7, {171, 171, 171}},
-        {8, {87, 87, 87}},    {9, {87, 87, 255}},    {10, {87, 255, 87}},
-        {11, {87, 255, 255}}, {12, {255, 87, 87}},   {13, {255, 87, 255}},
-        {14, {255, 255, 87}}, {15, {255, 255, 255}}, {31, {255, 255, 255}},
-        {38, {255, 0, 127}},  {47, {67, 255, 0}},    {53, {0, 191, 255}},
-        {54, {0, 127, 255}},  {55, {0, 67, 255}},
+        {1, {0, 0, 171}},      {2, {0, 171, 0}},      {3, {0, 171, 171}},
+        {4, {171, 0, 0}},      {5, {171, 0, 171}},    {6, {171, 87, 0}},
+        {7, {171, 171, 171}},  {8, {87, 87, 87}},     {9, {87, 87, 255}},
+        {10, {87, 255, 87}},   {11, {87, 255, 255}},  {12, {255, 87, 87}},
+        {13, {255, 87, 255}},  {14, {255, 255, 87}},  {30, {227, 227, 227}},
+        {37, {11, 47, 11}},    {46, {95, 71, 71}},    {52, {195, 255, 255}},
+        {53, {0, 191, 255}},   {54, {0, 127, 255}},
     }};
     for (const auto &[index, color] : reservedDefaults) {
         ok &= expect(palette[index] == color,

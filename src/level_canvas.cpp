@@ -340,7 +340,7 @@ void LevelCanvas::commitSelection()
                     source.x();
                 finalValues[sourceOffset] =
                     level_->activeLayer == 0
-                        ? LayerValue{1, 1}
+                        ? LayerValue{0, 1}
                         : LayerValue{layer.pixels[sourceOffset], 0};
             }
             if (selectionOpacity_[localOffset] != 0) {
@@ -398,7 +398,7 @@ void LevelCanvas::deleteSelection()
                     static_cast<std::size_t>(source.y()) * Level::Width +
                     source.x();
                 const std::uint8_t newValue =
-                    level_->activeLayer == 0 ? 1 : layer.pixels[offset];
+                    level_->activeLayer == 0 ? 0 : layer.pixels[offset];
                 const std::uint8_t newMask =
                     level_->activeLayer == 0 ? 1 : 0;
                 if (layer.pixels[offset] != newValue ||
@@ -2169,7 +2169,8 @@ void LevelCanvas::setTextBoxPosition(const QPoint& position)
 
 void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
 {
-    if (selectionActive_ && !selectionContains(point.x(), point.y())) {
+    if (level_->layers[level_->activeLayer].locked ||
+        (selectionActive_ && !selectionContains(point.x(), point.y()))) {
         return;
     }
     const std::uint8_t target = pixelAt(point.x(), point.y());
@@ -2177,7 +2178,9 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
         return;
     }
 
+    std::vector<std::uint8_t> visited(Level::PixelCount, 0);
     std::vector<QPoint> pending{point};
+    visited[static_cast<std::size_t>(point.y()) * Level::Width + point.x()] = 1;
     setPixel(point.x(), point.y(), index);
     while (!pending.empty()) {
         const QPoint current = pending.back();
@@ -2196,7 +2199,12 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
                  !selectionContains(neighbour.x(), neighbour.y()))) {
                 continue;
             }
-            if (pixelAt(neighbour.x(), neighbour.y()) == target) {
+            const std::size_t neighbourOffset =
+                static_cast<std::size_t>(neighbour.y()) * Level::Width +
+                neighbour.x();
+            if (visited[neighbourOffset] == 0 &&
+                pixelAt(neighbour.x(), neighbour.y()) == target) {
+                visited[neighbourOffset] = 1;
                 setPixel(neighbour.x(), neighbour.y(), index);
                 pending.push_back(neighbour);
             }
@@ -2227,7 +2235,7 @@ void LevelCanvas::commitStroke()
 std::uint8_t LevelCanvas::paintIndex(const Qt::MouseButton button) const
 {
     if (drawTool_ == DrawTool::Eraser) {
-        return 1;
+        return 0;
     }
     return button == Qt::RightButton ? secondaryIndex_ : selectedIndex_;
 }

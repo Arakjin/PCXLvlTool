@@ -39,7 +39,7 @@ int main()
     const TestFile file(std::filesystem::current_path() / "project-test.vwp");
     auto source = std::make_unique<Level>();
     source->name = "LAYER TEST";
-    source->pixels.fill(1);
+    source->pixels.fill(0);
     source->palette[57] = {12, 34, 56};
     initializeBackgroundLayer(*source);
     source->layers[0].pixels[123] = 57;
@@ -69,7 +69,7 @@ int main()
     ok &= expect(loaded->layers[0].pixels[123] == 57 &&
                      loaded->layers[1].pixels[456] == 99 &&
                      loaded->layers[1].mask[456] == 1 &&
-                     loaded->pixels[456] == 1,
+                     loaded->pixels[456] == 0,
                  "indexed layer pixels, transparency, or compositing changed");
     ok &= expect(loaded->layers[0].name == "Background" &&
                      loaded->layers[0].visible &&

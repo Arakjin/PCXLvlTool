@@ -40,6 +40,6 @@ private:
 
     const Level* level_ = nullptr;
     std::vector<std::uint8_t> indices_;
-    std::uint8_t selectedIndex_ = 57;
-    std::uint8_t secondaryIndex_ = 58;
+    std::uint8_t selectedIndex_ = 56;
+    std::uint8_t secondaryIndex_ = 57;
 };

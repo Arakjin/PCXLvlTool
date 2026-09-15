@@ -63,7 +63,7 @@ protected:
             do {
                 candidate += direction;
             } while (candidate >= minimum() && candidate <= maximum() &&
-                     isReservedPaletteIndex(candidate));
+                     isReservedColorChartNumber(candidate));
             candidate = std::clamp(candidate, minimum(), maximum());
         }
         setValue(candidate);
@@ -73,7 +73,7 @@ protected:
     {
         const QValidator::State state = QSpinBox::validate(input, position);
         if (state == QValidator::Acceptable &&
-            isReservedPaletteIndex(input.toInt())) {
+            isReservedColorChartNumber(input.toInt())) {
             return QValidator::Intermediate;
         }
         return state;
@@ -83,8 +83,9 @@ protected:
     {
         bool valid = false;
         int value = input.toInt(&valid);
-        if (valid && isReservedPaletteIndex(value)) {
-            while (value <= maximum() && isReservedPaletteIndex(value)) {
+        if (valid && isReservedColorChartNumber(value)) {
+            while (value <= maximum() &&
+                   isReservedColorChartNumber(value)) {
                 ++value;
             }
             input = QString::number(std::min(value, maximum()));
@@ -104,9 +105,10 @@ QString toQString(const std::filesystem::path& path)
     return QString::fromStdU16String(path.u16string());
 }
 
-QString materialDescription(const int index)
+QString materialDescription(const int paletteIndex)
 {
-    if (isReservedPaletteIndex(index)) {
+    const int index = colorChartNumber(paletteIndex);
+    if (isReservedPaletteIndex(paletteIndex)) {
         return QStringLiteral("Reserved (do not use)");
     }
     if (index >= 20 && index <= 30) {
@@ -139,7 +141,7 @@ QString materialDescription(const int index)
     if (index >= 221 && index <= 243) {
         return QStringLiteral("Indestructible");
     }
-    if (index >= 248 && index <= 255) {
+    if (index >= 248 && index <= 256) {
         return QStringLiteral("Indestructible");
     }
 
@@ -227,49 +229,49 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group)
     indices.reserve(256);
     switch (group) {
     case PaletteGroup::AllUsable:
-        indices.push_back(1);
-        appendRange(indices, 16, 30);
-        appendRange(indices, 32, 37);
-        appendRange(indices, 39, 46);
-        appendRange(indices, 48, 52);
-        appendRange(indices, 56, 174);
-        appendRange(indices, 176, 199);
-        appendRange(indices, 201, 219);
-        appendRange(indices, 221, 255);
+        indices.push_back(0);
+        appendRange(indices, 15, 29);
+        appendRange(indices, 31, 36);
+        appendRange(indices, 38, 45);
+        appendRange(indices, 47, 51);
+        appendRange(indices, 55, 173);
+        appendRange(indices, 175, 198);
+        appendRange(indices, 200, 218);
+        appendRange(indices, 220, 255);
         break;
     case PaletteGroup::Background:
-        indices.push_back(1);
+        indices.push_back(0);
         break;
     case PaletteGroup::Water:
-        appendRange(indices, 16, 19);
+        appendRange(indices, 15, 18);
         break;
     case PaletteGroup::FlyThrough:
-        appendRange(indices, 20, 30);
+        appendRange(indices, 19, 29);
         break;
     case PaletteGroup::Font:
-        appendRange(indices, 32, 37);
+        appendRange(indices, 31, 36);
         break;
     case PaletteGroup::Special:
-        appendRange(indices, 39, 46);
-        appendRange(indices, 48, 52);
-        indices.push_back(56);
+        appendRange(indices, 38, 45);
+        appendRange(indices, 47, 51);
+        indices.push_back(55);
         break;
     case PaletteGroup::NormalTerrain:
-        appendRange(indices, 57, 149);
+        appendRange(indices, 56, 148);
         break;
     case PaletteGroup::Burnable:
-        appendRange(indices, 150, 174);
-        appendRange(indices, 176, 199);
+        appendRange(indices, 149, 173);
+        appendRange(indices, 175, 198);
         break;
     case PaletteGroup::Underwater:
-        appendRange(indices, 201, 219);
+        appendRange(indices, 200, 218);
         break;
     case PaletteGroup::Indestructible:
-        appendRange(indices, 221, 243);
-        appendRange(indices, 248, 255);
+        appendRange(indices, 220, 242);
+        appendRange(indices, 247, 255);
         break;
     case PaletteGroup::Turrets:
-        appendRange(indices, 244, 247);
+        appendRange(indices, 243, 246);
         break;
     }
     return indices;
@@ -319,7 +321,7 @@ MainWindow::MainWindow(QWidget* parent)
 {
     level_->name = "UNTITLED";
     level_->palette = defaultVWingPalette();
-    level_->pixels.fill(1);
+    level_->pixels.fill(0);
 
     canvas_ = new LevelCanvas(this);
     canvas_->setLevel(level_.get());
@@ -470,7 +472,8 @@ void MainWindow::createToolBars()
                                   "press Enter to finish"));
         } else if (tool == DrawTool::Eraser) {
             button->setToolTip(tr("Eraser: makes upper layers transparent; "
-                                  "writes background index 1 on Background"));
+                                  "writes Color Chart 1 (file index 0) on "
+                                  "Background"));
         }
         button->setAccessibleName(tr(label));
         toolGroup->addButton(button, static_cast<int>(tool));
@@ -607,7 +610,7 @@ void MainWindow::createMaterialDock()
         {"Normal terrain (57-149)", PaletteGroup::NormalTerrain},
         {"Burnable (150-199)", PaletteGroup::Burnable},
         {"Underwater (201-219)", PaletteGroup::Underwater},
-        {"Indestructible (221-243, 248-255)", PaletteGroup::Indestructible},
+        {"Indestructible (221-243, 248-256)", PaletteGroup::Indestructible},
         {"Turrets (244-247)", PaletteGroup::Turrets},
     }};
     for (const auto& [label, group] : paletteGroups) {
@@ -620,21 +623,22 @@ void MainWindow::createMaterialDock()
     layout->addWidget(paletteWidget_);
 
     auto* indexLayout = new QHBoxLayout();
-    indexLayout->addWidget(new QLabel(tr("Left index:"), contents));
+    indexLayout->addWidget(new QLabel(tr("Left Color Chart:"), contents));
     materialIndexSpinBox_ = new PaletteIndexSpinBox(contents);
-    materialIndexSpinBox_->setRange(0, 255);
+    materialIndexSpinBox_->setRange(1, 256);
     materialIndexSpinBox_->setValue(57);
     materialIndexSpinBox_->setToolTip(
         tr("Reserved Color Chart indices cannot be selected"));
     indexLayout->addWidget(materialIndexSpinBox_);
     layout->addLayout(indexLayout);
     auto* secondaryIndexLayout = new QHBoxLayout();
-    secondaryIndexLayout->addWidget(new QLabel(tr("Right index:"), contents));
+    secondaryIndexLayout->addWidget(
+        new QLabel(tr("Right Color Chart:"), contents));
     secondaryIndexSpinBox_ = new PaletteIndexSpinBox(contents);
-    secondaryIndexSpinBox_->setRange(0, 255);
+    secondaryIndexSpinBox_->setRange(1, 256);
     secondaryIndexSpinBox_->setValue(58);
     secondaryIndexSpinBox_->setToolTip(
-        tr("Right-click drawing and filled-shape interior index"));
+        tr("Right-click drawing and filled-shape interior Color Chart number"));
     secondaryIndexLayout->addWidget(secondaryIndexSpinBox_);
     layout->addLayout(secondaryIndexLayout);
     materialDetailsLabel_ = new QLabel(contents);
@@ -653,10 +657,10 @@ void MainWindow::createMaterialDock()
             [this, paletteGroupCombo](const int index) {
                 auto indices = paletteIndices(static_cast<PaletteGroup>(
                     paletteGroupCombo->itemData(index).toInt()));
-                const auto selected =
-                    static_cast<std::uint8_t>(materialIndexSpinBox_->value());
+                const auto selected = static_cast<std::uint8_t>(
+                    paletteIndexFromColorChart(materialIndexSpinBox_->value()));
                 const auto secondary = static_cast<std::uint8_t>(
-                    secondaryIndexSpinBox_->value());
+                    paletteIndexFromColorChart(secondaryIndexSpinBox_->value()));
                 const bool selectionVisible =
                     std::find(indices.begin(), indices.end(), selected) !=
                     indices.end();
@@ -666,36 +670,48 @@ void MainWindow::createMaterialDock()
                 const int firstIndex = indices.empty() ? 0 : indices.front();
                 paletteWidget_->setIndices(std::move(indices));
                 if (!selectionVisible) {
-                    materialIndexSpinBox_->setValue(firstIndex);
+                    materialIndexSpinBox_->setValue(
+                        colorChartNumber(firstIndex));
                 }
                 if (!secondaryVisible) {
-                    secondaryIndexSpinBox_->setValue(firstIndex);
+                    secondaryIndexSpinBox_->setValue(
+                        colorChartNumber(firstIndex));
                 }
             });
     connect(materialIndexSpinBox_, &QSpinBox::valueChanged, this,
             [this](const int value) {
-                canvas_->setSelectedIndex(static_cast<std::uint8_t>(value));
-                paletteWidget_->setSelectedIndex(
-                    static_cast<std::uint8_t>(value));
-                updateMaterialDetails(value);
+                const auto index = static_cast<std::uint8_t>(
+                    paletteIndexFromColorChart(value));
+                canvas_->setSelectedIndex(index);
+                paletteWidget_->setSelectedIndex(index);
+                updateMaterialDetails(index);
             });
-    connect(canvas_, &LevelCanvas::selectedIndexChanged, materialIndexSpinBox_,
-            &QSpinBox::setValue);
+    connect(canvas_, &LevelCanvas::selectedIndexChanged, this,
+            [this](const int index) {
+                materialIndexSpinBox_->setValue(colorChartNumber(index));
+            });
     connect(secondaryIndexSpinBox_, &QSpinBox::valueChanged, this,
             [this](const int value) {
-                canvas_->setSecondaryIndex(static_cast<std::uint8_t>(value));
-                paletteWidget_->setSecondaryIndex(
-                    static_cast<std::uint8_t>(value));
+                const auto index = static_cast<std::uint8_t>(
+                    paletteIndexFromColorChart(value));
+                canvas_->setSecondaryIndex(index);
+                paletteWidget_->setSecondaryIndex(index);
             });
-    connect(canvas_, &LevelCanvas::secondaryIndexChanged,
-            secondaryIndexSpinBox_, &QSpinBox::setValue);
-    connect(paletteWidget_, &PaletteWidget::indexSelected,
-            materialIndexSpinBox_, &QSpinBox::setValue);
-    connect(paletteWidget_, &PaletteWidget::secondaryIndexSelected,
-            secondaryIndexSpinBox_, &QSpinBox::setValue);
+    connect(canvas_, &LevelCanvas::secondaryIndexChanged, this,
+            [this](const int index) {
+                secondaryIndexSpinBox_->setValue(colorChartNumber(index));
+            });
+    connect(paletteWidget_, &PaletteWidget::indexSelected, this,
+            [this](const int index) {
+                materialIndexSpinBox_->setValue(colorChartNumber(index));
+            });
+    connect(paletteWidget_, &PaletteWidget::secondaryIndexSelected, this,
+            [this](const int index) {
+                secondaryIndexSpinBox_->setValue(colorChartNumber(index));
+            });
     connect(paletteWidget_, &PaletteWidget::indexEditRequested, this,
             [this](const int index) {
-                materialIndexSpinBox_->setValue(index);
+                materialIndexSpinBox_->setValue(colorChartNumber(index));
                 editSelectedPaletteColor();
             });
     connect(editColorButton, &QPushButton::clicked, this,
@@ -707,11 +723,14 @@ void MainWindow::createMaterialDock()
     connect(canvas_, &LevelCanvas::paletteColorChanged, this,
             [this](const int index) {
                 paletteWidget_->update();
-                if (index < 0 || index == materialIndexSpinBox_->value()) {
-                    updateMaterialDetails(materialIndexSpinBox_->value());
+                const int selectedIndex = paletteIndexFromColorChart(
+                    materialIndexSpinBox_->value());
+                if (index < 0 || index == selectedIndex) {
+                    updateMaterialDetails(selectedIndex);
                 }
             });
-    updateMaterialDetails(materialIndexSpinBox_->value());
+    updateMaterialDetails(
+        paletteIndexFromColorChart(materialIndexSpinBox_->value()));
 
     auto* scrollArea = new QScrollArea(dock);
     scrollArea->setWidgetResizable(true);
@@ -943,7 +962,8 @@ void MainWindow::openLevel()
     publishPath_ = isProject ? std::filesystem::path{} : path;
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
-    updateMaterialDetails(materialIndexSpinBox_->value());
+    updateMaterialDetails(
+        paletteIndexFromColorChart(materialIndexSpinBox_->value()));
     refreshLayerList();
     canvas_->undoStack()->setClean();
     nonUndoModified_ = false;
@@ -960,7 +980,10 @@ void MainWindow::updateMaterialDetails(const int index)
             .arg(static_cast<int>(color.g), 2, 16, QLatin1Char('0'))
             .arg(static_cast<int>(color.b), 2, 16, QLatin1Char('0'))
             .toUpper();
-    materialDetailsLabel_->setText(tr("RGB: %1, %2, %3   %4\n%5")
+    materialDetailsLabel_->setText(tr("Color Chart %1 / file index %2\n"
+                                      "RGB: %3, %4, %5   %6\n%7")
+                                       .arg(colorChartNumber(index))
+                                       .arg(index)
                                        .arg(static_cast<int>(color.r))
                                        .arg(static_cast<int>(color.g))
                                        .arg(static_cast<int>(color.b))
@@ -1056,11 +1079,14 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
 
 void MainWindow::editSelectedPaletteColor()
 {
-    const int index = materialIndexSpinBox_->value();
+    const int index = paletteIndexFromColorChart(
+        materialIndexSpinBox_->value());
     const RGB& current = level_->palette[static_cast<std::size_t>(index)];
     const QColor selected =
         QColorDialog::getColor(QColor(current.r, current.g, current.b), this,
-                               tr("Palette index %1").arg(index));
+                               tr("Color Chart %1 (file index %2)")
+                                   .arg(colorChartNumber(index))
+                                   .arg(index));
     if (!selected.isValid()) {
         return;
     }

@@ -86,9 +86,10 @@ level author. It also documents gameplay meanings and reserved ranges for
 palette indices. These statements describe converter input and game behavior;
 they do not by themselves prove the on-disk `.LEV` layout.
 
-One documentation range is written as `248-256`, although an 8-bit palette has
-indices only from 0 through 255. The text is preserved as source evidence and
-must not be silently translated into a parser rule.
+The documentation numbers its Color Chart entries from 1 through 256, while
+the underlying PCX palette and pixel bytes use indices 0 through 255. Thus
+Color Chart 1 is stored as index 0 and Color Chart 256 as index 255. The
+documented `248-256` range is direct evidence of this one-based presentation.
 
 ## Next confirmation tests
 

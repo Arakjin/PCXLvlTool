@@ -27,7 +27,7 @@ std::uint8_t compositeLayerPixel(const Level& level, const std::size_t offset,
             return layer.pixels[offset];
         }
     }
-    return 1;
+    return 0;
 }
 
 void flattenLayers(Level& level)

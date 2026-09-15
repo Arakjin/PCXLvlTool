@@ -30,7 +30,8 @@ The current milestone supports:
 - up to five reorderable, binary visible/hidden layers; transparent pixels in
   upper layers reveal the layers below
 - a fixed, always-visible Background layer at the bottom; its eraser writes
-  V-Wing background index 1, while erasing upper layers makes them transparent
+  Color Chart 1 (file/palette index 0), while erasing upper layers makes them
+  transparent
 - layer duplication, naming, locking, deletion, and top-to-bottom ordering in a
   dedicated Layers panel
 - pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%,
@@ -83,6 +84,10 @@ separates water, explosives, normal terrain, burnable terrain, underwater
 materials, indestructible terrain, and turret parts. It is a practical starter
 palette, not a claim about one canonical V-Wing palette. Opening a `.LEV` file
 always uses that file's embedded palette unchanged.
+
+The converter's Color Chart uses human-facing numbers 1-256, while PCX and LEV
+store palette indices 0-255. The editor's color selectors show Color Chart
+numbers and the details panel also reports the corresponding file index.
 
 ## Command-line tools
 

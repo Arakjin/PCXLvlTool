@@ -406,8 +406,8 @@ int main(int argc, char *argv[])
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Eraser);
     click(viewport, {50.5, 50.5});
-    ok &= expect(level.pixels[offset(50, 50)] == 1,
-                 "background eraser should write palette index one");
+    ok &= expect(level.pixels[offset(50, 50)] == 0,
+                 "background eraser should write Color Chart 1 / file index 0");
     canvas.undoStack()->undo();
     ok &= expect(level.pixels[offset(50, 50)] == 77,
                  "eraser should restore the old index when undone");
@@ -503,8 +503,8 @@ int main(int argc, char *argv[])
     canvas.setDrawTool(DrawTool::Eraser);
     canvas.setToolThickness(DrawTool::Eraser, 4);
     click(viewport, {100.5, 100.5});
-    ok &= expect(level.pixels[offset(99, 99)] == 1 &&
-                     level.pixels[offset(102, 102)] == 1,
+    ok &= expect(level.pixels[offset(99, 99)] == 0 &&
+                     level.pixels[offset(102, 102)] == 0,
                  "eraser should use its independently configured thickness");
 
     canvas.setLevel(nullptr);
@@ -554,7 +554,7 @@ int main(int argc, char *argv[])
                  "moving a selection should mark a pending edit");
     canvas.commitSelection();
     ok &=
-        expect(level.pixels[offset(10, 10)] == 1 &&
+        expect(level.pixels[offset(10, 10)] == 0 &&
                    level.pixels[offset(20, 20)] == 77 &&
                    level.pixels[offset(21, 21)] == 77,
                "committing a moved selection should clear and move its pixels");
@@ -574,7 +574,7 @@ int main(int argc, char *argv[])
     canvas.setDrawTool(DrawTool::SelectEllipse);
     drag(viewport, {30.5, 30.5}, {34.5, 34.5});
     sendKey(&canvas, Qt::Key_Delete);
-    ok &= expect(level.pixels[offset(32, 32)] == 1 &&
+    ok &= expect(level.pixels[offset(32, 32)] == 0 &&
                      level.pixels[offset(30, 30)] == 77,
                  "Delete should clear only pixels inside an ellipse selection");
 
@@ -592,7 +592,7 @@ int main(int argc, char *argv[])
     ok &= expect(canvas.hasSelection(),
                  "a closed freehand path should create a selection");
     canvas.deleteSelection();
-    ok &= expect(level.pixels[offset(41, 41)] == 1 &&
+    ok &= expect(level.pixels[offset(41, 41)] == 0 &&
                      level.pixels[offset(44, 44)] == 77,
                  "freehand Delete should respect the lasso mask");
 
@@ -647,7 +647,7 @@ int main(int argc, char *argv[])
     sendKey(&canvas, Qt::Key_Delete);
     const bool canvasClearedToBackground =
         std::all_of(level.pixels.begin(), level.pixels.end(),
-                    [](const std::uint8_t value) { return value == 1; });
+                    [](const std::uint8_t value) { return value == 0; });
     ok &=
         expect(canvasClearedToBackground && canvas.undoStack()->count() == 1,
                "Delete after Ctrl+A should clear the canvas in one operation");
@@ -657,8 +657,35 @@ int main(int argc, char *argv[])
                      level.pixels[offset(639, 799)] == 59,
                  "full-canvas deletion should be undoable");
 
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setSelectedIndex(57);
+    canvas.setDrawTool(DrawTool::FloodFill);
+    click(viewport, {1.5, 1.5});
+    ok &= expect(std::all_of(level.pixels.begin(), level.pixels.end(),
+                             [](const std::uint8_t value) {
+                                 return value == 57;
+                             }) &&
+                     canvas.undoStack()->count() == 1,
+                 "flood fill should handle the entire 640x800 canvas");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setLayerLocked(0, true);
+    canvas.setSelectedIndex(57);
+    canvas.setDrawTool(DrawTool::FloodFill);
+    click(viewport, {1.5, 1.5});
+    ok &= expect(std::all_of(level.pixels.begin(), level.pixels.end(),
+                             [](const std::uint8_t value) {
+                                 return value == 0;
+                             }) &&
+                     canvas.undoStack()->count() == 0,
+                 "flood fill should safely ignore a locked layer");
+
     auto layerLevel = std::make_unique<Level>();
-    layerLevel->pixels.fill(1);
+    layerLevel->pixels.fill(0);
     layerLevel->pixels[offset(100, 100)] = 10;
     layerLevel->pixels[offset(110, 110)] = 11;
     LevelCanvas layerCanvas;

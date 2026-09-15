@@ -13,8 +13,9 @@ PaletteWidget::PaletteWidget(QWidget* parent) : QWidget(parent)
     std::iota(indices_.begin(), indices_.end(), std::uint8_t{0});
     setFixedSize(Columns * CellSize + 2 * Margin,
                  Columns * CellSize + 2 * Margin);
-    setToolTip(tr("Left click selects the primary index; right click selects "
-                  "the secondary index; double-click edits a color"));
+    setToolTip(tr("Left click selects the primary Color Chart entry; right "
+                  "click selects the secondary entry; double-click edits a "
+                  "color"));
 }
 
 void PaletteWidget::setIndices(std::vector<std::uint8_t> indices)

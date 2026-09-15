@@ -176,8 +176,8 @@ private:
 
     Level* level_ = nullptr;
     double zoom_ = 1.0;
-    std::uint8_t selectedIndex_ = 57;
-    std::uint8_t secondaryIndex_ = 58;
+    std::uint8_t selectedIndex_ = 56;
+    std::uint8_t secondaryIndex_ = 57;
     DrawTool drawTool_ = DrawTool::Pencil;
     std::uint8_t strokePaintIndex_ = 57;
     DrawTool strokeTool_ = DrawTool::Pencil;
