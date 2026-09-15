@@ -102,8 +102,11 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   that levels open, can be drawn on and saved, and the GUI-saved output opens
   correctly in the original game.
 - Milestone 6, usable editor: in progress. Stroke-based undo/redo and the
-  pencil, eraser, line, outline/filled rectangle, flood-fill, and eyedropper
-  tools are implemented and covered by offscreen canvas interaction tests.
+  Paint-style pencil, eraser, line, outline/filled rectangle, outline/filled
+  ellipse, flood-fill, and eyedropper tools are implemented. Shape tools have
+  a live preview. The palette viewer exposes all 256 exact indices, RGB values,
+  and converter-documented material meanings. Canvas and palette interaction
+  paths are covered by offscreen tests.
 
 ## Questions to investigate
 

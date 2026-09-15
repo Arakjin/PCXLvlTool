@@ -26,10 +26,12 @@ The current milestone supports:
 - opening, saving, and saving `.LEV` files under a new name
 - pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%
 - panning with the middle mouse button
-- pencil, eraser, line, rectangle, filled rectangle, flood-fill, and eyedropper
-  tools
+- Paint-style two-column toolbox with pencil, eraser, line, rectangle, filled
+  rectangle, ellipse, filled ellipse, flood-fill, and eyedropper tools
+- live, non-destructive previews while dragging line and shape tools
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
-- selecting an exact palette index from 0 through 255
+- a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
+  documented V-Wing material information
 - cursor coordinates and the current pixel index in the status bar
 - prompts before discarding unsaved edits
 

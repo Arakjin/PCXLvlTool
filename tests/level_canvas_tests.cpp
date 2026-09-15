@@ -1,6 +1,8 @@
 #include "level_canvas.h"
+#include "palette_widget.h"
 
 #include <QApplication>
+#include <QImage>
 #include <QMouseEvent>
 
 #include <cstddef>
@@ -38,8 +40,7 @@ void drag(QWidget* target, const QPointF from, const QPointF to)
 {
     sendMouseEvent(target, QEvent::MouseButtonPress, from, Qt::LeftButton,
                    Qt::LeftButton);
-    sendMouseEvent(target, QEvent::MouseMove, to, Qt::NoButton,
-                   Qt::LeftButton);
+    sendMouseEvent(target, QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton);
     sendMouseEvent(target, QEvent::MouseButtonRelease, to, Qt::LeftButton,
                    Qt::NoButton);
 }
@@ -112,6 +113,25 @@ int main(int argc, char* argv[])
 
     canvas.setLevel(nullptr);
     level = Level{};
+    level.palette[8] = RGB{255, 0, 0};
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Line);
+    const QImage beforePreview = viewport->grab().toImage();
+    sendMouseEvent(viewport, QEvent::MouseButtonPress, {70.5, 70.5},
+                   Qt::LeftButton, Qt::LeftButton);
+    sendMouseEvent(viewport, QEvent::MouseMove, {74.5, 70.5}, Qt::NoButton,
+                   Qt::LeftButton);
+    application.processEvents();
+    const QImage duringPreview = viewport->grab().toImage();
+    ok &= expect(beforePreview != duringPreview,
+                 "shape drag should render a live preview");
+    ok &= expect(level.pixels[offset(72, 70)] == 0,
+                 "shape preview should not edit level pixels before release");
+    sendMouseEvent(viewport, QEvent::MouseButtonRelease, {74.5, 70.5},
+                   Qt::LeftButton, Qt::NoButton);
+
+    canvas.setLevel(nullptr);
+    level = Level{};
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Rectangle);
     drag(viewport, {20.5, 20.5}, {22.5, 22.5});
@@ -129,6 +149,23 @@ int main(int argc, char* argv[])
                      level.pixels[offset(31, 31)] == 8 &&
                      level.pixels[offset(32, 32)] == 8,
                  "filled rectangle should also draw its interior");
+
+    canvas.setLevel(nullptr);
+    level = Level{};
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Ellipse);
+    drag(viewport, {35.5, 35.5}, {41.5, 41.5});
+    ok &= expect(level.pixels[offset(38, 35)] == 8 &&
+                     level.pixels[offset(38, 38)] == 0,
+                 "ellipse should draw an unfilled outline");
+
+    canvas.setLevel(nullptr);
+    level = Level{};
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::FilledEllipse);
+    drag(viewport, {45.5, 45.5}, {51.5, 51.5});
+    ok &= expect(level.pixels[offset(48, 48)] == 8,
+                 "filled ellipse should draw its interior");
 
     canvas.setLevel(nullptr);
     level = Level{};
@@ -178,6 +215,20 @@ int main(int argc, char* argv[])
     canvas.undoStack()->undo();
     ok &= expect(level.pixels[offset(50, 50)] == 77,
                  "eraser should restore the old index when undone");
+
+    PaletteWidget palette;
+    palette.setLevel(&level);
+    palette.show();
+    application.processEvents();
+    int paletteIndex = -1;
+    QObject::connect(
+        &palette, &PaletteWidget::indexSelected,
+        [&paletteIndex](const int index) { paletteIndex = index; });
+    const int paletteCell = (palette.width() - 2) / 16;
+    click(&palette, {1.0 + 13 * paletteCell + paletteCell / 2.0,
+                     1.0 + 7 * paletteCell + paletteCell / 2.0});
+    ok &= expect(paletteIndex == 125,
+                 "palette click should preserve the exact grid index");
 
     if (ok) {
         std::cout << "All level canvas tests passed\n";

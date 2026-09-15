@@ -10,7 +10,9 @@
 class QAction;
 class QCloseEvent;
 class QLabel;
+class QSpinBox;
 class LevelCanvas;
+class PaletteWidget;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -24,7 +26,6 @@ protected:
 private:
     void createActions();
     void createMaterialDock();
-    void createDrawToolBar();
     void createZoomToolBar();
     void openLevel();
     bool saveLevel();
@@ -32,10 +33,14 @@ private:
     bool maybeSave();
     bool writeLevel(const std::filesystem::path& path);
     void setModified(bool modified);
+    void updateMaterialDetails(int index);
     void updateWindowTitle();
 
     std::unique_ptr<Level> level_;
     LevelCanvas* canvas_ = nullptr;
+    PaletteWidget* paletteWidget_ = nullptr;
+    QSpinBox* materialIndexSpinBox_ = nullptr;
+    QLabel* materialDetailsLabel_ = nullptr;
     QLabel* positionLabel_ = nullptr;
     QAction* saveAction_ = nullptr;
     std::filesystem::path currentPath_;

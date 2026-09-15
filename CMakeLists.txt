@@ -40,6 +40,8 @@ add_executable(VWingLevelEditor WIN32
     src/main_window.h
     src/level_canvas.cpp
     src/level_canvas.h
+    src/palette_widget.cpp
+    src/palette_widget.h
 )
 target_link_libraries(VWingLevelEditor PRIVATE
     vwing_level_format
@@ -116,6 +118,8 @@ if(BUILD_TESTING)
         tests/level_canvas_tests.cpp
         src/level_canvas.cpp
         src/level_canvas.h
+        src/palette_widget.cpp
+        src/palette_widget.h
     )
     target_link_libraries(level_canvas_tests PRIVATE Qt6::Widgets)
     target_include_directories(level_canvas_tests PRIVATE src)

@@ -13,6 +13,7 @@
 #include <vector>
 
 class QMouseEvent;
+class QPainter;
 class QPaintEvent;
 class QResizeEvent;
 
@@ -30,6 +31,8 @@ enum class DrawTool {
     FilledRectangle,
     FloodFill,
     Eyedropper,
+    Ellipse,
+    FilledEllipse,
 };
 
 class LevelCanvas final : public QAbstractScrollArea {
@@ -62,9 +65,12 @@ private:
     QPoint imagePoint(const QPointF& viewportPoint) const;
     bool setPixel(int x, int y, std::uint8_t index);
     void drawLine(const QPoint& from, const QPoint& to, std::uint8_t index);
-    void drawRectangle(const QPoint& from, const QPoint& to,
-                       std::uint8_t index, bool filled);
+    void drawRectangle(const QPoint& from, const QPoint& to, std::uint8_t index,
+                       bool filled);
+    void drawEllipse(const QPoint& from, const QPoint& to, std::uint8_t index,
+                     bool filled);
     void floodFill(const QPoint& point, std::uint8_t index);
+    void paintShapePreview(QPainter& painter) const;
     void beginStroke(const QString& commandText);
     void commitStroke();
     std::uint8_t paintIndex() const;
