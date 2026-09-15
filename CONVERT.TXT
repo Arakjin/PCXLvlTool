@@ -1,0 +1,90 @@
+
+
+                 LEVEL CONVERTER FOR V-WING V1.91
+                 --------------------------------
+
+
+     It is now possible to make your own levels for V-Wing. The con-
+     verter allows you to incorporate PCX images directly into the 
+     game. A world of endless possibilities has opened up to every-
+     one. Note that these levels DO work with the ShareWare version
+     of V-Wing (ver 1.91).
+
+     Some things to have to be kept in mind when drawing the levels.
+     First of all, the pictures are is 640*800, 256 colors. The pal-
+     ette is up to you do design, but there are some (a lot) special 
+     colors that should be observed. See the color chart below.
+
+     The converter is really simple to operate. When you convert a
+     picture into a level, it will ask you three things. The name of 
+     the level is the name that appears in the levels menu. The pic-
+     ture is the PCX file, and the level is the name of the .lev
+     file. They have to be in the same directory, naturally.
+
+     Some hints about constructing levels:
+          -do not use big areas of exploding colors
+          -do not use big areas of burning colors
+          -the 320*400 mode makes everything look a bit flat, so make
+           all of your structures a bit too tall; if you are making a
+           level exclusively for the 320*200 mode, ingore this.
+          -when using water, make sure that the structures below
+           water level are either indestructible or those that turn
+           into water when destroyed; otherwise you'll have some
+           REALLY idiotic effects
+          -when creating flammable structures, use the two types of
+           burning colors together to create "ruins"
+          -turrets do not appear in the following types of terrain:
+           burning colors, bases, underwater; keep this in mind
+
+
+                V-Wing Color Chart
+                ------------------
+
+        1       Background color (will always be black)
+        2-15    Reserved                                  (don't use)
+        16      Water
+        17      Waterfall (flow down)
+        18      Water (flow right)
+        19      Water (flow left)
+        20-30   Fly through
+        31      Reserved                                  (don't use)
+        32-37   Font
+        38      Reserved                                  (don't use)
+        39      Ice (not in water)
+        40-42   Explodes into Grenade Launcher shells
+        43-44   Explodes like Plastic Explosive
+        45      Plastic Explosive
+        46      Birds
+        47      Reserved                                  (don't use)
+        48      Blood
+        49      Clay
+        50      Base
+        51      Ash
+        52      Snow
+        53-55   Reserved for fire                         (don't use)
+        56      Bubbles
+***     57-149  Normal colors                                 ***
+        150     Doesn't burn                              
+        151-174 Burns away
+        175     Burns for ever                            (don't use)
+        176-199 Burns to ash
+        200     Indestructible, doesn't damage Ghostship  (don't use)
+        201     Underwater ash
+        202     Underwater clay
+        203     Ice
+        204-219 When destroyed, turns into water
+        220     Indestructible, doesn't damage Ghostship  (don't use)
+        221-243 Indestructible
+        244     Turret muzzle (firing)
+        245     Turret barrel and body
+        246     Turret muzzle
+        247     Turret body (sides)
+        248-256 Indestructible
+
+
+
+                                NOTE!
+
+        This converter program is FreeWare. You may distribute it
+        freely, as long as it remains unmodified and this document
+        remains with it, unmodified.
