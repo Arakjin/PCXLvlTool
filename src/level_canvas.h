@@ -24,6 +24,8 @@ struct PixelChange {
     std::size_t offset;
     std::uint8_t oldValue;
     std::uint8_t newValue;
+    std::uint8_t oldMask = 1;
+    std::uint8_t newMask = 1;
 };
 
 enum class DrawTool {
@@ -81,6 +83,16 @@ public:
     void selectAll();
     bool hasSelection() const;
     bool hasPendingSelectionEdit() const;
+    int layerCount() const;
+    int activeLayerIndex() const;
+    bool addLayer();
+    bool deleteActiveLayer();
+    bool duplicateActiveLayer();
+    bool moveActiveLayer(int direction);
+    void setActiveLayer(int index);
+    void setLayerVisible(int index, bool visible);
+    void setLayerLocked(int index, bool locked);
+    void renameLayer(int index, const QString& name);
     QUndoStack* undoStack();
     void refreshImage();
 
@@ -92,6 +104,7 @@ signals:
     void secondaryIndexChanged(int index);
     void paletteColorChanged(int index);
     void pendingSelectionEditChanged(bool pending);
+    void layersChanged();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -114,6 +127,7 @@ private:
 
     QPoint imagePoint(const QPointF& viewportPoint) const;
     bool setPixel(int x, int y, std::uint8_t index);
+    void recompositePixel(std::size_t offset);
     bool setBrushPixel(int x, int y, std::uint8_t index, int thickness);
     std::uint8_t pixelAt(int x, int y) const;
     bool selectionContains(int x, int y) const;
@@ -215,8 +229,10 @@ private:
     bool selectionEditPending_ = false;
     std::vector<std::uint8_t> selectionMask_;
     std::vector<std::uint8_t> selectionPixels_;
+    std::vector<std::uint8_t> selectionOpacity_;
     std::vector<QPoint> freehandSelectionPoints_;
     QUndoStack undoStack_;
     std::vector<PixelChange> strokeChanges_;
+    std::size_t strokeLayerIndex_ = 0;
     std::unordered_map<std::size_t, std::size_t> strokeChangeIndices_;
 };

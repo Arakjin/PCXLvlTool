@@ -1,5 +1,6 @@
 #include "level_canvas.h"
 
+#include "layer_model.h"
 #include "palette_rules.h"
 
 #include <QApplication>
@@ -29,8 +30,10 @@ constexpr auto kSelectionMimeType = "application/x-vwing-level-selection";
 class PixelEditCommand final : public QUndoCommand {
 public:
     PixelEditCommand(Level* level, std::vector<PixelChange> changes,
-                     LevelCanvas* canvas, QString commandText)
-        : level_(level), changes_(std::move(changes)), canvas_(canvas)
+                     const std::size_t layerIndex, LevelCanvas* canvas,
+                     QString commandText)
+        : level_(level), changes_(std::move(changes)),
+          layerIndex_(layerIndex), canvas_(canvas)
     {
         setText(commandText);
     }
@@ -38,7 +41,9 @@ public:
     void undo() override
     {
         for (const PixelChange& change : changes_) {
-            level_->pixels[change.offset] = change.oldValue;
+            Level::Layer& layer = level_->layers[layerIndex_];
+            layer.pixels[change.offset] = change.oldValue;
+            layer.mask[change.offset] = change.oldMask;
         }
         canvas_->refreshImage();
     }
@@ -46,7 +51,9 @@ public:
     void redo() override
     {
         for (const PixelChange& change : changes_) {
-            level_->pixels[change.offset] = change.newValue;
+            Level::Layer& layer = level_->layers[layerIndex_];
+            layer.pixels[change.offset] = change.newValue;
+            layer.mask[change.offset] = change.newMask;
         }
         canvas_->refreshImage();
     }
@@ -54,6 +61,7 @@ public:
 private:
     Level* level_;
     std::vector<PixelChange> changes_;
+    std::size_t layerIndex_;
     LevelCanvas* canvas_;
 };
 
@@ -116,6 +124,10 @@ void LevelCanvas::setLevel(Level* level)
     movingTextBox_ = false;
     textDraft_.clear();
     level_ = level;
+    if (level_ != nullptr) {
+        initializeBackgroundLayer(*level_);
+        flattenLayers(*level_);
+    }
     drawing_ = false;
     undoStack_.clear();
     strokeChanges_.clear();
@@ -309,7 +321,9 @@ void LevelCanvas::commitSelection()
         return;
     }
 
-    std::unordered_map<std::size_t, std::uint8_t> finalValues;
+    using LayerValue = std::pair<std::uint8_t, std::uint8_t>;
+    std::unordered_map<std::size_t, LayerValue> finalValues;
+    Level::Layer& layer = level_->layers[level_->activeLayer];
     const int width = selectionBounds_.width();
     const int height = selectionBounds_.height();
     for (int y = 0; y < height; ++y) {
@@ -321,22 +335,31 @@ void LevelCanvas::commitSelection()
             }
             if (selectionHasSource_) {
                 const QPoint source = selectionSourcePosition_ + QPoint(x, y);
-                finalValues[static_cast<std::size_t>(source.y()) *
-                                Level::Width +
-                            source.x()] = 0;
+                const std::size_t sourceOffset =
+                    static_cast<std::size_t>(source.y()) * Level::Width +
+                    source.x();
+                finalValues[sourceOffset] =
+                    level_->activeLayer == 0
+                        ? LayerValue{1, 1}
+                        : LayerValue{layer.pixels[sourceOffset], 0};
             }
-            const QPoint destination = selectionPosition_ + QPoint(x, y);
-            finalValues[static_cast<std::size_t>(destination.y()) *
-                            Level::Width +
-                        destination.x()] = selectionPixels_[localOffset];
+            if (selectionOpacity_[localOffset] != 0) {
+                const QPoint destination = selectionPosition_ + QPoint(x, y);
+                finalValues[static_cast<std::size_t>(destination.y()) *
+                                Level::Width +
+                            destination.x()] =
+                    {selectionPixels_[localOffset], 1};
+            }
         }
     }
 
     std::vector<PixelChange> changes;
     changes.reserve(finalValues.size());
     for (const auto& [offset, value] : finalValues) {
-        if (level_->pixels[offset] != value) {
-            changes.push_back({offset, level_->pixels[offset], value});
+        if (layer.pixels[offset] != value.first ||
+            layer.mask[offset] != value.second) {
+            changes.push_back({offset, layer.pixels[offset], value.first,
+                               layer.mask[offset], value.second});
         }
     }
     std::sort(changes.begin(), changes.end(),
@@ -345,8 +368,9 @@ void LevelCanvas::commitSelection()
               });
     clearSelection();
     if (!changes.empty()) {
-        undoStack_.push(new PixelEditCommand(level_, std::move(changes), this,
-                                             tr("Commit selection")));
+        undoStack_.push(new PixelEditCommand(
+            level_, std::move(changes), level_->activeLayer, this,
+            tr("Commit selection")));
     }
 }
 
@@ -358,6 +382,7 @@ void LevelCanvas::deleteSelection()
     }
 
     std::vector<PixelChange> changes;
+    Level::Layer& layer = level_->layers[level_->activeLayer];
     if (selectionHasSource_) {
         const int width = selectionBounds_.width();
         const int height = selectionBounds_.height();
@@ -372,16 +397,23 @@ void LevelCanvas::deleteSelection()
                 const std::size_t offset =
                     static_cast<std::size_t>(source.y()) * Level::Width +
                     source.x();
-                if (level_->pixels[offset] != 0) {
-                    changes.push_back({offset, level_->pixels[offset], 0});
+                const std::uint8_t newValue =
+                    level_->activeLayer == 0 ? 1 : layer.pixels[offset];
+                const std::uint8_t newMask =
+                    level_->activeLayer == 0 ? 1 : 0;
+                if (layer.pixels[offset] != newValue ||
+                    layer.mask[offset] != newMask) {
+                    changes.push_back({offset, layer.pixels[offset], newValue,
+                                       layer.mask[offset], newMask});
                 }
             }
         }
     }
     clearSelection();
     if (!changes.empty()) {
-        undoStack_.push(new PixelEditCommand(level_, std::move(changes), this,
-                                             tr("Delete selection")));
+        undoStack_.push(new PixelEditCommand(
+            level_, std::move(changes), level_->activeLayer, this,
+            tr("Delete selection")));
     }
 }
 
@@ -399,7 +431,8 @@ void LevelCanvas::copySelection()
            << static_cast<qint32>(selectionPosition_.y());
     for (std::size_t index = 0; index < selectionMask_.size(); ++index) {
         stream << static_cast<quint8>(selectionMask_[index])
-               << static_cast<quint8>(selectionPixels_[index]);
+               << static_cast<quint8>(selectionPixels_[index])
+               << static_cast<quint8>(selectionOpacity_[index]);
     }
     auto* mimeData = new QMimeData();
     mimeData->setData(QString::fromLatin1(kSelectionMimeType), payload);
@@ -432,13 +465,16 @@ void LevelCanvas::pasteSelection()
     const std::size_t size = static_cast<std::size_t>(width) * height;
     std::vector<std::uint8_t> mask(size);
     std::vector<std::uint8_t> pixels(size);
+    std::vector<std::uint8_t> opacity(size);
     bool containsPixels = false;
     for (std::size_t index = 0; index < size; ++index) {
         quint8 maskValue = 0;
         quint8 pixelValue = 0;
-        stream >> maskValue >> pixelValue;
+        quint8 opacityValue = 0;
+        stream >> maskValue >> pixelValue >> opacityValue;
         mask[index] = maskValue == 0 ? 0 : 1;
         pixels[index] = pixelValue;
+        opacity[index] = opacityValue == 0 ? 0 : 1;
         containsPixels |= mask[index] != 0;
     }
     if (stream.status() != QDataStream::Ok || !containsPixels) {
@@ -450,6 +486,7 @@ void LevelCanvas::pasteSelection()
         QRect(0, 0, static_cast<int>(width), static_cast<int>(height));
     selectionMask_ = std::move(mask);
     selectionPixels_ = std::move(pixels);
+    selectionOpacity_ = std::move(opacity);
     selectionHasSource_ = false;
     selectionActive_ = true;
     selectionEditPending_ = true;
@@ -476,7 +513,9 @@ void LevelCanvas::selectAll()
     selectionSourcePosition_ = {0, 0};
     selectionPosition_ = {0, 0};
     selectionMask_.assign(Level::PixelCount, 1);
-    selectionPixels_.assign(level_->pixels.begin(), level_->pixels.end());
+    const Level::Layer& layer = level_->layers[level_->activeLayer];
+    selectionPixels_.assign(layer.pixels.begin(), layer.pixels.end());
+    selectionOpacity_.assign(layer.mask.begin(), layer.mask.end());
     selectionHasSource_ = true;
     selectionActive_ = true;
     selectionEditPending_ = false;
@@ -490,9 +529,145 @@ bool LevelCanvas::hasPendingSelectionEdit() const
     return selectionEditPending_ || textDraftActive_;
 }
 
+int LevelCanvas::layerCount() const
+{
+    return level_ == nullptr ? 0 : static_cast<int>(level_->layers.size());
+}
+
+int LevelCanvas::activeLayerIndex() const
+{
+    return level_ == nullptr ? -1 : static_cast<int>(level_->activeLayer);
+}
+
+bool LevelCanvas::addLayer()
+{
+    if (level_ == nullptr || level_->layers.size() >= Level::MaxLayers) {
+        return false;
+    }
+    commitSelection();
+    Level::Layer layer;
+    layer.name = "Layer " + std::to_string(level_->layers.size());
+    level_->layers.push_back(std::move(layer));
+    level_->activeLayer = level_->layers.size() - 1;
+    undoStack_.clear();
+    emit layersChanged();
+    return true;
+}
+
+bool LevelCanvas::deleteActiveLayer()
+{
+    if (level_ == nullptr || level_->activeLayer == 0) {
+        return false;
+    }
+    commitSelection();
+    level_->layers.erase(level_->layers.begin() +
+                         static_cast<std::ptrdiff_t>(level_->activeLayer));
+    level_->activeLayer = std::min(level_->activeLayer,
+                                   level_->layers.size() - 1);
+    undoStack_.clear();
+    flattenLayers(*level_);
+    emit layersChanged();
+    viewport()->update();
+    return true;
+}
+
+bool LevelCanvas::duplicateActiveLayer()
+{
+    if (level_ == nullptr || level_->layers.size() >= Level::MaxLayers) {
+        return false;
+    }
+    commitSelection();
+    Level::Layer copy = level_->layers[level_->activeLayer];
+    copy.name += " copy";
+    const auto position = level_->layers.begin() +
+                          static_cast<std::ptrdiff_t>(level_->activeLayer + 1);
+    level_->layers.insert(position, std::move(copy));
+    ++level_->activeLayer;
+    undoStack_.clear();
+    flattenLayers(*level_);
+    emit layersChanged();
+    viewport()->update();
+    return true;
+}
+
+bool LevelCanvas::moveActiveLayer(const int direction)
+{
+    if (level_ == nullptr || level_->activeLayer == 0 || direction == 0) {
+        return false;
+    }
+    const int target = static_cast<int>(level_->activeLayer) + direction;
+    if (target < 1 || target >= static_cast<int>(level_->layers.size())) {
+        return false;
+    }
+    commitSelection();
+    std::swap(level_->layers[level_->activeLayer],
+              level_->layers[static_cast<std::size_t>(target)]);
+    level_->activeLayer = static_cast<std::size_t>(target);
+    undoStack_.clear();
+    flattenLayers(*level_);
+    emit layersChanged();
+    viewport()->update();
+    return true;
+}
+
+void LevelCanvas::setActiveLayer(const int index)
+{
+    if (level_ == nullptr || index < 0 ||
+        index >= static_cast<int>(level_->layers.size()) ||
+        static_cast<std::size_t>(index) == level_->activeLayer) {
+        return;
+    }
+    commitSelection();
+    level_->activeLayer = static_cast<std::size_t>(index);
+    emit layersChanged();
+}
+
+void LevelCanvas::setLayerVisible(const int index, const bool visible)
+{
+    if (level_ == nullptr || index <= 0 ||
+        index >= static_cast<int>(level_->layers.size()) ||
+        level_->layers[static_cast<std::size_t>(index)].visible == visible) {
+        return;
+    }
+    commitSelection();
+    level_->layers[static_cast<std::size_t>(index)].visible = visible;
+    flattenLayers(*level_);
+    emit layersChanged();
+    viewport()->update();
+}
+
+void LevelCanvas::setLayerLocked(const int index, const bool locked)
+{
+    if (level_ == nullptr || index < 0 ||
+        index >= static_cast<int>(level_->layers.size()) ||
+        level_->layers[static_cast<std::size_t>(index)].locked == locked) {
+        return;
+    }
+    commitSelection();
+    level_->layers[static_cast<std::size_t>(index)].locked = locked;
+    emit layersChanged();
+}
+
+void LevelCanvas::renameLayer(const int index, const QString& name)
+{
+    if (level_ == nullptr || index <= 0 ||
+        index >= static_cast<int>(level_->layers.size()) || name.isEmpty()) {
+        return;
+    }
+    level_->layers[static_cast<std::size_t>(index)].name =
+        name.toStdString();
+    emit layersChanged();
+}
+
 QUndoStack* LevelCanvas::undoStack() { return &undoStack_; }
 
-void LevelCanvas::refreshImage() { viewport()->update(); }
+void LevelCanvas::refreshImage()
+{
+    if (level_ != nullptr) {
+        flattenLayers(*level_);
+    }
+    viewport()->update();
+}
 
 void LevelCanvas::paintEvent(QPaintEvent*)
 {
@@ -525,7 +700,11 @@ void LevelCanvas::paintEvent(QPaintEvent*)
                     const std::size_t sourceOffset =
                         static_cast<std::size_t>(source.y()) * Level::Width +
                         source.x();
-                    composedPixels[sourceOffset] = 0;
+                    composedPixels[sourceOffset] = compositeLayerPixel(
+                        *level_, sourceOffset, level_->activeLayer);
+                }
+                if (selectionOpacity_[localOffset] == 0) {
+                    continue;
                 }
                 const QPoint destination = selectionPosition_ + QPoint(x, y);
                 const std::size_t destinationOffset =
@@ -1039,6 +1218,9 @@ QPoint LevelCanvas::imagePoint(const QPointF& viewportPoint) const
 
 bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
 {
+    if (level_->layers[level_->activeLayer].locked) {
+        return false;
+    }
     if (selectionActive_) {
         if (!selectionContains(x, y)) {
             return false;
@@ -1048,10 +1230,15 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
         const std::size_t localOffset =
             static_cast<std::size_t>(localY) * selectionBounds_.width() +
             localX;
-        if (selectionPixels_[localOffset] == index) {
+        const bool eraseToTransparency =
+            strokeTool_ == DrawTool::Eraser && level_->activeLayer > 0;
+        const std::uint8_t newMask = eraseToTransparency ? 0 : 1;
+        if (selectionPixels_[localOffset] == index &&
+            selectionOpacity_[localOffset] == newMask) {
             return false;
         }
         selectionPixels_[localOffset] = index;
+        selectionOpacity_[localOffset] = newMask;
         if (!selectionEditPending_) {
             selectionEditPending_ = true;
             emit pendingSelectionEditChanged(true);
@@ -1061,7 +1248,13 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
 
     const std::size_t offset = static_cast<std::size_t>(y) * Level::Width +
                                static_cast<std::size_t>(x);
-    if (level_->pixels[offset] == index) {
+    Level::Layer& layer = level_->layers[level_->activeLayer];
+    const bool eraseToTransparency =
+        strokeTool_ == DrawTool::Eraser && level_->activeLayer > 0;
+    const std::uint8_t newMask = eraseToTransparency ? 0 : 1;
+    const std::uint8_t newValue = eraseToTransparency ? layer.pixels[offset]
+                                                       : index;
+    if (layer.pixels[offset] == newValue && layer.mask[offset] == newMask) {
         return false;
     }
     const auto existing = strokeChangeIndices_.find(offset);
@@ -1069,14 +1262,24 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
         strokeChangeIndices_.emplace(offset, strokeChanges_.size());
         strokeChanges_.push_back(PixelChange{
             offset,
-            level_->pixels[offset],
-            index,
+            layer.pixels[offset],
+            newValue,
+            layer.mask[offset],
+            newMask,
         });
     } else {
-        strokeChanges_[existing->second].newValue = index;
+        strokeChanges_[existing->second].newValue = newValue;
+        strokeChanges_[existing->second].newMask = newMask;
     }
-    level_->pixels[offset] = index;
+    layer.pixels[offset] = newValue;
+    layer.mask[offset] = newMask;
+    recompositePixel(offset);
     return true;
+}
+
+void LevelCanvas::recompositePixel(const std::size_t offset)
+{
+    level_->pixels[offset] = compositeLayerPixel(*level_, offset);
 }
 
 bool LevelCanvas::setBrushPixel(const int x, const int y,
@@ -1105,7 +1308,9 @@ std::uint8_t LevelCanvas::pixelAt(const int x, const int y) const
         const std::size_t localOffset =
             static_cast<std::size_t>(localY) * selectionBounds_.width() +
             localX;
-        return selectionPixels_[localOffset];
+        if (selectionOpacity_[localOffset] != 0) {
+            return selectionPixels_[localOffset];
+        }
     }
     if (selectionActive_ && selectionHasSource_) {
         const int localX = x - selectionSourcePosition_.x();
@@ -1115,7 +1320,9 @@ std::uint8_t LevelCanvas::pixelAt(const int x, const int y) const
             selectionMask_[static_cast<std::size_t>(localY) *
                                selectionBounds_.width() +
                            localX] != 0) {
-            return 0;
+            const std::size_t offset =
+                static_cast<std::size_t>(y) * Level::Width + x;
+            return compositeLayerPixel(*level_, offset, level_->activeLayer);
         }
     }
     return level_->pixels[static_cast<std::size_t>(y) * Level::Width + x];
@@ -1740,6 +1947,8 @@ void LevelCanvas::createSelection()
     const std::size_t size = static_cast<std::size_t>(width) * height;
     selectionMask_.assign(size, 0);
     selectionPixels_.assign(size, 0);
+    selectionOpacity_.assign(size, 0);
+    const Level::Layer& layer = level_->layers[level_->activeLayer];
 
     QPainterPath freehandPath;
     if (strokeTool_ == DrawTool::SelectFreehand) {
@@ -1775,10 +1984,11 @@ void LevelCanvas::createSelection()
             const std::size_t localOffset =
                 static_cast<std::size_t>(y) * width + x;
             selectionMask_[localOffset] = 1;
-            selectionPixels_[localOffset] =
-                level_->pixels[static_cast<std::size_t>(bounds.top() + y) *
-                                   Level::Width +
-                               bounds.left() + x];
+            const std::size_t levelOffset =
+                static_cast<std::size_t>(bounds.top() + y) * Level::Width +
+                bounds.left() + x;
+            selectionPixels_[localOffset] = layer.pixels[levelOffset];
+            selectionOpacity_[localOffset] = layer.mask[levelOffset];
             containsPixels = true;
         }
     }
@@ -1798,6 +2008,7 @@ void LevelCanvas::clearSelection()
     selectionBounds_ = {};
     selectionMask_.clear();
     selectionPixels_.clear();
+    selectionOpacity_.clear();
     freehandSelectionPoints_.clear();
     updateToolCursor();
     viewport()->update();
@@ -1999,13 +2210,15 @@ void LevelCanvas::beginStroke(const QString& commandText)
     strokeChanges_.clear();
     strokeChangeIndices_.clear();
     strokeCommandText_ = commandText;
+    strokeLayerIndex_ = level_ == nullptr ? 0 : level_->activeLayer;
 }
 
 void LevelCanvas::commitStroke()
 {
     if (!strokeChanges_.empty()) {
         undoStack_.push(new PixelEditCommand(level_, std::move(strokeChanges_),
-                                             this, strokeCommandText_));
+                                             strokeLayerIndex_, this,
+                                             strokeCommandText_));
     }
     strokeChanges_.clear();
     strokeChangeIndices_.clear();
@@ -2014,7 +2227,7 @@ void LevelCanvas::commitStroke()
 std::uint8_t LevelCanvas::paintIndex(const Qt::MouseButton button) const
 {
     if (drawTool_ == DrawTool::Eraser) {
-        return 0;
+        return 1;
     }
     return button == Qt::RightButton ? secondaryIndex_ : selectedIndex_;
 }

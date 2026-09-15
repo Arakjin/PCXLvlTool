@@ -1,6 +1,7 @@
 # V-Wing Level Editor
 
-Portable C++17 and Qt 6 tools for inspecting and editing V-Wing `.LEV` files.
+Portable C++17 and Qt 6 tools for inspecting and editing V-Wing `.LEV` files
+and layered `.vwp` editor projects.
 
 ## Build
 
@@ -23,7 +24,15 @@ Run:
 
 The current milestone supports:
 
-- opening, saving, and saving `.LEV` files under a new name
+- opening `.LEV` levels and layered `.vwp` projects
+- saving editable work as `.vwp`, plus a separate **Publish LEV** action that
+  flattens the visible layers into a game-compatible `.LEV` file
+- up to five reorderable, binary visible/hidden layers; transparent pixels in
+  upper layers reveal the layers below
+- a fixed, always-visible Background layer at the bottom; its eraser writes
+  V-Wing background index 1, while erasing upper layers makes them transparent
+- layer duplication, naming, locking, deletion, and top-to-bottom ordering in a
+  dedicated Layers panel
 - pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%,
   with `Ctrl+mouse wheel` zooming around the pointer
 - panning with the middle mouse button
@@ -63,9 +72,11 @@ The current milestone supports:
 - cursor coordinates and the current pixel index in the status bar
 - prompts before discarding unsaved edits
 
-The editor always writes the converter 1.91-compatible classic header. Keep a
-backup of levels used for testing. The original reference files in the parent
-V-Wing directory are read-only research material and must not be modified.
+Published LEV files always use the converter 1.91-compatible classic header.
+The `.vwp` format retains layer pixels, transparency, order, visibility, locks,
+names, palette, and the active layer. Keep a backup of levels used for testing.
+The original reference files in the parent V-Wing directory are read-only
+research material and must not be modified.
 
 Untitled levels start with an editor-designed material palette that visually
 separates water, explosives, normal terrain, burnable terrain, underwater
@@ -83,7 +94,8 @@ always uses that file's embedded palette unchanged.
 
 Format evidence and research status are documented in
 [`docs/lev-format.md`](docs/lev-format.md) and
-[`docs/reverse-engineering.md`](docs/reverse-engineering.md).
+[`docs/reverse-engineering.md`](docs/reverse-engineering.md). The editable
+project container is documented in [`docs/vwp-format.md`](docs/vwp-format.md).
 
 ## Third-party artwork
 

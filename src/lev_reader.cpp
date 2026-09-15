@@ -179,6 +179,8 @@ bool loadLev(const std::filesystem::path& path, Level& level,
         level.name = readName(bytes);
         std::copy(pixels.begin(), pixels.end(), level.pixels.begin());
         level.palette = palette;
+        level.layers.clear();
+        level.activeLayer = 0;
         return true;
     } catch (const std::exception& exception) {
         error = exception.what();

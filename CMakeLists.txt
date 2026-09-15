@@ -6,10 +6,12 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
 add_library(vwing_level_format
     src/default_palette.cpp
+    src/layer_model.cpp
     src/lev_reader.cpp
     src/lev_writer.cpp
     src/palette_io.cpp
     src/pcx_writer.cpp
+    src/project_io.cpp
 )
 target_include_directories(vwing_level_format PUBLIC src)
 
@@ -131,6 +133,21 @@ if(BUILD_TESTING)
 
     add_test(NAME palette_tests COMMAND palette_tests)
 
+    add_executable(project_tests
+        tests/project_tests.cpp
+    )
+    target_link_libraries(project_tests PRIVATE vwing_level_format)
+    target_compile_features(project_tests PRIVATE cxx_std_17)
+    set_target_properties(project_tests PROPERTIES CXX_EXTENSIONS OFF)
+
+    if(MSVC)
+        target_compile_options(project_tests PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(project_tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME project_tests COMMAND project_tests)
+
     add_test(NAME gui_smoke_test COMMAND VWingLevelEditor --smoke-test)
     set_tests_properties(gui_smoke_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
@@ -138,6 +155,7 @@ if(BUILD_TESTING)
 
     add_executable(level_canvas_tests
         tests/level_canvas_tests.cpp
+        src/layer_model.cpp
         src/level_canvas.cpp
         src/level_canvas.h
         src/palette_widget.cpp

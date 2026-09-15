@@ -7,19 +7,25 @@
 #include "palette_io.h"
 #include "palette_rules.h"
 #include "palette_widget.h"
+#include "project_io.h"
 
 #include <QAction>
+#include <QAbstractItemView>
 #include <QButtonGroup>
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFontComboBox>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
+#include <QInputDialog>
+#include <QListWidget>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -313,6 +319,7 @@ MainWindow::MainWindow(QWidget* parent)
 {
     level_->name = "UNTITLED";
     level_->palette = defaultVWingPalette();
+    level_->pixels.fill(1);
 
     canvas_ = new LevelCanvas(this);
     canvas_->setLevel(level_.get());
@@ -321,6 +328,7 @@ MainWindow::MainWindow(QWidget* parent)
     createActions();
     createToolBars();
     createMaterialDock();
+    createLayerDock();
     createZoomToolBar();
 
     positionLabel_ = new QLabel(tr("Ready"), this);
@@ -334,12 +342,16 @@ MainWindow::MainWindow(QWidget* parent)
             [this] { positionLabel_->setText(tr("Ready")); });
     connect(canvas_->undoStack(), &QUndoStack::cleanChanged, this,
             [this](const bool clean) {
-                setModified(!clean || canvas_->hasPendingSelectionEdit());
+                setModified(nonUndoModified_ || !clean ||
+                            canvas_->hasPendingSelectionEdit());
             });
     connect(canvas_, &LevelCanvas::pendingSelectionEditChanged, this,
             [this](const bool pending) {
-                setModified(pending || !canvas_->undoStack()->isClean());
+                setModified(nonUndoModified_ || pending ||
+                            !canvas_->undoStack()->isClean());
             });
+    connect(canvas_, &LevelCanvas::layersChanged, this,
+            &MainWindow::refreshLayerList);
 
     resize(1000, 800);
     updateWindowTitle();
@@ -361,13 +373,19 @@ void MainWindow::createActions()
     openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openLevel);
 
-    saveAction_ = fileMenu->addAction(tr("&Save"));
+    saveAction_ = fileMenu->addAction(tr("&Save project"));
     saveAction_->setShortcut(QKeySequence::Save);
-    connect(saveAction_, &QAction::triggered, this, [this] { saveLevel(); });
+    connect(saveAction_, &QAction::triggered, this,
+            [this] { saveProject(); });
 
-    QAction* saveAsAction = fileMenu->addAction(tr("Save &As..."));
+    QAction* saveAsAction = fileMenu->addAction(tr("Save project &as..."));
     saveAsAction->setShortcut(QKeySequence::SaveAs);
-    connect(saveAsAction, &QAction::triggered, this, [this] { saveLevelAs(); });
+    connect(saveAsAction, &QAction::triggered, this,
+            [this] { saveProjectAs(); });
+
+    QAction* publishAction = fileMenu->addAction(tr("&Publish LEV..."));
+    connect(publishAction, &QAction::triggered, this,
+            [this] { publishLevel(); });
 
     fileMenu->addSeparator();
     QAction* exitAction = fileMenu->addAction(tr("E&xit"));
@@ -416,7 +434,7 @@ void MainWindow::createToolBars()
     toolGroup->setExclusive(true);
     const std::array<std::pair<const char*, DrawTool>, 15> tools{{
         {"Pencil", DrawTool::Pencil},
-        {"Eraser (index 0)", DrawTool::Eraser},
+        {"Eraser", DrawTool::Eraser},
         {"Spray", DrawTool::Spray},
         {"Line", DrawTool::Line},
         {"Bezier curve", DrawTool::BezierCurve},
@@ -450,6 +468,9 @@ void MainWindow::createToolBars()
         } else if (tool == DrawTool::Polygon) {
             button->setToolTip(tr("Polygon: click corners, double-click or "
                                   "press Enter to finish"));
+        } else if (tool == DrawTool::Eraser) {
+            button->setToolTip(tr("Eraser: makes upper layers transparent; "
+                                  "writes background index 1 on Background"));
         }
         button->setAccessibleName(tr(label));
         toolGroup->addButton(button, static_cast<int>(tool));
@@ -727,6 +748,164 @@ void MainWindow::createZoomToolBar()
                 zoomCombo->setCurrentIndex(zoomCombo->findData(zoom));
             });
     toolBar->addWidget(zoomCombo);
+    toolBar->addSeparator();
+    auto* publishButton = new QPushButton(tr("Publish LEV..."), toolBar);
+    publishButton->setToolTip(
+        tr("Flatten visible layers and write a game-compatible LEV file"));
+    connect(publishButton, &QPushButton::clicked, this,
+            [this] { publishLevel(); });
+    toolBar->addWidget(publishButton);
+}
+
+void MainWindow::createLayerDock()
+{
+    auto* dock = new QDockWidget(tr("Layers"), this);
+    auto* contents = new QWidget(dock);
+    auto* layout = new QVBoxLayout(contents);
+    layout->addWidget(new QLabel(
+        tr("Top layer is drawn first. Unchecked layers are hidden."), contents));
+
+    layerListWidget_ = new QListWidget(contents);
+    layerListWidget_->setSelectionMode(QAbstractItemView::SingleSelection);
+    layout->addWidget(layerListWidget_);
+
+    auto* firstRow = new QHBoxLayout();
+    auto* addButton = new QPushButton(tr("Add"), contents);
+    auto* duplicateButton = new QPushButton(tr("Duplicate"), contents);
+    auto* deleteButton = new QPushButton(tr("Delete"), contents);
+    firstRow->addWidget(addButton);
+    firstRow->addWidget(duplicateButton);
+    firstRow->addWidget(deleteButton);
+    layout->addLayout(firstRow);
+
+    auto* secondRow = new QHBoxLayout();
+    auto* upButton = new QPushButton(tr("Up"), contents);
+    auto* downButton = new QPushButton(tr("Down"), contents);
+    auto* renameButton = new QPushButton(tr("Rename"), contents);
+    auto* lockButton = new QPushButton(tr("Lock / unlock"), contents);
+    secondRow->addWidget(upButton);
+    secondRow->addWidget(downButton);
+    secondRow->addWidget(renameButton);
+    secondRow->addWidget(lockButton);
+    layout->addLayout(secondRow);
+
+    dock->setWidget(contents);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    connect(layerListWidget_, &QListWidget::currentItemChanged, this,
+            [this](QListWidgetItem* current, QListWidgetItem*) {
+                if (current != nullptr) {
+                    canvas_->setActiveLayer(
+                        current->data(Qt::UserRole).toInt());
+                }
+            });
+    connect(layerListWidget_, &QListWidget::itemChanged, this,
+            [this](QListWidgetItem* item) {
+                const int index = item->data(Qt::UserRole).toInt();
+                const bool visible = item->checkState() == Qt::Checked;
+                if (index > 0 &&
+                    level_->layers[static_cast<std::size_t>(index)].visible !=
+                        visible) {
+                    canvas_->setLayerVisible(index, visible);
+                    nonUndoModified_ = true;
+                    setModified(true);
+                }
+            });
+    connect(addButton, &QPushButton::clicked, this, [this] {
+        if (canvas_->addLayer()) {
+            nonUndoModified_ = true;
+            setModified(true);
+        } else {
+            statusBar()->showMessage(tr("A project can contain at most 5 layers"),
+                                     3000);
+        }
+    });
+    connect(duplicateButton, &QPushButton::clicked, this, [this] {
+        if (canvas_->duplicateActiveLayer()) {
+            nonUndoModified_ = true;
+            setModified(true);
+        } else {
+            statusBar()->showMessage(tr("The layer could not be duplicated"),
+                                     3000);
+        }
+    });
+    connect(deleteButton, &QPushButton::clicked, this, [this] {
+        if (canvas_->deleteActiveLayer()) {
+            nonUndoModified_ = true;
+            setModified(true);
+        } else {
+            statusBar()->showMessage(tr("Background cannot be deleted"), 3000);
+        }
+    });
+    connect(upButton, &QPushButton::clicked, this, [this] {
+        if (canvas_->moveActiveLayer(1)) {
+            nonUndoModified_ = true;
+            setModified(true);
+        }
+    });
+    connect(downButton, &QPushButton::clicked, this, [this] {
+        if (canvas_->moveActiveLayer(-1)) {
+            nonUndoModified_ = true;
+            setModified(true);
+        }
+    });
+    connect(renameButton, &QPushButton::clicked, this, [this] {
+        const int index = canvas_->activeLayerIndex();
+        if (index <= 0) {
+            statusBar()->showMessage(tr("Background cannot be renamed"), 3000);
+            return;
+        }
+        bool accepted = false;
+        const QString current = QString::fromStdString(
+            level_->layers[static_cast<std::size_t>(index)].name);
+        const QString name = QInputDialog::getText(
+            this, tr("Rename layer"), tr("Layer name:"), QLineEdit::Normal,
+            current, &accepted);
+        if (accepted && !name.trimmed().isEmpty() && name != current) {
+            canvas_->renameLayer(index, name.trimmed());
+            nonUndoModified_ = true;
+            setModified(true);
+        }
+    });
+    connect(lockButton, &QPushButton::clicked, this, [this] {
+        const int index = canvas_->activeLayerIndex();
+        if (index < 0) {
+            return;
+        }
+        const bool locked =
+            level_->layers[static_cast<std::size_t>(index)].locked;
+        canvas_->setLayerLocked(index, !locked);
+        nonUndoModified_ = true;
+        setModified(true);
+    });
+    refreshLayerList();
+}
+
+void MainWindow::refreshLayerList()
+{
+    if (layerListWidget_ == nullptr || level_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(layerListWidget_);
+    layerListWidget_->clear();
+    for (std::size_t index = level_->layers.size(); index-- > 0;) {
+        const Level::Layer& layer = level_->layers[index];
+        QString label = QString::fromStdString(layer.name);
+        if (layer.locked) {
+            label += tr("  [locked]");
+        }
+        auto* item = new QListWidgetItem(label, layerListWidget_);
+        item->setData(Qt::UserRole, static_cast<int>(index));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+        if (index == 0) {
+            item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
+            item->setToolTip(tr("Background is always visible and always bottom"));
+        }
+        if (index == level_->activeLayer) {
+            layerListWidget_->setCurrentItem(item);
+        }
+    }
 }
 
 void MainWindow::openLevel()
@@ -735,9 +914,10 @@ void MainWindow::openLevel()
         return;
     }
 
-    const QString filename =
-        QFileDialog::getOpenFileName(this, tr("Open V-Wing level"), QString(),
-                                     tr("V-Wing levels (*.LEV *.lev)"));
+    const QString filename = QFileDialog::getOpenFileName(
+        this, tr("Open project or V-Wing level"), QString(),
+        tr("V-Wing projects and levels (*.vwp *.VWP *.lev *.LEV);;"
+           "V-Wing projects (*.vwp *.VWP);;V-Wing levels (*.lev *.LEV)"));
     if (filename.isEmpty()) {
         return;
     }
@@ -745,7 +925,12 @@ void MainWindow::openLevel()
     auto loaded = std::make_unique<Level>();
     std::string error;
     const std::filesystem::path path = toPath(filename);
-    if (!loadLev(path, *loaded, error)) {
+    const bool isProject =
+        QString::compare(QFileInfo(filename).suffix(), QStringLiteral("vwp"),
+                         Qt::CaseInsensitive) == 0;
+    const bool loadedSuccessfully = isProject ? loadProject(path, *loaded, error)
+                                              : loadLev(path, *loaded, error);
+    if (!loadedSuccessfully) {
         QMessageBox::critical(this, tr("Open failed"),
                               QString::fromStdString(error));
         return;
@@ -754,11 +939,14 @@ void MainWindow::openLevel()
     // Drop commands while their old Level target is still alive.
     canvas_->undoStack()->clear();
     level_ = std::move(loaded);
-    currentPath_ = path;
+    projectPath_ = isProject ? path : std::filesystem::path{};
+    publishPath_ = isProject ? std::filesystem::path{} : path;
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
     updateMaterialDetails(materialIndexSpinBox_->value());
+    refreshLayerList();
     canvas_->undoStack()->setClean();
+    nonUndoModified_ = false;
     setModified(false);
     statusBar()->showMessage(tr("Opened %1").arg(filename), 3000);
 }
@@ -780,20 +968,23 @@ void MainWindow::updateMaterialDetails(const int index)
                                        .arg(materialDescription(index)));
 }
 
-bool MainWindow::saveLevel()
+bool MainWindow::saveProject()
 {
-    return currentPath_.empty() ? saveLevelAs() : writeLevel(currentPath_);
+    return projectPath_.empty() ? saveProjectAs() : writeProject(projectPath_);
 }
 
-bool MainWindow::saveLevelAs()
+bool MainWindow::saveProjectAs()
 {
-    const QString filename = QFileDialog::getSaveFileName(
-        this, tr("Save V-Wing level"), toQString(currentPath_),
-        tr("V-Wing levels (*.LEV)"));
+    QString filename = QFileDialog::getSaveFileName(
+        this, tr("Save editable V-Wing project"), toQString(projectPath_),
+        tr("V-Wing projects (*.vwp)"));
     if (filename.isEmpty()) {
         return false;
     }
-    return writeLevel(toPath(filename));
+    if (!filename.endsWith(QStringLiteral(".vwp"), Qt::CaseInsensitive)) {
+        filename += QStringLiteral(".vwp");
+    }
+    return writeProject(toPath(filename));
 }
 
 bool MainWindow::maybeSave()
@@ -803,28 +994,63 @@ bool MainWindow::maybeSave()
     }
 
     const QMessageBox::StandardButton choice = QMessageBox::warning(
-        this, tr("Unsaved changes"), tr("Save changes to the current level?"),
+        this, tr("Unsaved changes"), tr("Save changes to the editable project?"),
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
         QMessageBox::Save);
     if (choice == QMessageBox::Save) {
-        return saveLevel();
+        return saveProject();
     }
     return choice == QMessageBox::Discard;
 }
 
-bool MainWindow::writeLevel(const std::filesystem::path& path)
+bool MainWindow::writeProject(const std::filesystem::path& path)
 {
     canvas_->commitSelection();
     std::string error;
-    if (!saveLev(path, *level_, error)) {
+    if (!::saveProject(path, *level_, error)) {
         QMessageBox::critical(this, tr("Save failed"),
                               QString::fromStdString(error));
         return false;
     }
-    currentPath_ = path;
+    projectPath_ = path;
     canvas_->undoStack()->setClean();
+    nonUndoModified_ = false;
     setModified(false);
     statusBar()->showMessage(tr("Saved %1").arg(toQString(path)), 3000);
+    return true;
+}
+
+bool MainWindow::publishLevel()
+{
+    std::filesystem::path suggested = publishPath_;
+    if (suggested.empty() && !projectPath_.empty()) {
+        suggested = projectPath_;
+        suggested.replace_extension(".LEV");
+    }
+    QString filename = QFileDialog::getSaveFileName(
+        this, tr("Publish game-compatible V-Wing level"), toQString(suggested),
+        tr("V-Wing levels (*.LEV)"));
+    if (filename.isEmpty()) {
+        return false;
+    }
+    if (!filename.endsWith(QStringLiteral(".lev"), Qt::CaseInsensitive)) {
+        filename += QStringLiteral(".LEV");
+    }
+    return writePublishedLevel(toPath(filename));
+}
+
+bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
+{
+    canvas_->commitSelection();
+    canvas_->refreshImage();
+    std::string error;
+    if (!saveLev(path, *level_, error)) {
+        QMessageBox::critical(this, tr("Publish failed"),
+                              QString::fromStdString(error));
+        return false;
+    }
+    publishPath_ = path;
+    statusBar()->showMessage(tr("Published %1").arg(toQString(path)), 3000);
     return true;
 }
 
@@ -888,9 +1114,11 @@ void MainWindow::setModified(const bool modified)
 
 void MainWindow::updateWindowTitle()
 {
-    const QString name = currentPath_.empty()
-                             ? tr("Untitled")
-                             : toQString(currentPath_.filename());
+    const QString name = projectPath_.empty()
+                             ? (publishPath_.empty()
+                                    ? tr("Untitled")
+                                    : toQString(publishPath_.filename()))
+                             : toQString(projectPath_.filename());
     setWindowTitle(tr("%1%2 — V-Wing Level Editor")
                        .arg(modified_ ? QStringLiteral("*") : QString(), name));
 }

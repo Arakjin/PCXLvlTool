@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -102,6 +103,8 @@ void clearLevel(Level &level)
     level.name.clear();
     level.pixels.fill(0);
     level.palette.fill({});
+    level.layers.clear();
+    level.activeLayer = 0;
 }
 
 } // namespace
@@ -403,8 +406,8 @@ int main(int argc, char *argv[])
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Eraser);
     click(viewport, {50.5, 50.5});
-    ok &= expect(level.pixels[offset(50, 50)] == 0,
-                 "eraser should write palette index zero");
+    ok &= expect(level.pixels[offset(50, 50)] == 1,
+                 "background eraser should write palette index one");
     canvas.undoStack()->undo();
     ok &= expect(level.pixels[offset(50, 50)] == 77,
                  "eraser should restore the old index when undone");
@@ -500,8 +503,8 @@ int main(int argc, char *argv[])
     canvas.setDrawTool(DrawTool::Eraser);
     canvas.setToolThickness(DrawTool::Eraser, 4);
     click(viewport, {100.5, 100.5});
-    ok &= expect(level.pixels[offset(99, 99)] == 0 &&
-                     level.pixels[offset(102, 102)] == 0,
+    ok &= expect(level.pixels[offset(99, 99)] == 1 &&
+                     level.pixels[offset(102, 102)] == 1,
                  "eraser should use its independently configured thickness");
 
     canvas.setLevel(nullptr);
@@ -551,7 +554,7 @@ int main(int argc, char *argv[])
                  "moving a selection should mark a pending edit");
     canvas.commitSelection();
     ok &=
-        expect(level.pixels[offset(10, 10)] == 0 &&
+        expect(level.pixels[offset(10, 10)] == 1 &&
                    level.pixels[offset(20, 20)] == 77 &&
                    level.pixels[offset(21, 21)] == 77,
                "committing a moved selection should clear and move its pixels");
@@ -571,7 +574,7 @@ int main(int argc, char *argv[])
     canvas.setDrawTool(DrawTool::SelectEllipse);
     drag(viewport, {30.5, 30.5}, {34.5, 34.5});
     sendKey(&canvas, Qt::Key_Delete);
-    ok &= expect(level.pixels[offset(32, 32)] == 0 &&
+    ok &= expect(level.pixels[offset(32, 32)] == 1 &&
                      level.pixels[offset(30, 30)] == 77,
                  "Delete should clear only pixels inside an ellipse selection");
 
@@ -589,7 +592,7 @@ int main(int argc, char *argv[])
     ok &= expect(canvas.hasSelection(),
                  "a closed freehand path should create a selection");
     canvas.deleteSelection();
-    ok &= expect(level.pixels[offset(41, 41)] == 0 &&
+    ok &= expect(level.pixels[offset(41, 41)] == 1 &&
                      level.pixels[offset(44, 44)] == 77,
                  "freehand Delete should respect the lasso mask");
 
@@ -642,17 +645,75 @@ int main(int argc, char *argv[])
                    level.pixels[offset(320, 400)] == 58,
                "Ctrl+A should create a non-destructive full-canvas selection");
     sendKey(&canvas, Qt::Key_Delete);
-    const bool canvasEmpty =
+    const bool canvasClearedToBackground =
         std::all_of(level.pixels.begin(), level.pixels.end(),
-                    [](const std::uint8_t value) { return value == 0; });
+                    [](const std::uint8_t value) { return value == 1; });
     ok &=
-        expect(canvasEmpty && canvas.undoStack()->count() == 1,
+        expect(canvasClearedToBackground && canvas.undoStack()->count() == 1,
                "Delete after Ctrl+A should clear the canvas in one operation");
     canvas.undoStack()->undo();
     ok &= expect(level.pixels[offset(1, 1)] == 57 &&
                      level.pixels[offset(320, 400)] == 58 &&
                      level.pixels[offset(639, 799)] == 59,
                  "full-canvas deletion should be undoable");
+
+    auto layerLevel = std::make_unique<Level>();
+    layerLevel->pixels.fill(1);
+    layerLevel->pixels[offset(100, 100)] = 10;
+    layerLevel->pixels[offset(110, 110)] = 11;
+    LevelCanvas layerCanvas;
+    layerCanvas.resize(320, 240);
+    layerCanvas.setLevel(layerLevel.get());
+    layerCanvas.show();
+    application.processEvents();
+    ok &= expect(layerCanvas.layerCount() == 1 &&
+                     layerLevel->layers.front().name == "Background",
+                 "a level should begin with one fixed Background layer");
+    ok &= expect(layerCanvas.addLayer() && layerCanvas.addLayer(),
+                 "upper layers should be addable");
+    layerLevel->layers[1].pixels[offset(100, 100)] = 20;
+    layerLevel->layers[1].mask[offset(100, 100)] = 1;
+    layerLevel->layers[2].pixels[offset(100, 100)] = 30;
+    layerLevel->layers[2].mask[offset(100, 100)] = 1;
+    layerCanvas.refreshImage();
+    ok &= expect(layerLevel->pixels[offset(100, 100)] == 30,
+                 "the highest visible layer should win compositing");
+    ok &= expect(layerCanvas.moveActiveLayer(-1) &&
+                     layerLevel->pixels[offset(100, 100)] == 20,
+                 "reordering layers should immediately change compositing");
+    layerCanvas.setLayerVisible(2, false);
+    ok &= expect(layerLevel->pixels[offset(100, 100)] == 30,
+                 "hidden layers should not contribute to compositing");
+    layerCanvas.setLayerVisible(2, true);
+
+    layerCanvas.setSelectedIndex(40);
+    layerCanvas.setDrawTool(DrawTool::Pencil);
+    click(layerCanvas.viewport(), {110.5, 110.5});
+    ok &= expect(layerLevel->layers[1].mask[offset(110, 110)] == 1 &&
+                     layerLevel->pixels[offset(110, 110)] == 40,
+                 "drawing should write to the active upper layer");
+    layerCanvas.setDrawTool(DrawTool::Eraser);
+    click(layerCanvas.viewport(), {110.5, 110.5});
+    ok &= expect(layerLevel->layers[1].mask[offset(110, 110)] == 0 &&
+                     layerLevel->pixels[offset(110, 110)] == 11,
+                 "upper-layer erasing should reveal the Background");
+    layerCanvas.setLayerLocked(1, true);
+    layerCanvas.setDrawTool(DrawTool::Pencil);
+    click(layerCanvas.viewport(), {120.5, 120.5});
+    ok &= expect(layerLevel->layers[1].mask[offset(120, 120)] == 0,
+                 "locked layers should reject drawing");
+    layerCanvas.setLayerLocked(1, false);
+    ok &= expect(layerCanvas.duplicateActiveLayer() && layerCanvas.addLayer() &&
+                     layerCanvas.layerCount() == 5 && !layerCanvas.addLayer(),
+                 "layers should duplicate but never exceed the five-layer cap");
+    layerCanvas.setActiveLayer(0);
+    layerCanvas.setLayerVisible(0, false);
+    layerCanvas.renameLayer(0, QStringLiteral("Changed"));
+    ok &= expect(!layerCanvas.deleteActiveLayer() &&
+                     !layerCanvas.moveActiveLayer(1) &&
+                     layerLevel->layers.front().visible &&
+                     layerLevel->layers.front().name == "Background",
+                 "Background should stay visible, named, bottom, and undeletable");
 
     PaletteWidget palette;
     palette.setLevel(&level);
