@@ -8,8 +8,8 @@
 
 int main(int argc, char* argv[])
 {
-    if (argc != 3) {
-        std::cerr << "Usage: levroundtrip <input.LEV> <output.LEV>\n";
+    if (argc != 3 && argc != 4) {
+        std::cerr << "Usage: levroundtrip <input.LEV> <output.LEV> [level-name]\n";
         return 2;
     }
 
@@ -22,6 +22,9 @@ int main(int argc, char* argv[])
         std::cerr << "levroundtrip: " << inputPath.string() << ": " << error
                   << '\n';
         return 1;
+    }
+    if (argc == 4) {
+        level->name = argv[3];
     }
     if (!saveLev(outputPath, *level, error)) {
         std::cerr << "levroundtrip: " << outputPath.string() << ": " << error

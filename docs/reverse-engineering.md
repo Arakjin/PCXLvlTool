@@ -32,6 +32,7 @@ cmake --build build
 ./build/lev_tests build/oracle
 ./build/lev2pcx ../LEVEL1.LEV build/LEVEL1.PCX
 ./build/levroundtrip ../LEVEL1.LEV build/LEVEL1.LEV
+./build/levroundtrip ../LEVEL1.LEV build/LEVEL11.LEV "TEST"
 ```
 
 `levdump` currently reports only directly observable byte-level properties:
@@ -56,8 +57,9 @@ standard 640 x 800, 8-bit indexed PCX while preserving every palette index and
 RGB palette entry.
 
 `levroundtrip` exercises the LEV writer by loading a source level and writing a
-new classic-format LEV. The writer rejects names longer than 20 bytes and
-non-printable ASCII instead of silently truncating or converting them.
+new classic-format LEV. An optional third argument overrides the internal level
+name. The writer rejects names longer than 20 bytes and non-printable ASCII
+instead of silently truncating or converting them.
 
 The raw inspection sections do not assign format meanings to bytes. After
 those sections were implemented, controlled converter tests established the
