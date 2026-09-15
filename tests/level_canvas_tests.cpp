@@ -407,7 +407,7 @@ int main(int argc, char *argv[])
     canvas.setDrawTool(DrawTool::Eraser);
     click(viewport, {50.5, 50.5});
     ok &= expect(level.pixels[offset(50, 50)] == 0,
-                 "background eraser should write Color Chart 1 / file index 0");
+                 "background eraser should write file index 0");
     canvas.undoStack()->undo();
     ok &= expect(level.pixels[offset(50, 50)] == 77,
                  "eraser should restore the old index when undone");

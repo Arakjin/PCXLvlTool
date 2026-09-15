@@ -2,18 +2,18 @@
 
 constexpr bool isReservedPaletteIndex(const int index)
 {
-    return (index >= 1 && index <= 14) || index == 30 || index == 37 ||
-           index == 46 || (index >= 52 && index <= 54);
+    return (index >= 1 && index <= 15) || index == 31 || index == 38 ||
+           index == 47 || (index >= 53 && index <= 55);
 }
 
 constexpr int colorChartNumber(const int paletteIndex)
 {
-    return paletteIndex + 1;
+    return paletteIndex;
 }
 
 constexpr int paletteIndexFromColorChart(const int colorNumber)
 {
-    return colorNumber - 1;
+    return colorNumber;
 }
 
 constexpr bool isReservedColorChartNumber(const int colorNumber)

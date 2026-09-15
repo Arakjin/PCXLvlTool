@@ -92,9 +92,10 @@ level author. It also documents gameplay meanings and reserved ranges for
 palette indices. These statements describe converter input and game behavior;
 they do not by themselves prove the on-disk `.LEV` layout.
 
-The documentation numbers its Color Chart entries from 1 through 256, while
-the underlying PCX palette and pixel bytes use indices 0 through 255. Thus
-Color Chart 1 is stored as index 0 and Color Chart 256 as index 255. The
+The original documentation numbers its Color Chart entries from 1 through 256,
+but the editor's material meanings and game-facing pixel values are tracked as
+direct PCX/LEV indices 0 through 255. In particular, the editor treats Base as
+index 50 and Clay as index 49. The
 documented `248-256` range is direct evidence of this one-based presentation.
 
 ## Next confirmation tests

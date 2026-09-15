@@ -112,8 +112,8 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   undo history as pixel edits. Untitled levels receive an explicitly
   editor-designed starter palette; its reserved entries use the per-index RGB
   modes measured from the original `LEVEL1.LEV` through `LEVEL11.LEV` files.
-  Converter Color Chart values 1-256 are translated to PCX/LEV palette indices
-  0-255 throughout the editor.
+  Material values are kept as direct PCX/LEV palette indices 0-255 throughout
+  the editor; Base is index 50 and Clay is index 49.
   Pencil, eraser, and line thicknesses are
   independently configurable, as are rectangle and ellipse outline widths.
   Rectangle corners have selectable radii, and Shift constrains rectangles and

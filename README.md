@@ -34,7 +34,7 @@ The current milestone supports:
 - up to five reorderable, binary visible/hidden layers; transparent pixels in
   upper layers reveal the layers below
 - a fixed, always-visible Background layer at the bottom; its eraser writes
-  Color Chart 1 (file/palette index 0), while erasing upper layers makes them
+  file/palette index 0, while erasing upper layers makes them
   transparent
 - layer duplication, naming, locking, deletion, and top-to-bottom ordering in a
   dedicated Layers panel
@@ -74,7 +74,7 @@ The current milestone supports:
   documented V-Wing material information; left click selects the primary index
   and right click selects the secondary index, which also works for drawing
 - palette-area filtering that omits reserved and "do not use" indices;
-  reserved Color Chart indices are also blocked in direct material selection
+  reserved material indices are also blocked in direct material selection
 - reserved default colors derived per index from the most common RGB values in
   the original `LEVEL1.LEV` through `LEVEL11.LEV` palettes
 - per-index RGB editing with undo, plus reusable 256-color JASC-PAL load/save
@@ -93,9 +93,9 @@ materials, indestructible terrain, and turret parts. It is a practical starter
 palette, not a claim about one canonical V-Wing palette. Opening a `.LEV` file
 always uses that file's embedded palette unchanged.
 
-The converter's Color Chart uses human-facing numbers 1-256, while PCX and LEV
-store palette indices 0-255. The editor's color selectors show Color Chart
-numbers and the details panel also reports the corresponding file index.
+The editor's material selectors use the game/PCX/LEV palette indices directly
+as values 0-255. This keeps the UI and saved pixel data aligned; for example,
+Base is selected and stored as index 50, while Clay is index 49.
 
 ## Command-line tools
 

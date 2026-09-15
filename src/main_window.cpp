@@ -143,12 +143,12 @@ QString materialDescription(const int paletteIndex)
     if (index >= 221 && index <= 243) {
         return QStringLiteral("Indestructible");
     }
-    if (index >= 248 && index <= 256) {
+    if (index >= 248 && index <= 255) {
         return QStringLiteral("Indestructible");
     }
 
     switch (index) {
-    case 1:
+    case 0:
         return QStringLiteral("Background (always black)");
     case 16:
         return QStringLiteral("Water");
@@ -232,48 +232,48 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group)
     switch (group) {
     case PaletteGroup::AllUsable:
         indices.push_back(0);
-        appendRange(indices, 15, 29);
-        appendRange(indices, 31, 36);
-        appendRange(indices, 38, 45);
-        appendRange(indices, 47, 51);
-        appendRange(indices, 55, 173);
-        appendRange(indices, 175, 198);
-        appendRange(indices, 200, 218);
-        appendRange(indices, 220, 255);
+        appendRange(indices, 16, 30);
+        appendRange(indices, 32, 37);
+        appendRange(indices, 39, 45);
+        appendRange(indices, 48, 52);
+        appendRange(indices, 56, 174);
+        appendRange(indices, 176, 199);
+        appendRange(indices, 201, 219);
+        appendRange(indices, 221, 255);
         break;
     case PaletteGroup::Background:
         indices.push_back(0);
         break;
     case PaletteGroup::Water:
-        appendRange(indices, 15, 18);
+        appendRange(indices, 16, 19);
         break;
     case PaletteGroup::FlyThrough:
-        appendRange(indices, 19, 29);
+        appendRange(indices, 20, 30);
         break;
     case PaletteGroup::Font:
-        appendRange(indices, 31, 36);
+        appendRange(indices, 32, 37);
         break;
     case PaletteGroup::Special:
-        appendRange(indices, 38, 45);
-        appendRange(indices, 47, 51);
-        indices.push_back(55);
+        appendRange(indices, 39, 45);
+        appendRange(indices, 48, 52);
+        indices.push_back(56);
         break;
     case PaletteGroup::NormalTerrain:
-        appendRange(indices, 56, 148);
+        appendRange(indices, 57, 149);
         break;
     case PaletteGroup::Burnable:
-        appendRange(indices, 149, 173);
-        appendRange(indices, 175, 198);
+        appendRange(indices, 150, 174);
+        appendRange(indices, 176, 199);
         break;
     case PaletteGroup::Underwater:
-        appendRange(indices, 200, 218);
+        appendRange(indices, 201, 219);
         break;
     case PaletteGroup::Indestructible:
-        appendRange(indices, 220, 242);
-        appendRange(indices, 247, 255);
+        appendRange(indices, 221, 243);
+        appendRange(indices, 248, 255);
         break;
     case PaletteGroup::Turrets:
-        appendRange(indices, 243, 246);
+        appendRange(indices, 244, 247);
         break;
     }
     return indices;
@@ -492,7 +492,7 @@ void MainWindow::createToolBars()
                    "intersects with the current selection"));
         } else if (tool == DrawTool::Eraser) {
             button->setToolTip(tr("Eraser: makes upper layers transparent; "
-                                  "writes Color Chart 1 (file index 0) on "
+                                  "writes file index 0 on "
                                   "Background"));
         }
         button->setAccessibleName(tr(label));
@@ -643,22 +643,22 @@ void MainWindow::createMaterialDock()
     layout->addWidget(paletteWidget_);
 
     auto* indexLayout = new QHBoxLayout();
-    indexLayout->addWidget(new QLabel(tr("Left Color Chart:"), contents));
+    indexLayout->addWidget(new QLabel(tr("Left material index:"), contents));
     materialIndexSpinBox_ = new PaletteIndexSpinBox(contents);
-    materialIndexSpinBox_->setRange(1, 256);
+    materialIndexSpinBox_->setRange(0, 255);
     materialIndexSpinBox_->setValue(57);
     materialIndexSpinBox_->setToolTip(
-        tr("Reserved Color Chart indices cannot be selected"));
+        tr("Reserved material indices cannot be selected"));
     indexLayout->addWidget(materialIndexSpinBox_);
     layout->addLayout(indexLayout);
     auto* secondaryIndexLayout = new QHBoxLayout();
     secondaryIndexLayout->addWidget(
-        new QLabel(tr("Right Color Chart:"), contents));
+        new QLabel(tr("Right material index:"), contents));
     secondaryIndexSpinBox_ = new PaletteIndexSpinBox(contents);
-    secondaryIndexSpinBox_->setRange(1, 256);
+    secondaryIndexSpinBox_->setRange(0, 255);
     secondaryIndexSpinBox_->setValue(58);
     secondaryIndexSpinBox_->setToolTip(
-        tr("Right-click drawing and filled-shape interior Color Chart number"));
+        tr("Right-click drawing and filled-shape interior material index"));
     secondaryIndexLayout->addWidget(secondaryIndexSpinBox_);
     layout->addLayout(secondaryIndexLayout);
     materialDetailsLabel_ = new QLabel(contents);
@@ -1062,7 +1062,7 @@ void MainWindow::updateMaterialDetails(const int index)
             .arg(static_cast<int>(color.g), 2, 16, QLatin1Char('0'))
             .arg(static_cast<int>(color.b), 2, 16, QLatin1Char('0'))
             .toUpper();
-    materialDetailsLabel_->setText(tr("Color Chart %1 / file index %2\n"
+    materialDetailsLabel_->setText(tr("Material index %1 / file index %2\n"
                                       "RGB: %3, %4, %5   %6\n%7")
                                        .arg(colorChartNumber(index))
                                        .arg(index)
@@ -1183,7 +1183,7 @@ void MainWindow::editSelectedPaletteColor()
     const RGB& current = level_->palette[static_cast<std::size_t>(index)];
     const QColor selected =
         QColorDialog::getColor(QColor(current.r, current.g, current.b), this,
-                               tr("Color Chart %1 (file index %2)")
+                               tr("Material index %1 (file index %2)")
                                    .arg(colorChartNumber(index))
                                    .arg(index));
     if (!selected.isValid()) {

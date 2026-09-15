@@ -52,14 +52,15 @@ int main()
     ok &= expect(!(palette[15] == palette[16]) &&
                      !(palette[56] == palette[148]),
                "default material ranges should contain useful color choices");
-    ok &= expect(isReservedPaletteIndex(1) && isReservedPaletteIndex(54) &&
-                     !isReservedPaletteIndex(15) &&
+    ok &= expect(isReservedPaletteIndex(1) && isReservedPaletteIndex(55) &&
+                     isReservedPaletteIndex(15) &&
+                     !isReservedPaletteIndex(16) &&
                      !isReservedPaletteIndex(56),
                  "reserved Color Chart index rules are incorrect");
-    ok &= expect(colorChartNumber(0) == 1 &&
-                     colorChartNumber(255) == 256 &&
-                     paletteIndexFromColorChart(57) == 56,
-                 "Color Chart and file-index conversion is incorrect");
+    ok &= expect(colorChartNumber(0) == 0 &&
+                     colorChartNumber(255) == 255 &&
+                     paletteIndexFromColorChart(57) == 57,
+                 "material index conversion is incorrect");
     const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
         {1, {0, 0, 171}},      {2, {0, 171, 0}},      {3, {0, 171, 171}},
         {4, {171, 0, 0}},      {5, {171, 0, 171}},    {6, {171, 87, 0}},
