@@ -518,6 +518,16 @@ void MainWindow::createToolBars()
     thicknessSpinBox->setValue(canvas_->toolThickness(DrawTool::Pencil));
     optionsBar->addWidget(thicknessSpinBox);
     optionsBar->addSeparator();
+    optionsBar->addWidget(new QLabel(tr("Tip: "), optionsBar));
+    auto* brushShapeCombo = new QComboBox(optionsBar);
+    brushShapeCombo->addItem(tr("Square"),
+                             static_cast<int>(BrushShape::Square));
+    brushShapeCombo->addItem(tr("Circle"),
+                             static_cast<int>(BrushShape::Circle));
+    brushShapeCombo->setToolTip(
+        tr("Pencil and eraser footprint shown under the pointer"));
+    optionsBar->addWidget(brushShapeCombo);
+    optionsBar->addSeparator();
     optionsBar->addWidget(new QLabel(tr("Shape: "), optionsBar));
     auto* shapeModeCombo = new QComboBox(optionsBar);
     shapeModeCombo->addItem(tr("Outline"), static_cast<int>(ShapeMode::Outline));
@@ -553,7 +563,8 @@ void MainWindow::createToolBars()
     connect(
         toolGroup, &QButtonGroup::idClicked, this,
         [this, activeToolLabel, thicknessSpinBox, cornerRadiusCombo,
-         shapeModeCombo, fontCombo, textSizeSpinBox, tools](const int id) {
+         brushShapeCombo, shapeModeCombo, fontCombo, textSizeSpinBox,
+         tools](const int id) {
             const auto selectedTool = static_cast<DrawTool>(id);
             canvas_->setDrawTool(selectedTool);
             for (const auto& [label, tool] : tools) {
@@ -574,6 +585,14 @@ void MainWindow::createToolBars()
             const QSignalBlocker blocker(thicknessSpinBox);
             thicknessSpinBox->setEnabled(supportsThickness);
             thicknessSpinBox->setValue(canvas_->toolThickness(selectedTool));
+            const bool supportsBrushShape = selectedTool == DrawTool::Pencil ||
+                                            selectedTool == DrawTool::Eraser;
+            brushShapeCombo->setEnabled(supportsBrushShape);
+            if (supportsBrushShape) {
+                const QSignalBlocker brushShapeBlocker(brushShapeCombo);
+                brushShapeCombo->setCurrentIndex(brushShapeCombo->findData(
+                    static_cast<int>(canvas_->brushShape(selectedTool))));
+            }
             const bool supportsCorners = selectedTool == DrawTool::Rectangle;
             cornerRadiusCombo->setEnabled(supportsCorners);
             if (supportsCorners) {
@@ -592,6 +611,13 @@ void MainWindow::createToolBars()
             [this, toolGroup](const int value) {
                 canvas_->setToolThickness(
                     static_cast<DrawTool>(toolGroup->checkedId()), value);
+            });
+    connect(brushShapeCombo, &QComboBox::currentIndexChanged, this,
+            [this, toolGroup, brushShapeCombo](const int index) {
+                canvas_->setBrushShape(
+                    static_cast<DrawTool>(toolGroup->checkedId()),
+                    static_cast<BrushShape>(
+                        brushShapeCombo->itemData(index).toInt()));
             });
     connect(cornerRadiusCombo, &QComboBox::currentIndexChanged, this,
             [this, cornerRadiusCombo](const int index) {

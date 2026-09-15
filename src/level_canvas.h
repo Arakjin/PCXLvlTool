@@ -52,6 +52,11 @@ enum class ShapeMode {
     FillOnly,
 };
 
+enum class BrushShape {
+    Square,
+    Circle,
+};
+
 class LevelCanvas final : public QAbstractScrollArea {
     Q_OBJECT
 
@@ -66,6 +71,8 @@ public:
     void setDrawTool(DrawTool tool);
     void setToolThickness(DrawTool tool, int thickness);
     int toolThickness(DrawTool tool) const;
+    void setBrushShape(DrawTool tool, BrushShape shape);
+    BrushShape brushShape(DrawTool tool) const;
     void setRectangleCornerRadius(int radius);
     int rectangleCornerRadius() const;
     void setShapeMode(ShapeMode mode);
@@ -159,6 +166,7 @@ private:
                   std::uint8_t index);
     void floodFill(const QPoint& point, std::uint8_t index);
     void paintShapePreview(QPainter& painter) const;
+    void paintBrushPreview(QPainter& painter) const;
     void paintSelection(QPainter& painter) const;
     void createSelection();
     void clearSelection();
@@ -192,6 +200,8 @@ private:
     int strokeThickness_ = 1;
     int pencilThickness_ = 1;
     int eraserThickness_ = 1;
+    BrushShape pencilBrushShape_ = BrushShape::Square;
+    BrushShape eraserBrushShape_ = BrushShape::Square;
     int lineThickness_ = 1;
     int rectangleThickness_ = 1;
     int ellipseThickness_ = 1;
@@ -216,6 +226,7 @@ private:
     bool movingTextBox_ = false;
     CurveStage curveStage_ = CurveStage::None;
     QPoint lastImagePoint_;
+    QPoint hoverImagePoint_{-1, -1};
     QPoint strokeStartPoint_;
     QString strokeCommandText_;
     QPoint lastPanPoint_;

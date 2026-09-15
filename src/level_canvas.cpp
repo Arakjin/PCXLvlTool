@@ -27,6 +27,211 @@ namespace {
 
 constexpr auto kSelectionMimeType = "application/x-vwing-level-selection";
 
+template <typename Plot>
+void rasterBrush(const int centerX, const int centerY, const int thickness,
+                 const BrushShape shape, Plot plot)
+{
+    const int lower = (thickness - 1) / 2;
+    const int upper = thickness / 2;
+    const double centerOffset = thickness % 2 == 0 ? 0.5 : 0.0;
+    const double radius = thickness % 2 == 0 ? thickness / 2.0
+                                              : (thickness - 1) / 2.0;
+    for (int y = centerY - lower; y <= centerY + upper; ++y) {
+        for (int x = centerX - lower; x <= centerX + upper; ++x) {
+            if (x < 0 || y < 0 || x >= static_cast<int>(Level::Width) ||
+                y >= static_cast<int>(Level::Height)) {
+                continue;
+            }
+            if (shape == BrushShape::Circle) {
+                const double deltaX = x - (centerX + centerOffset);
+                const double deltaY = y - (centerY + centerOffset);
+                if (deltaX * deltaX + deltaY * deltaY > radius * radius) {
+                    continue;
+                }
+            }
+            plot(x, y);
+        }
+    }
+}
+
+template <typename Plot>
+void rasterLine(QPoint from, const QPoint& to, const int thickness,
+                const BrushShape brushShape, Plot plot)
+{
+    const int dx = std::abs(to.x() - from.x());
+    const int sx = from.x() < to.x() ? 1 : -1;
+    const int dy = -std::abs(to.y() - from.y());
+    const int sy = from.y() < to.y() ? 1 : -1;
+    int error = dx + dy;
+    while (true) {
+        rasterBrush(from.x(), from.y(), thickness, brushShape, plot);
+        if (from == to) {
+            break;
+        }
+        const int twiceError = 2 * error;
+        if (twiceError >= dy) {
+            error += dy;
+            from.rx() += sx;
+        }
+        if (twiceError <= dx) {
+            error += dx;
+            from.ry() += sy;
+        }
+    }
+}
+
+template <typename Plot>
+void rasterBezier(const QPoint& start, const QPoint& control1,
+                  const QPoint& control2, const QPoint& end,
+                  const int thickness, Plot plot)
+{
+    const auto distance = [](const QPoint& first, const QPoint& second) {
+        const double x = second.x() - first.x();
+        const double y = second.y() - first.y();
+        return std::sqrt(x * x + y * y);
+    };
+    const double controlLength = distance(start, control1) +
+                                 distance(control1, control2) +
+                                 distance(control2, end);
+    const int steps =
+        std::clamp(static_cast<int>(std::ceil(controlLength * 2)), 1, 4096);
+    QPoint previous = start;
+    for (int step = 1; step <= steps; ++step) {
+        const double t = static_cast<double>(step) / steps;
+        const double inverse = 1.0 - t;
+        const double startWeight = inverse * inverse * inverse;
+        const double control1Weight = 3.0 * inverse * inverse * t;
+        const double control2Weight = 3.0 * inverse * t * t;
+        const double endWeight = t * t * t;
+        const QPoint current{
+            static_cast<int>(std::round(
+                startWeight * start.x() + control1Weight * control1.x() +
+                control2Weight * control2.x() + endWeight * end.x())),
+            static_cast<int>(std::round(
+                startWeight * start.y() + control1Weight * control1.y() +
+                control2Weight * control2.y() + endWeight * end.y())),
+        };
+        if (current != previous) {
+            rasterLine(previous, current, thickness, BrushShape::Square, plot);
+            previous = current;
+        }
+    }
+    if (previous != end) {
+        rasterLine(previous, end, thickness, BrushShape::Square, plot);
+    }
+}
+
+template <typename Plot>
+void rasterRectangle(const QPoint& from, const QPoint& to,
+                     const std::uint8_t outlineIndex,
+                     const std::uint8_t fillIndex, const int thickness,
+                     const int cornerRadius, const ShapeMode mode, Plot plot)
+{
+    const int left = std::min(from.x(), to.x());
+    const int right = std::max(from.x(), to.x());
+    const int top = std::min(from.y(), to.y());
+    const int bottom = std::max(from.y(), to.y());
+    const int radius = std::min(
+        cornerRadius, std::min(right - left + 1, bottom - top + 1) / 2);
+    const auto insideRounded = [](const int x, const int y, const int areaLeft,
+                                  const int areaTop, const int areaRight,
+                                  const int areaBottom, const int areaRadius) {
+        if (x < areaLeft || x > areaRight || y < areaTop || y > areaBottom) {
+            return false;
+        }
+        if (areaRadius <= 0) {
+            return true;
+        }
+        const double pixelX = x + 0.5;
+        const double pixelY = y + 0.5;
+        const double nearestX =
+            std::clamp(pixelX, areaLeft + static_cast<double>(areaRadius),
+                       areaRight + 1.0 - areaRadius);
+        const double nearestY =
+            std::clamp(pixelY, areaTop + static_cast<double>(areaRadius),
+                       areaBottom + 1.0 - areaRadius);
+        const double deltaX = pixelX - nearestX;
+        const double deltaY = pixelY - nearestY;
+        return deltaX * deltaX + deltaY * deltaY <= areaRadius * areaRadius;
+    };
+    const int innerLeft = left + thickness;
+    const int innerRight = right - thickness;
+    const int innerTop = top + thickness;
+    const int innerBottom = bottom - thickness;
+    const int innerRadius = std::max(0, radius - thickness);
+    const bool hasInterior = innerLeft <= innerRight && innerTop <= innerBottom;
+    for (int y = top; y <= bottom; ++y) {
+        for (int x = left; x <= right; ++x) {
+            const bool inside =
+                insideRounded(x, y, left, top, right, bottom, radius);
+            const bool insideInterior =
+                hasInterior &&
+                insideRounded(x, y, innerLeft, innerTop, innerRight,
+                              innerBottom, innerRadius);
+            if (!inside) {
+                continue;
+            }
+            if (mode == ShapeMode::FillOnly) {
+                plot(x, y, fillIndex);
+            } else if (!insideInterior) {
+                plot(x, y, outlineIndex);
+            } else if (mode == ShapeMode::OutlineAndFill) {
+                plot(x, y, fillIndex);
+            }
+        }
+    }
+}
+
+template <typename Plot>
+void rasterEllipse(const QPoint& from, const QPoint& to,
+                   const std::uint8_t outlineIndex,
+                   const std::uint8_t fillIndex, const int thickness,
+                   const ShapeMode mode, Plot plot)
+{
+    const int left = std::min(from.x(), to.x());
+    const int right = std::max(from.x(), to.x());
+    const int top = std::min(from.y(), to.y());
+    const int bottom = std::max(from.y(), to.y());
+    const int width = right - left + 1;
+    const int height = bottom - top + 1;
+    if (width == 1 || height == 1) {
+        rasterLine({left, top}, {right, bottom}, thickness, BrushShape::Square,
+                   [&](const int x, const int y) {
+                       plot(x, y, mode == ShapeMode::FillOnly ? fillIndex
+                                                              : outlineIndex);
+                   });
+        return;
+    }
+    const double radiusX = width / 2.0;
+    const double radiusY = height / 2.0;
+    const double centerX = left + radiusX;
+    const double centerY = top + radiusY;
+    const double innerRadiusX = radiusX - thickness;
+    const double innerRadiusY = radiusY - thickness;
+    for (int y = top; y <= bottom; ++y) {
+        for (int x = left; x <= right; ++x) {
+            const double normalizedX = (x + 0.5 - centerX) / radiusX;
+            const double normalizedY = (y + 0.5 - centerY) / radiusY;
+            if (normalizedX * normalizedX + normalizedY * normalizedY > 1.0) {
+                continue;
+            }
+            bool insideInterior = false;
+            if (innerRadiusX > 0.0 && innerRadiusY > 0.0) {
+                const double innerX = (x + 0.5 - centerX) / innerRadiusX;
+                const double innerY = (y + 0.5 - centerY) / innerRadiusY;
+                insideInterior = innerX * innerX + innerY * innerY <= 1.0;
+            }
+            if (mode == ShapeMode::FillOnly) {
+                plot(x, y, fillIndex);
+            } else if (!insideInterior) {
+                plot(x, y, outlineIndex);
+            } else if (mode == ShapeMode::OutlineAndFill) {
+                plot(x, y, fillIndex);
+            }
+        }
+    }
+}
+
 class PixelEditCommand final : public QUndoCommand {
 public:
     PixelEditCommand(Level* level, std::vector<PixelChange> changes,
@@ -165,6 +370,7 @@ void LevelCanvas::setSelectedIndex(const std::uint8_t index)
         return;
     }
     selectedIndex_ = index;
+    viewport()->update();
     emit selectedIndexChanged(index);
 }
 
@@ -190,6 +396,7 @@ void LevelCanvas::setDrawTool(const DrawTool tool)
     }
     drawTool_ = tool;
     updateToolCursor();
+    viewport()->update();
 }
 
 void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
@@ -212,6 +419,7 @@ void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
     } else if (tool == DrawTool::Polygon) {
         polygonThickness_ = value;
     }
+    viewport()->update();
 }
 
 int LevelCanvas::toolThickness(const DrawTool tool) const
@@ -241,6 +449,29 @@ int LevelCanvas::toolThickness(const DrawTool tool) const
         return polygonThickness_;
     }
     return 1;
+}
+
+void LevelCanvas::setBrushShape(const DrawTool tool, const BrushShape shape)
+{
+    if (tool == DrawTool::Pencil) {
+        pencilBrushShape_ = shape;
+    } else if (tool == DrawTool::Eraser) {
+        eraserBrushShape_ = shape;
+    } else {
+        return;
+    }
+    viewport()->update();
+}
+
+BrushShape LevelCanvas::brushShape(const DrawTool tool) const
+{
+    if (tool == DrawTool::Pencil) {
+        return pencilBrushShape_;
+    }
+    if (tool == DrawTool::Eraser) {
+        return eraserBrushShape_;
+    }
+    return BrushShape::Square;
 }
 
 void LevelCanvas::setRectangleCornerRadius(const int radius)
@@ -734,6 +965,7 @@ void LevelCanvas::paintEvent(QPaintEvent*)
                       image);
     paintShapePreview(painter);
     paintSelection(painter);
+    paintBrushPreview(painter);
 }
 
 void LevelCanvas::resizeEvent(QResizeEvent* event)
@@ -758,6 +990,7 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
         setFocus(Qt::MouseFocusReason);
         const QPoint point = imagePoint(event->position());
         if (point.x() >= 0) {
+            hoverImagePoint_ = point;
             if (drawTool_ == DrawTool::Polygon) {
                 if (!polygonActive_) {
                     strokeButton_ = event->button();
@@ -936,6 +1169,7 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
 
     const QPoint point = imagePoint(event->position());
     if (point.x() >= 0) {
+        hoverImagePoint_ = point;
         reportPosition(point);
         if (movingTextBox_ && (event->buttons() & strokeButton_)) {
             setTextBoxPosition(textMoveStart_ + (point - textMoveAnchor_));
@@ -997,8 +1231,12 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
                                   ? constrainedShapePoint(point)
                                   : point;
             viewport()->update();
+        } else {
+            viewport()->update();
         }
     } else {
+        hoverImagePoint_ = {-1, -1};
+        viewport()->update();
         emit cursorLeftCanvas();
     }
 }
@@ -1031,6 +1269,7 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         if (wasDrawing) {
             const QPoint releasePoint = imagePoint(event->position());
             if (releasePoint.x() >= 0) {
+                hoverImagePoint_ = releasePoint;
                 lastImagePoint_ = event->modifiers() & Qt::ShiftModifier
                                       ? constrainedShapePoint(releasePoint)
                                       : releasePoint;
@@ -1218,6 +1457,8 @@ void LevelCanvas::keyPressEvent(QKeyEvent* event)
 
 void LevelCanvas::leaveEvent(QEvent* event)
 {
+    hoverImagePoint_ = {-1, -1};
+    viewport()->update();
     emit cursorLeftCanvas();
     QAbstractScrollArea::leaveEvent(event);
 }
@@ -1307,18 +1548,11 @@ void LevelCanvas::recompositePixel(const std::size_t offset)
 bool LevelCanvas::setBrushPixel(const int x, const int y,
                                 const std::uint8_t index, const int thickness)
 {
-    const int lower = (thickness - 1) / 2;
-    const int upper = thickness / 2;
     bool changed = false;
-    for (int brushY = y - lower; brushY <= y + upper; ++brushY) {
-        for (int brushX = x - lower; brushX <= x + upper; ++brushX) {
-            if (brushX >= 0 && brushY >= 0 &&
-                brushX < static_cast<int>(Level::Width) &&
-                brushY < static_cast<int>(Level::Height)) {
-                changed |= setPixel(brushX, brushY, index);
-            }
-        }
-    }
+    rasterBrush(x, y, thickness, brushShape(strokeTool_),
+                [&](const int brushX, const int brushY) {
+                    changed |= setPixel(brushX, brushY, index);
+                });
     return changed;
 }
 
@@ -1415,33 +1649,11 @@ void LevelCanvas::sprayAt(const QPoint& point, const std::uint8_t index,
 void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
                            const std::uint8_t index, const int thickness)
 {
-    int x0 = from.x();
-    int y0 = from.y();
-    const int x1 = to.x();
-    const int y1 = to.y();
-    const int dx = std::abs(x1 - x0);
-    const int sx = x0 < x1 ? 1 : -1;
-    const int dy = -std::abs(y1 - y0);
-    const int sy = y0 < y1 ? 1 : -1;
-    int error = dx + dy;
     bool changed = false;
-
-    while (true) {
-        changed |= setBrushPixel(x0, y0, index, thickness);
-        if (x0 == x1 && y0 == y1) {
-            break;
-        }
-        const int twiceError = 2 * error;
-        if (twiceError >= dy) {
-            error += dy;
-            x0 += sx;
-        }
-        if (twiceError <= dx) {
-            error += dx;
-            y0 += sy;
-        }
-    }
-
+    rasterLine(from, to, thickness, brushShape(strokeTool_),
+               [&](const int x, const int y) {
+                   changed |= setPixel(x, y, index);
+               });
     if (changed) {
         viewport()->update();
     }
@@ -1451,39 +1663,13 @@ void LevelCanvas::drawBezier(const QPoint& start, const QPoint& control1,
                              const QPoint& control2, const QPoint& end,
                              const std::uint8_t index, const int thickness)
 {
-    const auto distance = [](const QPoint& first, const QPoint& second) {
-        const double x = second.x() - first.x();
-        const double y = second.y() - first.y();
-        return std::sqrt(x * x + y * y);
-    };
-    const double controlLength = distance(start, control1) +
-                                 distance(control1, control2) +
-                                 distance(control2, end);
-    const int steps =
-        std::clamp(static_cast<int>(std::ceil(controlLength * 2)), 1, 4096);
-    QPoint previous = start;
-    for (int step = 1; step <= steps; ++step) {
-        const double t = static_cast<double>(step) / steps;
-        const double inverse = 1.0 - t;
-        const double startWeight = inverse * inverse * inverse;
-        const double control1Weight = 3.0 * inverse * inverse * t;
-        const double control2Weight = 3.0 * inverse * t * t;
-        const double endWeight = t * t * t;
-        const QPoint current{
-            static_cast<int>(std::round(
-                startWeight * start.x() + control1Weight * control1.x() +
-                control2Weight * control2.x() + endWeight * end.x())),
-            static_cast<int>(std::round(
-                startWeight * start.y() + control1Weight * control1.y() +
-                control2Weight * control2.y() + endWeight * end.y())),
-        };
-        if (current != previous) {
-            drawLine(previous, current, index, thickness);
-            previous = current;
-        }
-    }
-    if (previous != end) {
-        drawLine(previous, end, index, thickness);
+    bool changed = false;
+    rasterBezier(start, control1, control2, end, thickness,
+                 [&](const int x, const int y) {
+                     changed |= setPixel(x, y, index);
+                 });
+    if (changed) {
+        viewport()->update();
     }
 }
 
@@ -1493,62 +1679,12 @@ void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
                                 const int thickness, const int cornerRadius,
                                 const ShapeMode mode)
 {
-    const int left = std::min(from.x(), to.x());
-    const int right = std::max(from.x(), to.x());
-    const int top = std::min(from.y(), to.y());
-    const int bottom = std::max(from.y(), to.y());
-    const int radius = std::min(
-        cornerRadius, std::min(right - left + 1, bottom - top + 1) / 2);
-    const auto insideRounded = [](const int x, const int y, const int areaLeft,
-                                  const int areaTop, const int areaRight,
-                                  const int areaBottom, const int areaRadius) {
-        if (x < areaLeft || x > areaRight || y < areaTop || y > areaBottom) {
-            return false;
-        }
-        if (areaRadius <= 0) {
-            return true;
-        }
-        const double pixelX = x + 0.5;
-        const double pixelY = y + 0.5;
-        const double nearestX =
-            std::clamp(pixelX, areaLeft + static_cast<double>(areaRadius),
-                       areaRight + 1.0 - areaRadius);
-        const double nearestY =
-            std::clamp(pixelY, areaTop + static_cast<double>(areaRadius),
-                       areaBottom + 1.0 - areaRadius);
-        const double deltaX = pixelX - nearestX;
-        const double deltaY = pixelY - nearestY;
-        return deltaX * deltaX + deltaY * deltaY <= areaRadius * areaRadius;
-    };
-
-    const int innerLeft = left + thickness;
-    const int innerRight = right - thickness;
-    const int innerTop = top + thickness;
-    const int innerBottom = bottom - thickness;
-    const int innerRadius = std::max(0, radius - thickness);
-    const bool hasInterior = innerLeft <= innerRight && innerTop <= innerBottom;
     bool changed = false;
-
-    for (int y = top; y <= bottom; ++y) {
-        for (int x = left; x <= right; ++x) {
-            const bool inside =
-                insideRounded(x, y, left, top, right, bottom, radius);
-            const bool insideInterior =
-                hasInterior &&
-                insideRounded(x, y, innerLeft, innerTop, innerRight,
-                              innerBottom, innerRadius);
-            if (!inside) {
-                continue;
-            }
-            if (mode == ShapeMode::FillOnly) {
-                changed |= setPixel(x, y, fillIndex);
-            } else if (!insideInterior) {
-                changed |= setPixel(x, y, outlineIndex);
-            } else if (mode == ShapeMode::OutlineAndFill) {
-                changed |= setPixel(x, y, fillIndex);
-            }
-        }
-    }
+    rasterRectangle(from, to, outlineIndex, fillIndex, thickness, cornerRadius,
+                    mode, [&](const int x, const int y,
+                              const std::uint8_t index) {
+                        changed |= setPixel(x, y, index);
+                    });
     if (changed) {
         viewport()->update();
     }
@@ -1559,55 +1695,12 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
                               const std::uint8_t fillIndex,
                               const int thickness, const ShapeMode mode)
 {
-    const int left = std::min(from.x(), to.x());
-    const int right = std::max(from.x(), to.x());
-    const int top = std::min(from.y(), to.y());
-    const int bottom = std::max(from.y(), to.y());
-    const int width = right - left + 1;
-    const int height = bottom - top + 1;
-
-    if (width == 1 || height == 1) {
-        drawLine({left, top}, {right, bottom},
-                 mode == ShapeMode::FillOnly ? fillIndex : outlineIndex,
-                 thickness);
-        return;
-    }
-
-    const double radiusX = width / 2.0;
-    const double radiusY = height / 2.0;
-    const double centerX = left + radiusX;
-    const double centerY = top + radiusY;
-    const auto inside = [=](const int x, const int y) {
-        const double normalizedX = (x + 0.5 - centerX) / radiusX;
-        const double normalizedY = (y + 0.5 - centerY) / radiusY;
-        return normalizedX * normalizedX + normalizedY * normalizedY <= 1.0;
-    };
-    const double innerRadiusX = radiusX - thickness;
-    const double innerRadiusY = radiusY - thickness;
-    const auto insideInterior = [=](const int x, const int y) {
-        if (innerRadiusX <= 0.0 || innerRadiusY <= 0.0) {
-            return false;
-        }
-        const double normalizedX = (x + 0.5 - centerX) / innerRadiusX;
-        const double normalizedY = (y + 0.5 - centerY) / innerRadiusY;
-        return normalizedX * normalizedX + normalizedY * normalizedY <= 1.0;
-    };
-
     bool changed = false;
-    for (int y = top; y <= bottom; ++y) {
-        for (int x = left; x <= right; ++x) {
-            if (!inside(x, y)) {
-                continue;
-            }
-            if (mode == ShapeMode::FillOnly) {
-                changed |= setPixel(x, y, fillIndex);
-            } else if (!insideInterior(x, y)) {
-                changed |= setPixel(x, y, outlineIndex);
-            } else if (mode == ShapeMode::OutlineAndFill) {
-                changed |= setPixel(x, y, fillIndex);
-            }
-        }
-    }
+    rasterEllipse(from, to, outlineIndex, fillIndex, thickness, mode,
+                  [&](const int x, const int y,
+                      const std::uint8_t index) {
+                      changed |= setPixel(x, y, index);
+                  });
     if (changed) {
         viewport()->update();
     }
@@ -1699,25 +1792,88 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     if (level_ == nullptr) {
         return;
     }
+    const auto paintRasterPreview =
+        [this, &painter](const auto& rasterize) {
+            QImage preview(static_cast<int>(Level::Width),
+                           static_cast<int>(Level::Height),
+                           QImage::Format_ARGB32_Premultiplied);
+            preview.fill(Qt::transparent);
+            std::vector<std::uint8_t> mask(Level::Width * Level::Height, 0);
+            std::vector<QPoint> pixels;
+            rasterize([this, &preview, &mask, &pixels](
+                          const int x, const int y,
+                          const std::uint8_t index) {
+                if (selectionActive_ && !selectionContains(x, y)) {
+                    return;
+                }
+                const RGB& rgb = level_->palette[index];
+                preview.setPixelColor(x, y,
+                                      QColor(rgb.r, rgb.g, rgb.b, 180));
+                const std::size_t offset =
+                    static_cast<std::size_t>(y) * Level::Width + x;
+                if (mask[offset] == 0) {
+                    mask[offset] = 1;
+                    pixels.emplace_back(x, y);
+                }
+            });
+            painter.save();
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+            painter.drawImage(
+                QRectF(0, 0, Level::Width * zoom_, Level::Height * zoom_),
+                preview);
+            const auto occupied = [&mask](const int x, const int y) {
+                return x >= 0 && y >= 0 &&
+                       x < static_cast<int>(Level::Width) &&
+                       y < static_cast<int>(Level::Height) &&
+                       mask[static_cast<std::size_t>(y) * Level::Width + x] !=
+                           0;
+            };
+            QPainterPath edge;
+            for (const QPoint& pixel : pixels) {
+                const qreal left = pixel.x() * zoom_;
+                const qreal top = pixel.y() * zoom_;
+                const qreal right = left + zoom_;
+                const qreal bottom = top + zoom_;
+                if (!occupied(pixel.x(), pixel.y() - 1)) {
+                    edge.moveTo(left, top);
+                    edge.lineTo(right, top);
+                }
+                if (!occupied(pixel.x() + 1, pixel.y())) {
+                    edge.moveTo(right, top);
+                    edge.lineTo(right, bottom);
+                }
+                if (!occupied(pixel.x(), pixel.y() + 1)) {
+                    edge.moveTo(left, bottom);
+                    edge.lineTo(right, bottom);
+                }
+                if (!occupied(pixel.x() - 1, pixel.y())) {
+                    edge.moveTo(left, top);
+                    edge.lineTo(left, bottom);
+                }
+            }
+            QColor edgeColor = palette().color(QPalette::BrightText);
+            edgeColor.setAlpha(210);
+            QPen edgePen(edgeColor, 1);
+            edgePen.setCosmetic(true);
+            painter.setPen(edgePen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(edge);
+            painter.restore();
+        };
     if (curveStage_ != CurveStage::None) {
-        const RGB& rgb = level_->palette[strokePaintIndex_];
-        const QColor color(rgb.r, rgb.g, rgb.b);
+        paintRasterPreview([this](const auto& plot) {
+            rasterBezier(curveStartPoint_, curveControl1_, curveControl2_,
+                         curveEndPoint_, strokeThickness_,
+                         [&](const int x, const int y) {
+                             plot(x, y, strokePaintIndex_);
+                         });
+        });
         const auto canvasPoint = [this](const QPoint& point) {
             return QPointF((point.x() + 0.5) * zoom_,
                            (point.y() + 0.5) * zoom_);
         };
-        QPainterPath curve;
-        curve.moveTo(canvasPoint(curveStartPoint_));
-        curve.cubicTo(canvasPoint(curveControl1_), canvasPoint(curveControl2_),
-                      canvasPoint(curveEndPoint_));
-
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.setPen(
-            QPen(color, std::max<qreal>(1.0, zoom_ * strokeThickness_)));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawPath(curve);
-
         QPen guidePen(palette().color(QPalette::BrightText), 1, Qt::DashLine);
         guidePen.setCosmetic(true);
         painter.setPen(guidePen);
@@ -1806,10 +1962,6 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         return;
     }
 
-    const RGB& outlineRgb = level_->palette[strokePaintIndex_];
-    const RGB& fillRgb = level_->palette[strokeFillIndex_];
-    const QColor outlineColor(outlineRgb.r, outlineRgb.g, outlineRgb.b);
-    const QColor fillColor(fillRgb.r, fillRgb.g, fillRgb.b);
     const qreal left =
         std::min(strokeStartPoint_.x(), lastImagePoint_.x()) * zoom_;
     const qreal top =
@@ -1845,50 +1997,61 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         return;
     }
 
-    const int previewThickness = strokeThickness_;
-    const qreal strokeWidth = std::max<qreal>(1.0, zoom_ * previewThickness);
-    const qreal cornerRadius = strokeCornerRadius_ * zoom_;
+    if (strokeTool_ == DrawTool::Line) {
+        paintRasterPreview([this](const auto& plot) {
+            rasterLine(strokeStartPoint_, lastImagePoint_, strokeThickness_,
+                       BrushShape::Square,
+                       [&](const int x, const int y) {
+                           plot(x, y, strokePaintIndex_);
+                       });
+        });
+    } else if (strokeTool_ == DrawTool::Rectangle) {
+        paintRasterPreview([this](const auto& plot) {
+            rasterRectangle(strokeStartPoint_, lastImagePoint_,
+                            strokePaintIndex_, strokeFillIndex_,
+                            strokeThickness_, strokeCornerRadius_,
+                            strokeShapeMode_, plot);
+        });
+    } else if (strokeTool_ == DrawTool::Ellipse) {
+        paintRasterPreview([this](const auto& plot) {
+            rasterEllipse(strokeStartPoint_, lastImagePoint_,
+                          strokePaintIndex_, strokeFillIndex_,
+                          strokeThickness_, strokeShapeMode_, plot);
+        });
+    }
+}
+
+void LevelCanvas::paintBrushPreview(QPainter& painter) const
+{
+    if (level_ == nullptr || hoverImagePoint_.x() < 0 || panning_ ||
+        (drawTool_ != DrawTool::Pencil && drawTool_ != DrawTool::Eraser)) {
+        return;
+    }
+
+    const int thickness = toolThickness(drawTool_);
+    const BrushShape shape = brushShape(drawTool_);
+    const std::uint8_t index =
+        drawing_ ? strokePaintIndex_ : selectedIndex_;
+    const RGB& rgb = level_->palette[index];
+    QColor fillColor = drawTool_ == DrawTool::Eraser
+                           ? QColor(255, 255, 255, 75)
+                           : QColor(rgb.r, rgb.g, rgb.b, 105);
+    QColor edgeColor = drawTool_ == DrawTool::Eraser
+                           ? QColor(255, 80, 80, 220)
+                           : palette().color(QPalette::BrightText);
+    edgeColor.setAlpha(210);
 
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, false);
-    painter.setPen(QPen(outlineColor, strokeWidth));
-    painter.setBrush(Qt::NoBrush);
-
-    if (strokeTool_ == DrawTool::Line) {
-        painter.drawLine(QPointF((strokeStartPoint_.x() + 0.5) * zoom_,
-                                 (strokeStartPoint_.y() + 0.5) * zoom_),
-                         QPointF((lastImagePoint_.x() + 0.5) * zoom_,
-                                 (lastImagePoint_.y() + 0.5) * zoom_));
-    } else if (strokeTool_ == DrawTool::Rectangle) {
-        painter.setPen(strokeShapeMode_ == ShapeMode::FillOnly
-                           ? Qt::NoPen
-                           : QPen(outlineColor, strokeWidth));
-        painter.setBrush(strokeShapeMode_ == ShapeMode::Outline ? Qt::NoBrush
-                                                                : fillColor);
-        painter.drawRoundedRect(bounds, cornerRadius, cornerRadius);
-    } else if (strokeTool_ == DrawTool::Ellipse) {
-        painter.setPen(strokeShapeMode_ == ShapeMode::FillOnly
-                           ? Qt::NoPen
-                           : QPen(outlineColor, strokeWidth));
-        painter.setBrush(strokeShapeMode_ == ShapeMode::Outline ? Qt::NoBrush
-                                                                : fillColor);
-        painter.drawEllipse(bounds);
-    }
-
-    QPen guidePen(palette().color(QPalette::BrightText), 1, Qt::DashLine);
-    guidePen.setCosmetic(true);
-    painter.setPen(guidePen);
-    painter.setBrush(Qt::NoBrush);
-    if (strokeTool_ == DrawTool::Line) {
-        painter.drawLine(QPointF((strokeStartPoint_.x() + 0.5) * zoom_,
-                                 (strokeStartPoint_.y() + 0.5) * zoom_),
-                         QPointF((lastImagePoint_.x() + 0.5) * zoom_,
-                                 (lastImagePoint_.y() + 0.5) * zoom_));
-    } else if (strokeTool_ == DrawTool::Ellipse) {
-        painter.drawEllipse(bounds);
-    } else {
-        painter.drawRoundedRect(bounds, cornerRadius, cornerRadius);
-    }
+    QPen pixelPen(edgeColor, 1);
+    pixelPen.setCosmetic(true);
+    painter.setPen(pixelPen);
+    painter.setBrush(fillColor);
+    rasterBrush(hoverImagePoint_.x(), hoverImagePoint_.y(), thickness, shape,
+                [this, &painter](const int x, const int y) {
+                    painter.drawRect(QRectF(x * zoom_, y * zoom_, zoom_,
+                                            zoom_));
+                });
     painter.restore();
 }
 

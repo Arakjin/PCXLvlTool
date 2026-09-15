@@ -46,9 +46,12 @@ The current milestone supports:
   selection tools, plus a separate horizontal options bar
 - independently remembered 1-32 pixel thickness for pencil, eraser, line,
   rectangle, ellipse, polygon, spray, and Bezier curve
+- independently remembered square or circular tips for pencil and eraser, with
+  a translucent pixel-exact footprint preview under the pointer
 - sparse spray dragging with distance-based spacing, while a single click keeps
   the full spray dab
-- live, non-destructive previews while dragging line and shape tools
+- pixel-exact, non-destructive previews while dragging line, Bezier, rectangle,
+  and ellipse tools; previews use the same rasterizers as the committed result
 - `Shift` constrains lines to the nearest horizontal, vertical, or 45-degree
   direction; for Bezier curves it constrains only the initial baseline
 - Paint-style Bezier workflow: drag a baseline and then its two bend points;

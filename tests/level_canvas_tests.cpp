@@ -457,6 +457,21 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
+    canvas.setSelectedIndex(58);
+    canvas.setDrawTool(DrawTool::Pencil);
+    canvas.setToolThickness(DrawTool::Pencil, 3);
+    canvas.setBrushShape(DrawTool::Pencil, BrushShape::Circle);
+    drag(viewport, {85.5, 85.5}, {88.5, 85.5});
+    ok &= expect(level.pixels[offset(84, 84)] == 0 &&
+                     level.pixels[offset(85, 84)] == 58 &&
+                     level.pixels[offset(89, 85)] == 58 &&
+                     level.pixels[offset(89, 86)] == 0,
+                 "round pencil strokes should use a circular pixel footprint");
+    canvas.setBrushShape(DrawTool::Pencil, BrushShape::Square);
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Line);
     canvas.setSelectedIndex(59);
     canvas.setToolThickness(DrawTool::Line, 3);
@@ -546,6 +561,28 @@ int main(int argc, char *argv[])
     ok &= expect(level.pixels[offset(99, 99)] == 0 &&
                      level.pixels[offset(102, 102)] == 0,
                  "eraser should use its independently configured thickness");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 99; y <= 102; ++y) {
+        for (int x = 99; x <= 102; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Eraser);
+    canvas.setToolThickness(DrawTool::Eraser, 4);
+    canvas.setBrushShape(DrawTool::Eraser, BrushShape::Circle);
+    click(viewport, {100.5, 100.5});
+    ok &= expect(level.pixels[offset(99, 99)] == 77 &&
+                     level.pixels[offset(100, 99)] == 0 &&
+                     level.pixels[offset(102, 100)] == 0 &&
+                     level.pixels[offset(102, 102)] == 77,
+                 "round eraser tip should omit the square footprint corners");
+    ok &= expect(canvas.brushShape(DrawTool::Eraser) == BrushShape::Circle &&
+                     canvas.brushShape(DrawTool::Pencil) ==
+                         BrushShape::Square,
+                 "pencil and eraser should remember tip shapes independently");
 
     canvas.setLevel(nullptr);
     clearLevel(level);
