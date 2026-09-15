@@ -1,4 +1,4 @@
-# V-Wing Level Editor – toteutussuunnitelma
+# PCX Level Tool – toteutussuunnitelma (V-Wing-tuki)
 
 ## Tavoite
 
@@ -754,7 +754,7 @@ Qt:n pitää hoitaa alustariippuvaiset GUI-asiat.
 Tavoite:
 
 ```text
-VWingLevelEditor.exe
+PCXLvlTool.exe
 ```
 
 Käyttäjän ei pidä asentaa:
@@ -772,13 +772,13 @@ julkaisuversion käyttämiseksi.
 Tee Release-paketti esimerkiksi:
 
 ```text
-VWingLevelEditor-Windows-x64.zip
+PCXLvlTool-Windows-x64.zip
 ```
 
 jossa ovat:
 
 ```text
-VWingLevelEditor.exe
+PCXLvlTool.exe
 tarvittavat Qt DLL:t
 platforms/qwindows.dll
 LICENSE / README
@@ -1082,13 +1082,13 @@ Kun ensimmäiset oikeat `.LEV`-tiedostot ovat käytettävissä, jatka niiden ver
 Käyttäjän näkökulmasta ohjelman pitää lopulta toimia näin:
 
 ```text
-VWingLevelEditor.exe
+PCXLvlTool.exe
 ```
 
 tai Linuxissa:
 
 ```text
-VWingLevelEditor
+PCXLvlTool
 ```
 
 Sitten:

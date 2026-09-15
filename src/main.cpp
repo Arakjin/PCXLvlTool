@@ -7,8 +7,8 @@
 int main(int argc, char* argv[])
 {
     QApplication application(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("V-Wing Level Editor"));
-    QApplication::setOrganizationName(QStringLiteral("V-Wing Tools"));
+    QApplication::setApplicationName(QStringLiteral("PCX Level Tool"));
+    QApplication::setOrganizationName(QStringLiteral("PCX Level Tools"));
 
     MainWindow window;
     window.show();

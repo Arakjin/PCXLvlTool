@@ -1276,7 +1276,7 @@ void MainWindow::updateWindowTitle()
     const QString document = levelName.isEmpty()
                                  ? filename
                                  : tr("%1 [%2]").arg(filename, levelName);
-    setWindowTitle(tr("%1%2 — V-Wing Level Editor")
+    setWindowTitle(tr("%1%2 — PCX Level Tool")
                        .arg(modified_ ? QStringLiteral("*") : QString(),
                             document));
 }

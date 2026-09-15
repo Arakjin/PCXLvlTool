@@ -1,7 +1,8 @@
-# V-Wing Level Editor
+# PCX Level Tool
 
-Portable C++17 and Qt 6 tools for inspecting and editing V-Wing `.LEV` files
-and layered `.vwp` editor projects.
+Portable C++17 and Qt 6 level editor. V-Wing `.LEV` files and layered `.vwp`
+editor projects are the first supported formats, with room for additional
+games and formats in the future.
 
 ## Build
 
@@ -19,7 +20,7 @@ CMake, and the C++ standard library.
 Run:
 
 ```sh
-./build/VWingLevelEditor
+./build/PCXLvlTool
 ```
 
 The current milestone supports:

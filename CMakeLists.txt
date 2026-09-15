@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(VWingLevTools LANGUAGES CXX)
+project(PCXLvlTool LANGUAGES CXX)
 
 find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
@@ -38,7 +38,7 @@ add_executable(levroundtrip
 )
 target_link_libraries(levroundtrip PRIVATE vwing_level_format)
 
-add_executable(VWingLevelEditor WIN32
+add_executable(PCXLvlTool WIN32
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
@@ -48,17 +48,17 @@ add_executable(VWingLevelEditor WIN32
     src/palette_widget.h
     resources/icons.qrc
 )
-target_link_libraries(VWingLevelEditor PRIVATE
+target_link_libraries(PCXLvlTool PRIVATE
     vwing_level_format
     Qt6::Svg
     Qt6::Widgets
 )
-set_target_properties(VWingLevelEditor PROPERTIES
+set_target_properties(PCXLvlTool PROPERTIES
     AUTOMOC ON
     AUTORCC ON
 )
 
-foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx levroundtrip VWingLevelEditor)
+foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx levroundtrip PCXLvlTool)
     target_compile_features(${target} PRIVATE cxx_std_17)
     set_target_properties(${target} PROPERTIES
         CXX_EXTENSIONS OFF
@@ -148,7 +148,7 @@ if(BUILD_TESTING)
 
     add_test(NAME project_tests COMMAND project_tests)
 
-    add_test(NAME gui_smoke_test COMMAND VWingLevelEditor --smoke-test)
+    add_test(NAME gui_smoke_test COMMAND PCXLvlTool --smoke-test)
     set_tests_properties(gui_smoke_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
