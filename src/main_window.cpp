@@ -386,6 +386,10 @@ void MainWindow::createActions()
         canvas_->undoStack()->redo();
     });
     editMenu->addSeparator();
+    QAction* selectAllAction = editMenu->addAction(tr("Select &all"));
+    selectAllAction->setShortcut(QKeySequence::SelectAll);
+    connect(selectAllAction, &QAction::triggered, canvas_,
+            &LevelCanvas::selectAll);
     QAction* copyAction = editMenu->addAction(tr("&Copy selection"));
     copyAction->setShortcut(QKeySequence::Copy);
     connect(copyAction, &QAction::triggered, canvas_,
@@ -458,7 +462,7 @@ void MainWindow::createMaterialDock()
     auto* selectionHelp = new QLabel(
         tr("Selection: draw a mask, then use Move or another drawing tool. "
            "Enter commits, Esc cancels, Del removes, Ctrl+C/V copies and "
-           "pastes."),
+           "pastes; Ctrl+A selects all."),
         contents);
     selectionHelp->setWordWrap(true);
     layout->addWidget(selectionHelp);

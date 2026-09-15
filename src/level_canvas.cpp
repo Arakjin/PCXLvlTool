@@ -414,6 +414,24 @@ void LevelCanvas::pasteSelection()
     viewport()->update();
 }
 
+void LevelCanvas::selectAll()
+{
+    if (level_ == nullptr) {
+        return;
+    }
+    commitSelection();
+    selectionBounds_ = QRect(0, 0, static_cast<int>(Level::Width),
+                             static_cast<int>(Level::Height));
+    selectionSourcePosition_ = {0, 0};
+    selectionPosition_ = {0, 0};
+    selectionMask_.assign(Level::PixelCount, 1);
+    selectionPixels_.assign(level_->pixels.begin(), level_->pixels.end());
+    selectionHasSource_ = true;
+    selectionActive_ = true;
+    selectionEditPending_ = false;
+    viewport()->update();
+}
+
 bool LevelCanvas::hasSelection() const { return selectionActive_; }
 
 bool LevelCanvas::hasPendingSelectionEdit() const
@@ -734,6 +752,11 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
 
 void LevelCanvas::keyPressEvent(QKeyEvent* event)
 {
+    if (event->matches(QKeySequence::SelectAll)) {
+        selectAll();
+        event->accept();
+        return;
+    }
     if (event->matches(QKeySequence::Copy)) {
         copySelection();
         event->accept();

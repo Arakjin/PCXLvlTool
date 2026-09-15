@@ -119,8 +119,9 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   spacing so drag density does not depend on mouse-event frequency. Rectangular,
   elliptical, and freehand floating selections are implemented without changing
   the indexed level model. Selection movement, masked drawing, deletion, and
-  clipboard
-  round-trips are undoable when committed. Cubic Bezier curves use a baseline
+  clipboard round-trips are undoable when committed; Ctrl+A creates a
+  full-canvas indexed selection for bulk operations. Cubic Bezier curves use a
+  baseline
   followed by two interactive control-point drags and commit as one pixel edit.
   Canvas and palette interaction paths are covered by offscreen tests.
 

@@ -41,7 +41,8 @@ The current milestone supports:
 - rectangular, elliptical, and freehand selections stored as temporary indexed
   layers; selections can be moved, deleted, or edited with the drawing tools
 - lossless indexed selection copy/paste with `Ctrl+C` and `Ctrl+V`; `Enter`
-  commits a floating selection and `Esc` cancels it
+  commits a floating selection, `Esc` cancels it, and `Ctrl+A` selects the full
+  640x800 canvas
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
   documented V-Wing material information

@@ -523,6 +523,30 @@ int main(int argc, char *argv[])
                      level.pixels[offset(71, 71)] == 88,
                  "copied indexed pixels should paste without changing source");
 
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    level.pixels[offset(1, 1)] = 57;
+    level.pixels[offset(320, 400)] = 58;
+    level.pixels[offset(639, 799)] = 59;
+    canvas.setLevel(&level);
+    sendKey(&canvas, Qt::Key_A, Qt::ControlModifier);
+    ok &=
+        expect(canvas.hasSelection() && !canvas.hasPendingSelectionEdit() &&
+                   level.pixels[offset(320, 400)] == 58,
+               "Ctrl+A should create a non-destructive full-canvas selection");
+    sendKey(&canvas, Qt::Key_Delete);
+    const bool canvasEmpty =
+        std::all_of(level.pixels.begin(), level.pixels.end(),
+                    [](const std::uint8_t value) { return value == 0; });
+    ok &=
+        expect(canvasEmpty && canvas.undoStack()->count() == 1,
+               "Delete after Ctrl+A should clear the canvas in one operation");
+    canvas.undoStack()->undo();
+    ok &= expect(level.pixels[offset(1, 1)] == 57 &&
+                     level.pixels[offset(320, 400)] == 58 &&
+                     level.pixels[offset(639, 799)] == 59,
+                 "full-canvas deletion should be undoable");
+
     PaletteWidget palette;
     palette.setLevel(&level);
     palette.show();

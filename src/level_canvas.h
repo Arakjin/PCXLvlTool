@@ -65,6 +65,7 @@ public:
     void deleteSelection();
     void copySelection();
     void pasteSelection();
+    void selectAll();
     bool hasSelection() const;
     bool hasPendingSelectionEdit() const;
     QUndoStack* undoStack();
