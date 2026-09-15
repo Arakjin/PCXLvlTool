@@ -111,8 +111,10 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   JASC-PAL files can be edited, loaded, and saved; palette changes use the same
   undo history as pixel edits. Untitled levels receive an explicitly
   editor-designed starter palette. Pencil, eraser, and line thicknesses are
-  independently configurable. Canvas and palette interaction paths are covered
-  by offscreen tests.
+  independently configurable, as are rectangle and ellipse outline widths.
+  Rectangle corners have selectable radii, and Shift constrains rectangles and
+  ellipses to squares and circles. Canvas and palette interaction paths are
+  covered by offscreen tests.
 
 ## Questions to investigate
 

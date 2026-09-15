@@ -28,8 +28,11 @@ The current milestone supports:
 - panning with the middle mouse button
 - Paint-style two-column toolbox with pencil, eraser, line, rectangle, filled
   rectangle, ellipse, filled ellipse, flood-fill, and eyedropper tools
-- independently remembered 1-32 pixel thickness for pencil, eraser, and line
+- independently remembered 1-32 pixel thickness for pencil, eraser, line,
+  rectangle outline, and ellipse outline
 - live, non-destructive previews while dragging line and shape tools
+- `Shift`-constrained squares and circles, plus selectable sharp or rounded
+  rectangle corners
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
   documented V-Wing material information

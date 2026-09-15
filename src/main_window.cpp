@@ -423,9 +423,23 @@ void MainWindow::createMaterialDock()
     thicknessSpinBox->setValue(canvas_->toolThickness(DrawTool::Pencil));
     thicknessLayout->addWidget(thicknessSpinBox);
     layout->addLayout(thicknessLayout);
+
+    auto* cornerLayout = new QHBoxLayout();
+    cornerLayout->addWidget(new QLabel(tr("Corners:"), contents));
+    auto* cornerRadiusCombo = new QComboBox(contents);
+    cornerRadiusCombo->addItem(tr("Sharp"), 0);
+    cornerRadiusCombo->addItem(tr("2 px"), 2);
+    cornerRadiusCombo->addItem(tr("4 px"), 4);
+    cornerRadiusCombo->addItem(tr("8 px"), 8);
+    cornerRadiusCombo->addItem(tr("16 px"), 16);
+    cornerRadiusCombo->addItem(tr("32 px"), 32);
+    cornerRadiusCombo->setEnabled(false);
+    cornerLayout->addWidget(cornerRadiusCombo);
+    layout->addLayout(cornerLayout);
     connect(
         toolGroup, &QButtonGroup::idClicked, this,
-        [this, activeToolLabel, thicknessSpinBox, tools](const int id) {
+        [this, activeToolLabel, thicknessSpinBox, cornerRadiusCombo,
+         tools](const int id) {
             const auto selectedTool = static_cast<DrawTool>(id);
             canvas_->setDrawTool(selectedTool);
             for (const auto& [label, tool] : tools) {
@@ -434,17 +448,33 @@ void MainWindow::createMaterialDock()
                     break;
                 }
             }
-            const bool supportsThickness = selectedTool == DrawTool::Pencil ||
-                                           selectedTool == DrawTool::Eraser ||
-                                           selectedTool == DrawTool::Line;
+            const bool supportsThickness =
+                selectedTool == DrawTool::Pencil ||
+                selectedTool == DrawTool::Eraser ||
+                selectedTool == DrawTool::Line ||
+                selectedTool == DrawTool::Rectangle ||
+                selectedTool == DrawTool::Ellipse;
             const QSignalBlocker blocker(thicknessSpinBox);
             thicknessSpinBox->setEnabled(supportsThickness);
             thicknessSpinBox->setValue(canvas_->toolThickness(selectedTool));
+            const bool supportsCorners =
+                selectedTool == DrawTool::Rectangle ||
+                selectedTool == DrawTool::FilledRectangle;
+            cornerRadiusCombo->setEnabled(supportsCorners);
+            if (supportsCorners) {
+                cornerRadiusCombo->setCurrentIndex(cornerRadiusCombo->findData(
+                    canvas_->rectangleCornerRadius()));
+            }
         });
     connect(thicknessSpinBox, &QSpinBox::valueChanged, this,
             [this, toolGroup](const int value) {
                 canvas_->setToolThickness(
                     static_cast<DrawTool>(toolGroup->checkedId()), value);
+            });
+    connect(cornerRadiusCombo, &QComboBox::currentIndexChanged, this,
+            [this, cornerRadiusCombo](const int index) {
+                canvas_->setRectangleCornerRadius(
+                    cornerRadiusCombo->itemData(index).toInt());
             });
 
     layout->addSpacing(6);

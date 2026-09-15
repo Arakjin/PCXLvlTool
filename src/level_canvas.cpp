@@ -146,6 +146,10 @@ void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
         eraserThickness_ = value;
     } else if (tool == DrawTool::Line) {
         lineThickness_ = value;
+    } else if (tool == DrawTool::Rectangle) {
+        rectangleThickness_ = value;
+    } else if (tool == DrawTool::Ellipse) {
+        ellipseThickness_ = value;
     }
 }
 
@@ -160,7 +164,23 @@ int LevelCanvas::toolThickness(const DrawTool tool) const
     if (tool == DrawTool::Line) {
         return lineThickness_;
     }
+    if (tool == DrawTool::Rectangle) {
+        return rectangleThickness_;
+    }
+    if (tool == DrawTool::Ellipse) {
+        return ellipseThickness_;
+    }
     return 1;
+}
+
+void LevelCanvas::setRectangleCornerRadius(const int radius)
+{
+    rectangleCornerRadius_ = std::clamp(radius, 0, 32);
+}
+
+int LevelCanvas::rectangleCornerRadius() const
+{
+    return rectangleCornerRadius_;
 }
 
 void LevelCanvas::setPaletteColor(const std::uint8_t index, const RGB color)
@@ -258,6 +278,7 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
             strokeTool_ = drawTool_;
             strokePaintIndex_ = paintIndex();
             strokeThickness_ = toolThickness(strokeTool_);
+            strokeCornerRadius_ = rectangleCornerRadius_;
 
             if (strokeTool_ == DrawTool::Eyedropper) {
                 const std::size_t offset =
@@ -311,7 +332,9 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
                      strokeThickness_);
             lastImagePoint_ = point;
         } else if (drawing_ && (event->buttons() & Qt::LeftButton)) {
-            lastImagePoint_ = point;
+            lastImagePoint_ = event->modifiers() & Qt::ShiftModifier
+                                  ? constrainedShapePoint(point)
+                                  : point;
             viewport()->update();
         }
     } else {
@@ -333,23 +356,26 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         if (wasDrawing) {
             const QPoint releasePoint = imagePoint(event->position());
             if (releasePoint.x() >= 0) {
-                lastImagePoint_ = releasePoint;
+                lastImagePoint_ = event->modifiers() & Qt::ShiftModifier
+                                      ? constrainedShapePoint(releasePoint)
+                                      : releasePoint;
             }
             if (strokeTool_ == DrawTool::Line) {
                 drawLine(strokeStartPoint_, lastImagePoint_, strokePaintIndex_,
                          strokeThickness_);
             } else if (strokeTool_ == DrawTool::Rectangle) {
                 drawRectangle(strokeStartPoint_, lastImagePoint_,
-                              strokePaintIndex_, false);
+                              strokePaintIndex_, strokeThickness_,
+                              strokeCornerRadius_, false);
             } else if (strokeTool_ == DrawTool::FilledRectangle) {
                 drawRectangle(strokeStartPoint_, lastImagePoint_,
-                              strokePaintIndex_, true);
+                              strokePaintIndex_, 1, strokeCornerRadius_, true);
             } else if (strokeTool_ == DrawTool::Ellipse) {
                 drawEllipse(strokeStartPoint_, lastImagePoint_,
-                            strokePaintIndex_, false);
+                            strokePaintIndex_, strokeThickness_, false);
             } else if (strokeTool_ == DrawTool::FilledEllipse) {
                 drawEllipse(strokeStartPoint_, lastImagePoint_,
-                            strokePaintIndex_, true);
+                            strokePaintIndex_, 1, true);
             }
             commitStroke();
         }
@@ -457,17 +483,54 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
 }
 
 void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
-                                const std::uint8_t index, const bool filled)
+                                const std::uint8_t index, const int thickness,
+                                const int cornerRadius, const bool filled)
 {
     const int left = std::min(from.x(), to.x());
     const int right = std::max(from.x(), to.x());
     const int top = std::min(from.y(), to.y());
     const int bottom = std::max(from.y(), to.y());
+    const int radius = std::min(
+        cornerRadius, std::min(right - left + 1, bottom - top + 1) / 2);
+    const auto insideRounded = [](const int x, const int y, const int areaLeft,
+                                  const int areaTop, const int areaRight,
+                                  const int areaBottom, const int areaRadius) {
+        if (x < areaLeft || x > areaRight || y < areaTop || y > areaBottom) {
+            return false;
+        }
+        if (areaRadius <= 0) {
+            return true;
+        }
+        const double pixelX = x + 0.5;
+        const double pixelY = y + 0.5;
+        const double nearestX =
+            std::clamp(pixelX, areaLeft + static_cast<double>(areaRadius),
+                       areaRight + 1.0 - areaRadius);
+        const double nearestY =
+            std::clamp(pixelY, areaTop + static_cast<double>(areaRadius),
+                       areaBottom + 1.0 - areaRadius);
+        const double deltaX = pixelX - nearestX;
+        const double deltaY = pixelY - nearestY;
+        return deltaX * deltaX + deltaY * deltaY <= areaRadius * areaRadius;
+    };
+
+    const int innerLeft = left + thickness;
+    const int innerRight = right - thickness;
+    const int innerTop = top + thickness;
+    const int innerBottom = bottom - thickness;
+    const int innerRadius = std::max(0, radius - thickness);
+    const bool hasInterior = innerLeft <= innerRight && innerTop <= innerBottom;
     bool changed = false;
 
     for (int y = top; y <= bottom; ++y) {
         for (int x = left; x <= right; ++x) {
-            if (filled || y == top || y == bottom || x == left || x == right) {
+            const bool inside =
+                insideRounded(x, y, left, top, right, bottom, radius);
+            const bool insideInterior =
+                hasInterior &&
+                insideRounded(x, y, innerLeft, innerTop, innerRight,
+                              innerBottom, innerRadius);
+            if (inside && (filled || !insideInterior)) {
                 changed |= setPixel(x, y, index);
             }
         }
@@ -478,7 +541,8 @@ void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
 }
 
 void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
-                              const std::uint8_t index, const bool filled)
+                              const std::uint8_t index, const int thickness,
+                              const bool filled)
 {
     const int left = std::min(from.x(), to.x());
     const int right = std::max(from.x(), to.x());
@@ -488,7 +552,7 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
     const int height = bottom - top + 1;
 
     if (width == 1 || height == 1) {
-        drawLine({left, top}, {right, bottom}, index, 1);
+        drawLine({left, top}, {right, bottom}, index, thickness);
         return;
     }
 
@@ -501,6 +565,16 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
         const double normalizedY = (y + 0.5 - centerY) / radiusY;
         return normalizedX * normalizedX + normalizedY * normalizedY <= 1.0;
     };
+    const double innerRadiusX = radiusX - thickness;
+    const double innerRadiusY = radiusY - thickness;
+    const auto insideInterior = [=](const int x, const int y) {
+        if (innerRadiusX <= 0.0 || innerRadiusY <= 0.0) {
+            return false;
+        }
+        const double normalizedX = (x + 0.5 - centerX) / innerRadiusX;
+        const double normalizedY = (y + 0.5 - centerY) / innerRadiusY;
+        return normalizedX * normalizedX + normalizedY * normalizedY <= 1.0;
+    };
 
     bool changed = false;
     for (int y = top; y <= bottom; ++y) {
@@ -508,9 +582,7 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
             if (!inside(x, y)) {
                 continue;
             }
-            const bool boundary = !inside(x - 1, y) || !inside(x + 1, y) ||
-                                  !inside(x, y - 1) || !inside(x, y + 1);
-            if (filled || boundary) {
+            if (filled || !insideInterior(x, y)) {
                 changed |= setPixel(x, y, index);
             }
         }
@@ -541,9 +613,12 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     const qreal height =
         (std::abs(lastImagePoint_.y() - strokeStartPoint_.y()) + 1) * zoom_;
     const QRectF bounds(left, top, width, height);
-    const int previewThickness =
-        strokeTool_ == DrawTool::Line ? strokeThickness_ : 1;
+    const bool outlinedShape = strokeTool_ == DrawTool::Line ||
+                               strokeTool_ == DrawTool::Rectangle ||
+                               strokeTool_ == DrawTool::Ellipse;
+    const int previewThickness = outlinedShape ? strokeThickness_ : 1;
     const qreal strokeWidth = std::max<qreal>(1.0, zoom_ * previewThickness);
+    const qreal cornerRadius = strokeCornerRadius_ * zoom_;
 
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, false);
@@ -556,9 +631,10 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
                          QPointF((lastImagePoint_.x() + 0.5) * zoom_,
                                  (lastImagePoint_.y() + 0.5) * zoom_));
     } else if (strokeTool_ == DrawTool::Rectangle) {
-        painter.drawRect(bounds);
+        painter.drawRoundedRect(bounds, cornerRadius, cornerRadius);
     } else if (strokeTool_ == DrawTool::FilledRectangle) {
-        painter.fillRect(bounds, color);
+        painter.setBrush(color);
+        painter.drawRoundedRect(bounds, cornerRadius, cornerRadius);
     } else if (strokeTool_ == DrawTool::Ellipse) {
         painter.drawEllipse(bounds);
     } else if (strokeTool_ == DrawTool::FilledEllipse) {
@@ -579,7 +655,7 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
                strokeTool_ == DrawTool::FilledEllipse) {
         painter.drawEllipse(bounds);
     } else {
-        painter.drawRect(bounds);
+        painter.drawRoundedRect(bounds, cornerRadius, cornerRadius);
     }
     painter.restore();
 }
@@ -643,6 +719,32 @@ void LevelCanvas::commitStroke()
 std::uint8_t LevelCanvas::paintIndex() const
 {
     return drawTool_ == DrawTool::Eraser ? 0 : selectedIndex_;
+}
+
+QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
+{
+    const bool constrain = strokeTool_ == DrawTool::Rectangle ||
+                           strokeTool_ == DrawTool::FilledRectangle ||
+                           strokeTool_ == DrawTool::Ellipse ||
+                           strokeTool_ == DrawTool::FilledEllipse;
+    if (!constrain) {
+        return point;
+    }
+
+    const int deltaX = point.x() - strokeStartPoint_.x();
+    const int deltaY = point.y() - strokeStartPoint_.y();
+    const int directionX = deltaX < 0 ? -1 : 1;
+    const int directionY = deltaY < 0 ? -1 : 1;
+    const int availableX = directionX < 0 ? strokeStartPoint_.x()
+                                          : static_cast<int>(Level::Width) - 1 -
+                                                strokeStartPoint_.x();
+    const int availableY = directionY < 0 ? strokeStartPoint_.y()
+                                          : static_cast<int>(Level::Height) -
+                                                1 - strokeStartPoint_.y();
+    const int side = std::min(
+        {std::max(std::abs(deltaX), std::abs(deltaY)), availableX, availableY});
+    return {strokeStartPoint_.x() + directionX * side,
+            strokeStartPoint_.y() + directionY * side};
 }
 
 QString LevelCanvas::commandText() const

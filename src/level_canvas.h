@@ -47,6 +47,8 @@ public:
     void setDrawTool(DrawTool tool);
     void setToolThickness(DrawTool tool, int thickness);
     int toolThickness(DrawTool tool) const;
+    void setRectangleCornerRadius(int radius);
+    int rectangleCornerRadius() const;
     void setPaletteColor(std::uint8_t index, RGB color);
     void applyPaletteColor(std::uint8_t index, RGB color);
     void setPalette(const std::array<RGB, 256>& palette);
@@ -75,14 +77,15 @@ private:
     void drawLine(const QPoint& from, const QPoint& to, std::uint8_t index,
                   int thickness);
     void drawRectangle(const QPoint& from, const QPoint& to, std::uint8_t index,
-                       bool filled);
+                       int thickness, int cornerRadius, bool filled);
     void drawEllipse(const QPoint& from, const QPoint& to, std::uint8_t index,
-                     bool filled);
+                     int thickness, bool filled);
     void floodFill(const QPoint& point, std::uint8_t index);
     void paintShapePreview(QPainter& painter) const;
     void beginStroke(const QString& commandText);
     void commitStroke();
     std::uint8_t paintIndex() const;
+    QPoint constrainedShapePoint(const QPoint& point) const;
     QString commandText() const;
     void updateScrollBars();
     void reportPosition(const QPoint& point);
@@ -97,6 +100,10 @@ private:
     int pencilThickness_ = 1;
     int eraserThickness_ = 1;
     int lineThickness_ = 1;
+    int rectangleThickness_ = 1;
+    int ellipseThickness_ = 1;
+    int rectangleCornerRadius_ = 0;
+    int strokeCornerRadius_ = 0;
     bool drawing_ = false;
     bool panning_ = false;
     QPoint lastImagePoint_;

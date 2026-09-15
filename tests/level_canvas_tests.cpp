@@ -11,7 +11,7 @@
 
 namespace {
 
-bool expect(const bool condition, const char* message)
+bool expect(const bool condition, const char *message)
 {
     if (!condition) {
         std::cerr << "FAIL: " << message << '\n';
@@ -19,17 +19,18 @@ bool expect(const bool condition, const char* message)
     return condition;
 }
 
-void sendMouseEvent(QWidget* target, const QEvent::Type type,
+void sendMouseEvent(QWidget *target, const QEvent::Type type,
                     const QPointF position, const Qt::MouseButton button,
-                    const Qt::MouseButtons buttons)
+                    const Qt::MouseButtons buttons,
+                    const Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     const QPointF globalPosition(target->mapToGlobal(position.toPoint()));
     QMouseEvent event(type, position, position, globalPosition, button, buttons,
-                      Qt::NoModifier);
+                      modifiers);
     QApplication::sendEvent(target, &event);
 }
 
-void click(QWidget* target, const QPointF position)
+void click(QWidget *target, const QPointF position)
 {
     sendMouseEvent(target, QEvent::MouseButtonPress, position, Qt::LeftButton,
                    Qt::LeftButton);
@@ -37,13 +38,15 @@ void click(QWidget* target, const QPointF position)
                    Qt::NoButton);
 }
 
-void drag(QWidget* target, const QPointF from, const QPointF to)
+void drag(QWidget *target, const QPointF from, const QPointF to,
+          const Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     sendMouseEvent(target, QEvent::MouseButtonPress, from, Qt::LeftButton,
-                   Qt::LeftButton);
-    sendMouseEvent(target, QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton);
+                   Qt::LeftButton, modifiers);
+    sendMouseEvent(target, QEvent::MouseMove, to, Qt::NoButton, Qt::LeftButton,
+                   modifiers);
     sendMouseEvent(target, QEvent::MouseButtonRelease, to, Qt::LeftButton,
-                   Qt::NoButton);
+                   Qt::NoButton, modifiers);
 }
 
 std::size_t offset(const int x, const int y)
@@ -52,9 +55,16 @@ std::size_t offset(const int x, const int y)
            static_cast<std::size_t>(x);
 }
 
+void clearLevel(Level &level)
+{
+    level.name.clear();
+    level.pixels.fill(0);
+    level.palette.fill({});
+}
+
 } // namespace
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
 
@@ -66,7 +76,7 @@ int main(int argc, char* argv[])
     canvas.show();
     application.processEvents();
 
-    QWidget* viewport = canvas.viewport();
+    QWidget *viewport = canvas.viewport();
     drag(viewport, {1.5, 1.5}, {3.5, 1.5});
 
     bool ok = true;
@@ -99,7 +109,7 @@ int main(int argc, char* argv[])
                  "drawing the existing index should not add an undo command");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setSelectedIndex(58);
     canvas.setDrawTool(DrawTool::Line);
@@ -113,7 +123,7 @@ int main(int argc, char* argv[])
                  "line should create one undo command");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     level.palette[58] = RGB{255, 0, 0};
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Line);
@@ -132,7 +142,7 @@ int main(int argc, char* argv[])
                    Qt::LeftButton, Qt::NoButton);
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Rectangle);
     drag(viewport, {20.5, 20.5}, {22.5, 22.5});
@@ -142,7 +152,7 @@ int main(int argc, char* argv[])
                  "rectangle should draw an unfilled outline");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::FilledRectangle);
     drag(viewport, {30.5, 30.5}, {32.5, 32.5});
@@ -152,7 +162,38 @@ int main(int argc, char* argv[])
                  "filled rectangle should also draw its interior");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Rectangle);
+    canvas.setToolThickness(DrawTool::Rectangle, 2);
+    canvas.setRectangleCornerRadius(0);
+    drag(viewport, {110.5, 110.5}, {116.5, 116.5});
+    ok &= expect(level.pixels[offset(111, 113)] == 58 &&
+                     level.pixels[offset(113, 113)] == 0,
+                 "rectangle outline should use its configured thickness");
+    ok &= expect(canvas.toolThickness(DrawTool::Rectangle) == 2,
+                 "rectangle should remember its own thickness");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setToolThickness(DrawTool::Rectangle, 1);
+    canvas.setRectangleCornerRadius(3);
+    drag(viewport, {120.5, 120.5}, {128.5, 128.5});
+    ok &= expect(level.pixels[offset(120, 120)] == 0 &&
+                     level.pixels[offset(124, 120)] == 58,
+                 "rounded rectangle should trim corners but keep its edges");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setRectangleCornerRadius(0);
+    drag(viewport, {140.5, 110.5}, {146.5, 113.5}, Qt::ShiftModifier);
+    ok &= expect(level.pixels[offset(143, 116)] == 58,
+                 "Shift should constrain a rectangle to a square");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Ellipse);
     drag(viewport, {35.5, 35.5}, {41.5, 41.5});
@@ -161,7 +202,7 @@ int main(int argc, char* argv[])
                  "ellipse should draw an unfilled outline");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::FilledEllipse);
     drag(viewport, {45.5, 45.5}, {51.5, 51.5});
@@ -169,7 +210,26 @@ int main(int argc, char* argv[])
                  "filled ellipse should draw its interior");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Ellipse);
+    canvas.setToolThickness(DrawTool::Ellipse, 2);
+    drag(viewport, {180.5, 120.5}, {190.5, 130.5});
+    ok &= expect(level.pixels[offset(185, 121)] == 58 &&
+                     level.pixels[offset(185, 125)] == 0,
+                 "ellipse outline should use its configured thickness");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::FilledEllipse);
+    drag(viewport, {160.5, 110.5}, {166.5, 113.5}, Qt::ShiftModifier);
+    ok &= expect(level.pixels[offset(163, 116)] == 58 &&
+                     level.pixels[offset(166, 116)] == 0,
+                 "Shift should constrain an ellipse to a circle");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
     for (int coordinate = 60; coordinate <= 64; ++coordinate) {
         level.pixels[offset(coordinate, 60)] = 1;
         level.pixels[offset(coordinate, 64)] = 1;
@@ -191,7 +251,7 @@ int main(int argc, char* argv[])
                  "flood fill should undo as one operation");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     level.pixels[offset(40, 40)] = 123;
     canvas.setLevel(&level);
     canvas.setSelectedIndex(59);
@@ -206,7 +266,7 @@ int main(int argc, char* argv[])
                  "eyedropper should not create an undo command");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     level.pixels[offset(50, 50)] = 77;
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Eraser);
@@ -218,7 +278,7 @@ int main(int argc, char* argv[])
                  "eraser should restore the old index when undone");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     level.palette[42] = RGB{1, 2, 3};
     canvas.setLevel(&level);
     int changedPaletteIndex = -1;
@@ -246,7 +306,7 @@ int main(int argc, char* argv[])
                  "complete palette replacement should be undoable");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Pencil);
     canvas.setSelectedIndex(58);
@@ -260,7 +320,7 @@ int main(int argc, char* argv[])
                  "pencil should remember its own thickness");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::Line);
     canvas.setSelectedIndex(59);
@@ -271,7 +331,7 @@ int main(int argc, char* argv[])
                  "line should use its configured thickness");
 
     canvas.setLevel(nullptr);
-    level = Level{};
+    clearLevel(level);
     for (int y = 99; y <= 102; ++y) {
         for (int x = 99; x <= 102; ++x) {
             level.pixels[offset(x, y)] = 77;
