@@ -41,7 +41,9 @@ The current milestone supports:
   rectangle corners; rectangle, ellipse, and polygon support outline-only,
   outline-and-fill, and fill-only modes using the primary index for outlines
   and the secondary index for interiors
-- indexed text placement with editable content and 6-64 pixel size
+- movable, non-destructive indexed text boxes with direct canvas typing,
+  selectable font family, and 6-64 pixel size; `Ctrl+Enter` or clicking outside
+  accepts and `Esc` cancels
 - Paint-style polygons made by clicking corners and completed with a double
   click or `Enter`; `Esc` cancels an unfinished polygon
 - rectangular, elliptical, and freehand selections stored as temporary indexed

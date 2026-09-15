@@ -6,7 +6,6 @@
 #include <QClipboard>
 #include <QDataStream>
 #include <QEvent>
-#include <QFontMetrics>
 #include <QImage>
 #include <QKeyEvent>
 #include <QMimeData>
@@ -113,6 +112,9 @@ void LevelCanvas::setLevel(Level* level)
     curveStage_ = CurveStage::None;
     polygonActive_ = false;
     polygonPoints_.clear();
+    textDraftActive_ = false;
+    movingTextBox_ = false;
+    textDraft_.clear();
     level_ = level;
     drawing_ = false;
     undoStack_.clear();
@@ -170,6 +172,9 @@ void LevelCanvas::setDrawTool(const DrawTool tool)
     }
     if (drawTool_ == DrawTool::Polygon && tool != DrawTool::Polygon) {
         commitPolygon();
+    }
+    if (drawTool_ == DrawTool::Text && tool != DrawTool::Text) {
+        commitText();
     }
     drawTool_ = tool;
     updateToolCursor();
@@ -240,11 +245,16 @@ void LevelCanvas::setShapeMode(const ShapeMode mode) { shapeMode_ = mode; }
 
 ShapeMode LevelCanvas::shapeMode() const { return shapeMode_; }
 
-void LevelCanvas::setTextContent(const QString& text) { textContent_ = text; }
+void LevelCanvas::setTextFontFamily(const QString& family)
+{
+    textFontFamily_ = family;
+    viewport()->update();
+}
 
 void LevelCanvas::setTextPixelSize(const int size)
 {
     textPixelSize_ = std::clamp(size, 6, 64);
+    viewport()->update();
 }
 
 void LevelCanvas::setPaletteColor(const std::uint8_t index, const RGB color)
@@ -291,6 +301,9 @@ void LevelCanvas::commitSelection()
     }
     if (polygonActive_) {
         commitPolygon();
+    }
+    if (textDraftActive_) {
+        commitText();
     }
     if (!selectionActive_ || level_ == nullptr) {
         return;
@@ -474,7 +487,7 @@ bool LevelCanvas::hasSelection() const { return selectionActive_; }
 
 bool LevelCanvas::hasPendingSelectionEdit() const
 {
-    return selectionEditPending_;
+    return selectionEditPending_ || textDraftActive_;
 }
 
 QUndoStack* LevelCanvas::undoStack() { return &undoStack_; }
@@ -592,6 +605,22 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                 event->accept();
                 return;
             }
+            if (drawTool_ == DrawTool::Text) {
+                if (textDraftActive_ && textBoxBounds_.contains(point)) {
+                    movingTextBox_ = true;
+                    strokeButton_ = event->button();
+                    textMoveAnchor_ = point;
+                    textMoveStart_ = textBoxBounds_.topLeft();
+                    viewport()->setCursor(Qt::ClosedHandCursor);
+                } else if (textDraftActive_) {
+                    commitText();
+                } else {
+                    beginTextBox(point, event->button());
+                }
+                reportPosition(point);
+                event->accept();
+                return;
+            }
             if (drawTool_ == DrawTool::MoveSelection) {
                 if (event->button() != Qt::LeftButton) {
                     event->accept();
@@ -657,10 +686,6 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                 beginStroke(tr("Flood fill"));
                 floodFill(point, strokePaintIndex_);
                 commitStroke();
-            } else if (strokeTool_ == DrawTool::Text) {
-                beginStroke(commandText());
-                drawText(point, strokePaintIndex_);
-                commitStroke();
             } else if (isSelectionTool(strokeTool_)) {
                 drawing_ = true;
                 freehandSelectionPoints_.clear();
@@ -715,6 +740,11 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
     const QPoint point = imagePoint(event->position());
     if (point.x() >= 0) {
         reportPosition(point);
+        if (movingTextBox_ && (event->buttons() & strokeButton_)) {
+            setTextBoxPosition(textMoveStart_ + (point - textMoveAnchor_));
+            viewport()->update();
+            return;
+        }
         if (polygonActive_) {
             lastImagePoint_ = point;
             viewport()->update();
@@ -787,6 +817,13 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         event->accept();
         return;
     }
+    if (event->button() == strokeButton_ && movingTextBox_) {
+        movingTextBox_ = false;
+        updateToolCursor();
+        viewport()->update();
+        event->accept();
+        return;
+    }
     if (event->button() == strokeButton_) {
         const bool wasDrawing = drawing_;
         drawing_ = false;
@@ -811,6 +848,25 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
                     curveControl2_ = lastImagePoint_;
                     commitCurve();
                 }
+                viewport()->update();
+                event->accept();
+                return;
+            }
+            if (strokeTool_ == DrawTool::Text) {
+                QRect bounds(strokeStartPoint_, lastImagePoint_);
+                bounds = bounds.normalized();
+                if (bounds.width() < 2 || bounds.height() < 2) {
+                    const int defaultWidth = std::max(80, textPixelSize_ * 10);
+                    const int defaultHeight = std::max(24, textPixelSize_ * 3);
+                    bounds.setSize({defaultWidth, defaultHeight});
+                }
+                bounds.setRight(std::min(bounds.right(),
+                                         static_cast<int>(Level::Width) - 1));
+                bounds.setBottom(std::min(bounds.bottom(),
+                                          static_cast<int>(Level::Height) - 1));
+                textBoxBounds_ = bounds;
+                textDraftActive_ = true;
+                emit pendingSelectionEditChanged(true);
                 viewport()->update();
                 event->accept();
                 return;
@@ -882,6 +938,38 @@ void LevelCanvas::wheelEvent(QWheelEvent* event)
 
 void LevelCanvas::keyPressEvent(QKeyEvent* event)
 {
+    if (event->key() == Qt::Key_Escape &&
+        (textDraftActive_ ||
+         (drawing_ && strokeTool_ == DrawTool::Text))) {
+        cancelText();
+        event->accept();
+        return;
+    }
+    if (textDraftActive_) {
+        if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) &&
+            (event->modifiers() & Qt::ControlModifier)) {
+            commitText();
+        } else if (event->matches(QKeySequence::Paste)) {
+            textDraft_.append(QApplication::clipboard()->text());
+            viewport()->update();
+        } else if (event->matches(QKeySequence::Copy)) {
+            QApplication::clipboard()->setText(textDraft_);
+        } else if (event->key() == Qt::Key_Backspace) {
+            textDraft_.chop(1);
+            viewport()->update();
+        } else if (event->key() == Qt::Key_Return ||
+                   event->key() == Qt::Key_Enter) {
+            textDraft_.append(QLatin1Char('\n'));
+            viewport()->update();
+        } else if (!(event->modifiers() &
+                     (Qt::ControlModifier | Qt::AltModifier)) &&
+                   !event->text().isEmpty()) {
+            textDraft_.append(event->text());
+            viewport()->update();
+        }
+        event->accept();
+        return;
+    }
     if (event->matches(QKeySequence::SelectAll)) {
         selectAll();
         event->accept();
@@ -1344,32 +1432,33 @@ void LevelCanvas::drawPolygon(const std::vector<QPoint>& points,
     viewport()->update();
 }
 
-void LevelCanvas::drawText(const QPoint& position, const std::uint8_t index)
+void LevelCanvas::drawText(const QRect& bounds, const QString& text,
+                           const std::uint8_t index)
 {
-    if (textContent_.isEmpty()) {
+    if (text.isEmpty() || bounds.isEmpty()) {
         return;
     }
 
-    QFont font;
+    QFont font(textFontFamily_);
     font.setPixelSize(textPixelSize_);
-    const QFontMetrics metrics(font);
-    const int width = std::max(1, metrics.horizontalAdvance(textContent_));
-    const int height = std::max(1, metrics.height());
+    const int width = bounds.width();
+    const int height = bounds.height();
     QImage mask(width, height, QImage::Format_Grayscale8);
     mask.fill(0);
     QPainter painter(&mask);
     painter.setRenderHint(QPainter::TextAntialiasing, false);
     painter.setFont(font);
     painter.setPen(Qt::white);
-    painter.drawText(0, metrics.ascent(), textContent_);
+    painter.drawText(QRect(0, 0, width, height),
+                     Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, text);
     painter.end();
 
     const int levelWidth = static_cast<int>(Level::Width);
     const int levelHeight = static_cast<int>(Level::Height);
-    for (int y = 0; y < height && position.y() + y < levelHeight; ++y) {
-        for (int x = 0; x < width && position.x() + x < levelWidth; ++x) {
+    for (int y = 0; y < height && bounds.top() + y < levelHeight; ++y) {
+        for (int x = 0; x < width && bounds.left() + x < levelWidth; ++x) {
             if (mask.constScanLine(y)[x] != 0) {
-                setPixel(position.x() + x, position.y() + y, index);
+                setPixel(bounds.left() + x, bounds.top() + y, index);
             }
         }
     }
@@ -1446,6 +1535,38 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         painter.setPen(guidePen);
         painter.setBrush(Qt::NoBrush);
         painter.drawPolygon(polygon);
+        painter.restore();
+        return;
+    }
+    if (textDraftActive_ || (drawing_ && strokeTool_ == DrawTool::Text)) {
+        const QRect imageBounds = textDraftActive_
+                                      ? textBoxBounds_
+                                      : QRect(strokeStartPoint_,
+                                              lastImagePoint_)
+                                            .normalized();
+        const QRectF bounds(imageBounds.left() * zoom_,
+                            imageBounds.top() * zoom_,
+                            imageBounds.width() * zoom_,
+                            imageBounds.height() * zoom_);
+        painter.save();
+        if (textDraftActive_) {
+            const RGB& rgb = level_->palette[strokePaintIndex_];
+            painter.setPen(QColor(rgb.r, rgb.g, rgb.b));
+            QFont font(textFontFamily_);
+            font.setPixelSize(
+                std::max(1, static_cast<int>(std::round(textPixelSize_ * zoom_))));
+            painter.setFont(font);
+            painter.setRenderHint(QPainter::TextAntialiasing, false);
+            painter.drawText(bounds,
+                             Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap,
+                             textDraft_);
+        }
+        QPen guidePen(palette().color(QPalette::BrightText), 1,
+                      Qt::DashLine);
+        guidePen.setCosmetic(true);
+        painter.setPen(guidePen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(bounds);
         painter.restore();
         return;
     }
@@ -1713,9 +1834,13 @@ void LevelCanvas::updateToolCursor()
     if (viewport() == nullptr || panning_ || movingSelection_) {
         return;
     }
-    viewport()->setCursor(drawTool_ == DrawTool::MoveSelection
-                              ? Qt::OpenHandCursor
-                              : Qt::CrossCursor);
+    if (drawTool_ == DrawTool::MoveSelection) {
+        viewport()->setCursor(Qt::OpenHandCursor);
+    } else if (drawTool_ == DrawTool::Text) {
+        viewport()->setCursor(Qt::IBeamCursor);
+    } else {
+        viewport()->setCursor(Qt::CrossCursor);
+    }
 }
 
 void LevelCanvas::cancelCurve()
@@ -1771,6 +1896,64 @@ void LevelCanvas::commitPolygon()
     }
     polygonPoints_.clear();
     viewport()->update();
+}
+
+void LevelCanvas::cancelText()
+{
+    if (!textDraftActive_ && !(drawing_ && strokeTool_ == DrawTool::Text)) {
+        return;
+    }
+    textDraftActive_ = false;
+    movingTextBox_ = false;
+    drawing_ = false;
+    textBoxBounds_ = {};
+    textDraft_.clear();
+    strokeChanges_.clear();
+    strokeChangeIndices_.clear();
+    updateToolCursor();
+    emit pendingSelectionEditChanged(selectionEditPending_);
+    viewport()->update();
+}
+
+void LevelCanvas::commitText()
+{
+    if (!textDraftActive_ || level_ == nullptr) {
+        return;
+    }
+    textDraftActive_ = false;
+    movingTextBox_ = false;
+    drawText(textBoxBounds_, textDraft_, strokePaintIndex_);
+    textBoxBounds_ = {};
+    textDraft_.clear();
+    commitStroke();
+    updateToolCursor();
+    emit pendingSelectionEditChanged(selectionEditPending_);
+    viewport()->update();
+}
+
+void LevelCanvas::beginTextBox(const QPoint& point,
+                               const Qt::MouseButton button)
+{
+    strokeButton_ = button;
+    strokeTool_ = DrawTool::Text;
+    strokePaintIndex_ = paintIndex(button);
+    strokeStartPoint_ = point;
+    lastImagePoint_ = point;
+    textDraft_.clear();
+    drawing_ = true;
+    beginStroke(commandText());
+    viewport()->update();
+}
+
+void LevelCanvas::setTextBoxPosition(const QPoint& position)
+{
+    const int maximumX =
+        static_cast<int>(Level::Width) - textBoxBounds_.width();
+    const int maximumY =
+        static_cast<int>(Level::Height) - textBoxBounds_.height();
+    textBoxBounds_.moveTopLeft(
+        {std::clamp(position.x(), 0, maximumX),
+         std::clamp(position.y(), 0, maximumY)});
 }
 
 void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)

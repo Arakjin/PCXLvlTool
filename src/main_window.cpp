@@ -15,11 +15,11 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFontComboBox>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
-#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -443,6 +443,14 @@ void MainWindow::createToolBars()
             "QToolButton:checked { background: #b9d9ff; border: 2px inset "
             "#5078a0; }"));
         button->setToolTip(tr(label));
+        if (tool == DrawTool::Text) {
+            button->setToolTip(tr("Text: drag an area, type directly, drag "
+                                  "the box to move it; Ctrl+Enter or clicking "
+                                  "outside accepts"));
+        } else if (tool == DrawTool::Polygon) {
+            button->setToolTip(tr("Polygon: click corners, double-click or "
+                                  "press Enter to finish"));
+        }
         button->setAccessibleName(tr(label));
         toolGroup->addButton(button, static_cast<int>(tool));
         toolBar->addWidget(button);
@@ -487,12 +495,11 @@ void MainWindow::createToolBars()
     cornerRadiusCombo->setEnabled(false);
     optionsBar->addWidget(cornerRadiusCombo);
     optionsBar->addSeparator();
-    optionsBar->addWidget(new QLabel(tr("Text: "), optionsBar));
-    auto* textInput = new QLineEdit(optionsBar);
-    textInput->setPlaceholderText(tr("Text to place"));
-    textInput->setEnabled(false);
-    textInput->setMaximumWidth(180);
-    optionsBar->addWidget(textInput);
+    optionsBar->addWidget(new QLabel(tr("Font: "), optionsBar));
+    auto* fontCombo = new QFontComboBox(optionsBar);
+    fontCombo->setEnabled(false);
+    fontCombo->setMaximumWidth(180);
+    optionsBar->addWidget(fontCombo);
     auto* textSizeSpinBox = new QSpinBox(optionsBar);
     textSizeSpinBox->setRange(6, 64);
     textSizeSpinBox->setValue(12);
@@ -502,7 +509,7 @@ void MainWindow::createToolBars()
     connect(
         toolGroup, &QButtonGroup::idClicked, this,
         [this, activeToolLabel, thicknessSpinBox, cornerRadiusCombo,
-         shapeModeCombo, textInput, textSizeSpinBox, tools](const int id) {
+         shapeModeCombo, fontCombo, textSizeSpinBox, tools](const int id) {
             const auto selectedTool = static_cast<DrawTool>(id);
             canvas_->setDrawTool(selectedTool);
             for (const auto& [label, tool] : tools) {
@@ -534,11 +541,8 @@ void MainWindow::createToolBars()
                                       selectedTool == DrawTool::Polygon;
             shapeModeCombo->setEnabled(supportsFill);
             const bool supportsText = selectedTool == DrawTool::Text;
-            textInput->setEnabled(supportsText);
+            fontCombo->setEnabled(supportsText);
             textSizeSpinBox->setEnabled(supportsText);
-            if (supportsText) {
-                textInput->setFocus();
-            }
         });
     connect(thicknessSpinBox, &QSpinBox::valueChanged, this,
             [this, toolGroup](const int value) {
@@ -556,8 +560,11 @@ void MainWindow::createToolBars()
                     shapeModeCombo->itemData(index).toInt());
                 canvas_->setShapeMode(mode);
             });
-    connect(textInput, &QLineEdit::textChanged, canvas_,
-            &LevelCanvas::setTextContent);
+    connect(fontCombo, &QFontComboBox::currentFontChanged, this,
+            [this](const QFont& font) {
+                canvas_->setTextFontFamily(font.family());
+            });
+    canvas_->setTextFontFamily(fontCombo->currentFont().family());
     connect(textSizeSpinBox, &QSpinBox::valueChanged, canvas_,
             &LevelCanvas::setTextPixelSize);
 }

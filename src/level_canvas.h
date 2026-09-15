@@ -68,7 +68,7 @@ public:
     int rectangleCornerRadius() const;
     void setShapeMode(ShapeMode mode);
     ShapeMode shapeMode() const;
-    void setTextContent(const QString& text);
+    void setTextFontFamily(const QString& family);
     void setTextPixelSize(int size);
     void setPaletteColor(std::uint8_t index, RGB color);
     void applyPaletteColor(std::uint8_t index, RGB color);
@@ -134,7 +134,8 @@ private:
     void drawPolygon(const std::vector<QPoint>& points,
                      std::uint8_t outlineIndex, std::uint8_t fillIndex,
                      int thickness, ShapeMode mode);
-    void drawText(const QPoint& position, std::uint8_t index);
+    void drawText(const QRect& bounds, const QString& text,
+                  std::uint8_t index);
     void floodFill(const QPoint& point, std::uint8_t index);
     void paintShapePreview(QPainter& painter) const;
     void paintSelection(QPainter& painter) const;
@@ -147,6 +148,10 @@ private:
     void commitCurve();
     void cancelPolygon();
     void commitPolygon();
+    void cancelText();
+    void commitText();
+    void beginTextBox(const QPoint& point, Qt::MouseButton button);
+    void setTextBoxPosition(const QPoint& position);
     void beginStroke(const QString& commandText);
     void commitStroke();
     std::uint8_t paintIndex(Qt::MouseButton button) const;
@@ -177,12 +182,14 @@ private:
     ShapeMode shapeMode_ = ShapeMode::Outline;
     ShapeMode strokeShapeMode_ = ShapeMode::Outline;
     std::uint8_t strokeFillIndex_ = 58;
-    QString textContent_;
+    QString textFontFamily_;
     int textPixelSize_ = 12;
     bool drawing_ = false;
     Qt::MouseButton strokeButton_ = Qt::LeftButton;
     bool panning_ = false;
     bool movingSelection_ = false;
+    bool textDraftActive_ = false;
+    bool movingTextBox_ = false;
     CurveStage curveStage_ = CurveStage::None;
     QPoint lastImagePoint_;
     QPoint strokeStartPoint_;
@@ -196,6 +203,10 @@ private:
     QPoint curveEndPoint_;
     QPoint curveControl1_;
     QPoint curveControl2_;
+    QRect textBoxBounds_;
+    QPoint textMoveAnchor_;
+    QPoint textMoveStart_;
+    QString textDraft_;
     bool polygonActive_ = false;
     std::vector<QPoint> polygonPoints_;
     QRect selectionBounds_;

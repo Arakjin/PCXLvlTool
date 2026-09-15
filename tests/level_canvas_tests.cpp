@@ -2,6 +2,7 @@
 #include "palette_widget.h"
 
 #include <QApplication>
+#include <QFont>
 #include <QIcon>
 #include <QImage>
 #include <QKeyEvent>
@@ -72,6 +73,12 @@ void sendKey(QWidget *target, const int key,
              const Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     QKeyEvent event(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(target, &event);
+}
+
+void sendText(QWidget *target, const QString& text)
+{
+    QKeyEvent event(QEvent::KeyPress, 0, Qt::NoModifier, text);
     QApplication::sendEvent(target, &event);
 }
 
@@ -323,15 +330,33 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
-    canvas.setTextContent(QStringLiteral("Test"));
+    canvas.setTextFontFamily(QFont().family());
     canvas.setTextPixelSize(12);
     canvas.setDrawTool(DrawTool::Text);
-    click(viewport, {240.5, 200.5});
+    drag(viewport, {240.5, 200.5}, {280.5, 225.5});
+    sendText(&canvas, QStringLiteral("Test"));
+    ok &= expect(std::all_of(level.pixels.begin(), level.pixels.end(),
+                             [](const std::uint8_t value) {
+                                 return value == 0;
+                             }),
+                 "text box should stay non-destructive before acceptance");
+    drag(viewport, {245.5, 205.5}, {265.5, 215.5});
+    sendKey(&canvas, Qt::Key_Return, Qt::ControlModifier);
     const bool textPixelsWritten = std::any_of(
         level.pixels.begin(), level.pixels.end(),
         [](const std::uint8_t value) { return value == 58; });
     ok &= expect(textPixelsWritten,
                  "text tool should rasterize text to the selected index");
+    int leftmostTextPixel = static_cast<int>(Level::Width);
+    for (std::size_t pixel = 0; pixel < level.pixels.size(); ++pixel) {
+        if (level.pixels[pixel] == 58) {
+            leftmostTextPixel =
+                std::min(leftmostTextPixel,
+                         static_cast<int>(pixel % Level::Width));
+        }
+    }
+    ok &= expect(leftmostTextPixel >= 260,
+                 "text box should be movable before acceptance");
     ok &= expect(canvas.undoStack()->count() == 1,
                  "placing text should create one undo command");
 
