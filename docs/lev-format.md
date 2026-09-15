@@ -33,7 +33,9 @@ The files are read from the parent V-Wing directory and remain unmodified.
 | Offset | Size | Status | Observation |
 |-------:|-----:|--------|-------------|
 | `0x0000` | 2 | Confirmed bytes, unknown meaning | Every corpus file and every converter output begins with `76 07`. |
-| `0x0002` | variable/unknown | Confirmed content, layout partly unknown | Printable uppercase text matching the displayed level name begins here. Changing only one name character changes only the corresponding byte in the output. Shorter names are followed by a NUL and spaces, but the complete field boundary is not yet established. |
+| `0x0002` | 21 | Confirmed for converter 1.91 | Level-name area: up to 20 bytes followed by NUL. Bytes after the NUL through `0x0016` are spaces. Empty, 19-byte, and 20-byte names were tested. |
+| `0x0017` | 2 | Confirmed for converter 1.91 | Zero bytes in controlled classic output; meaning unknown. |
+| `0x0019` | 103 | Confirmed bytes, unknown meaning | Constant classic header tail through `0x007F`. The writer reproduces these bytes exactly. |
 | `0x0000` | 128 | Confirmed | V-Wing-specific header written in place of the input PCX header. |
 | `0x0080` | variable | Confirmed for converter 1.91 output | PCX RLE image stream. The converter copies every byte from input PCX offset 128 through EOF without changes. |
 | EOF - 769 | 1 | Confirmed | Standard 256-color PCX palette marker `0C`. It is copied unchanged by the converter and is present in all ten reference levels. |
@@ -66,9 +68,15 @@ confirms that converter 1.91 preserves the standard PCX RLE stream, palette
 marker, and palette while replacing only the 128-byte header.
 
 Two conversions of the same PCX with level names `NAME A` and `NAME B` differ
-at exactly offset `0x0007`; all other bytes are identical. The documented
-20-character maximum still needs boundary tests before the name-field layout
-can be considered complete.
+at exactly offset `0x0007`; all other bytes are identical. Further tests with
+empty, 19-byte, and 20-byte names confirmed the classic name-area layout.
+
+The classic writer was checked against 20 controlled converter outputs. Its
+complete output, including header, RLE stream, palette marker, and palette, was
+binary-identical in all 20 cases. Rewriting each of the ten freeware reference
+levels with the classic header also preserved decoded pixels and palette
+exactly, although the resulting header is intentionally not expected to match
+the newer freeware header byte-for-byte.
 
 ## Converter documentation facts
 
@@ -84,6 +92,6 @@ must not be silently translated into a parser rule.
 
 ## Next confirmation tests
 
-1. Test level-name lengths 0, 19, and 20 to determine termination and padding.
-2. Determine whether the freeware header difference represents a distinct
+1. Determine whether the freeware header difference represents a distinct
    format version or only different converter behavior.
+2. Smoke-test classic writer output in the original V-Wing executable.

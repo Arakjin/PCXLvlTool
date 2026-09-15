@@ -31,6 +31,7 @@ cmake --build build
 ./build/pcxfixtures build/oracle
 ./build/lev_tests build/oracle
 ./build/lev2pcx ../LEVEL1.LEV build/LEVEL1.PCX
+./build/levroundtrip ../LEVEL1.LEV build/LEVEL1.LEV
 ```
 
 `levdump` currently reports only directly observable byte-level properties:
@@ -53,6 +54,10 @@ long runs, deterministic random pixels, and a palette-only change.
 `lev2pcx` decodes a validated LEV into the internal `Level` model and writes a
 standard 640 x 800, 8-bit indexed PCX while preserving every palette index and
 RGB palette entry.
+
+`levroundtrip` exercises the LEV writer by loading a source level and writing a
+new classic-format LEV. The writer rejects names longer than 20 bytes and
+non-printable ASCII instead of silently truncating or converting them.
 
 The raw inspection sections do not assign format meanings to bytes. After
 those sections were implemented, controlled converter tests established the
@@ -83,12 +88,16 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   files accepted by an independent decoder. All 15 controlled pixel/palette
   fixtures round-trip from LEV to PCX byte-for-byte identically to their source
   PCX files.
+- Milestone 4, LEV writer: implementation and binary converter-oracle checks
+  complete. All 20 controlled cases are byte-for-byte identical to converter
+  1.91 output, and all ten reference levels preserve decoded content across a
+  round trip. Final completion still requires a smoke test in the original
+  game executable.
 
 ## Questions to investigate
 
-- Is there a common header or signature?
-- Does the format contain offsets or block lengths?
-- Is the 640 x 800 indexed image stored as one stream or multiple blocks?
-- Which compression scheme, if any, is used?
-- Is the 256-color palette embedded in every file?
-- Are there distinct classic and freeware format variants?
+- What are the meanings of the still-unknown constant header bytes?
+- Does the one-byte freeware header shift identify a distinct format version
+  or only a newer converter implementation?
+- Does a newly written classic-format level load and play correctly in the
+  original game executable?
