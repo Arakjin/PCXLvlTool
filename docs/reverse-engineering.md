@@ -98,8 +98,9 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
 - Milestone 5, minimal GUI: implemented and build-tested with Qt 6 using both
   GCC and Clang. Open, Save, Save As, indexed canvas rendering, fixed zoom
   levels, middle-button pan, pencil drawing, material-index selection, cursor
-  status, and unsaved-change prompts are present. Interactive visual testing is
-  still pending.
+  status, and unsaved-change prompts are present. Interactive testing confirmed
+  that levels open, can be drawn on and saved, and the GUI-saved output opens
+  correctly in the original game.
 
 ## Questions to investigate
 

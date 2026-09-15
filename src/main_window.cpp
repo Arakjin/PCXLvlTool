@@ -20,8 +20,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -65,8 +65,8 @@ MainWindow::MainWindow(QWidget* parent)
             });
     connect(canvas_, &LevelCanvas::cursorLeftCanvas, this,
             [this] { positionLabel_->setText(tr("Ready")); });
-    connect(canvas_, &LevelCanvas::levelEdited, this,
-            [this] { setModified(true); });
+    connect(canvas_->undoStack(), &QUndoStack::cleanChanged, this,
+            [this](const bool clean) { setModified(!clean); });
 
     resize(1000, 800);
     updateWindowTitle();
@@ -101,6 +101,14 @@ void MainWindow::createActions()
     QAction* exitAction = fileMenu->addAction(tr("E&xit"));
     exitAction->setShortcut(QKeySequence::Quit);
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
+
+    QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
+    QAction* undoAction = canvas_->undoStack()->createUndoAction(this, tr("&Undo"));
+    undoAction->setShortcut(QKeySequence::Undo);
+    editMenu->addAction(undoAction);
+    QAction* redoAction = canvas_->undoStack()->createRedoAction(this, tr("&Redo"));
+    redoAction->setShortcut(QKeySequence::Redo);
+    editMenu->addAction(redoAction);
 }
 
 void MainWindow::createMaterialDock()
@@ -165,9 +173,12 @@ void MainWindow::openLevel()
         return;
     }
 
+    // Drop commands while their old Level target is still alive.
+    canvas_->undoStack()->clear();
     level_ = std::move(loaded);
     currentPath_ = path;
     canvas_->setLevel(level_.get());
+    canvas_->undoStack()->setClean();
     setModified(false);
     statusBar()->showMessage(tr("Opened %1").arg(filename), 3000);
 }
@@ -213,6 +224,7 @@ bool MainWindow::writeLevel(const std::filesystem::path& path)
         return false;
     }
     currentPath_ = path;
+    canvas_->undoStack()->setClean();
     setModified(false);
     statusBar()->showMessage(tr("Saved %1").arg(toQString(path)), 3000);
     return true;

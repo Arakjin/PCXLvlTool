@@ -6,9 +6,46 @@
 #include <QPainter>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QUndoCommand>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
+
+namespace {
+
+class PixelEditCommand final : public QUndoCommand {
+public:
+    PixelEditCommand(Level* level, std::vector<PixelChange> changes,
+                     LevelCanvas* canvas)
+        : level_(level), changes_(std::move(changes)), canvas_(canvas)
+    {
+        setText(QObject::tr("Pencil stroke"));
+    }
+
+    void undo() override
+    {
+        for (const PixelChange& change : changes_) {
+            level_->pixels[change.offset] = change.oldValue;
+        }
+        canvas_->refreshImage();
+    }
+
+    void redo() override
+    {
+        for (const PixelChange& change : changes_) {
+            level_->pixels[change.offset] = change.newValue;
+        }
+        canvas_->refreshImage();
+    }
+
+private:
+    Level* level_;
+    std::vector<PixelChange> changes_;
+    LevelCanvas* canvas_;
+};
+
+} // namespace
 
 LevelCanvas::LevelCanvas(QWidget* parent) : QAbstractScrollArea(parent)
 {
@@ -21,6 +58,9 @@ void LevelCanvas::setLevel(Level* level)
 {
     level_ = level;
     drawing_ = false;
+    undoStack_.clear();
+    strokeChanges_.clear();
+    strokeChangeIndices_.clear();
     updateScrollBars();
     viewport()->update();
 }
@@ -48,6 +88,16 @@ void LevelCanvas::setZoom(const double zoom)
 void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 {
     selectedIndex_ = index;
+}
+
+QUndoStack* LevelCanvas::undoStack()
+{
+    return &undoStack_;
+}
+
+void LevelCanvas::refreshImage()
+{
+    viewport()->update();
 }
 
 void LevelCanvas::paintEvent(QPaintEvent*)
@@ -99,10 +149,9 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
         if (point.x() >= 0) {
             drawing_ = true;
             lastImagePoint_ = point;
-            if (setPixel(point.x(), point.y())) {
-                viewport()->update();
-                emit levelEdited();
-            }
+            beginStroke();
+            setPixel(point.x(), point.y());
+            viewport()->update();
             reportPosition(point);
         }
         event->accept();
@@ -145,7 +194,11 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         return;
     }
     if (event->button() == Qt::LeftButton) {
+        const bool wasDrawing = drawing_;
         drawing_ = false;
+        if (wasDrawing) {
+            commitStroke();
+        }
         event->accept();
         return;
     }
@@ -183,6 +236,17 @@ bool LevelCanvas::setPixel(const int x, const int y)
     if (level_->pixels[offset] == selectedIndex_) {
         return false;
     }
+    const auto existing = strokeChangeIndices_.find(offset);
+    if (existing == strokeChangeIndices_.end()) {
+        strokeChangeIndices_.emplace(offset, strokeChanges_.size());
+        strokeChanges_.push_back(PixelChange{
+            offset,
+            level_->pixels[offset],
+            selectedIndex_,
+        });
+    } else {
+        strokeChanges_[existing->second].newValue = selectedIndex_;
+    }
     level_->pixels[offset] = selectedIndex_;
     return true;
 }
@@ -218,8 +282,23 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to)
 
     if (changed) {
         viewport()->update();
-        emit levelEdited();
     }
+}
+
+void LevelCanvas::beginStroke()
+{
+    strokeChanges_.clear();
+    strokeChangeIndices_.clear();
+}
+
+void LevelCanvas::commitStroke()
+{
+    if (!strokeChanges_.empty()) {
+        undoStack_.push(
+            new PixelEditCommand(level_, std::move(strokeChanges_), this));
+    }
+    strokeChanges_.clear();
+    strokeChangeIndices_.clear();
 }
 
 void LevelCanvas::updateScrollBars()

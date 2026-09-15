@@ -111,4 +111,28 @@ if(BUILD_TESTING)
     set_tests_properties(gui_smoke_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    add_executable(level_canvas_tests
+        tests/level_canvas_tests.cpp
+        src/level_canvas.cpp
+        src/level_canvas.h
+    )
+    target_link_libraries(level_canvas_tests PRIVATE Qt6::Widgets)
+    target_include_directories(level_canvas_tests PRIVATE src)
+    target_compile_features(level_canvas_tests PRIVATE cxx_std_17)
+    set_target_properties(level_canvas_tests PROPERTIES
+        AUTOMOC ON
+        CXX_EXTENSIONS OFF
+    )
+
+    if(MSVC)
+        target_compile_options(level_canvas_tests PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(level_canvas_tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME level_canvas_tests COMMAND level_canvas_tests)
+    set_tests_properties(level_canvas_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()
