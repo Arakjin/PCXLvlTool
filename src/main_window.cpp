@@ -289,6 +289,16 @@ QIcon toolIcon(const DrawTool tool)
         return QIcon(QStringLiteral(":/icons/icons/ellipse.svg"));
     case DrawTool::FilledEllipse:
         return QIcon(QStringLiteral(":/icons/icons/ellipse-filled.svg"));
+    case DrawTool::Spray:
+        return QIcon(QStringLiteral(":/icons/icons/spray.svg"));
+    case DrawTool::SelectRectangle:
+        return QIcon(QStringLiteral(":/icons/icons/select-rectangle.svg"));
+    case DrawTool::SelectEllipse:
+        return QIcon(QStringLiteral(":/icons/icons/select-ellipse.svg"));
+    case DrawTool::SelectFreehand:
+        return QIcon(QStringLiteral(":/icons/icons/lasso.svg"));
+    case DrawTool::MoveSelection:
+        return QIcon(QStringLiteral(":/icons/icons/hand-move.svg"));
     }
     return {};
 }
@@ -319,7 +329,13 @@ MainWindow::MainWindow(QWidget* parent)
     connect(canvas_, &LevelCanvas::cursorLeftCanvas, this,
             [this] { positionLabel_->setText(tr("Ready")); });
     connect(canvas_->undoStack(), &QUndoStack::cleanChanged, this,
-            [this](const bool clean) { setModified(!clean); });
+            [this](const bool clean) {
+                setModified(!clean || canvas_->hasPendingSelectionEdit());
+            });
+    connect(canvas_, &LevelCanvas::pendingSelectionEditChanged, this,
+            [this](const bool pending) {
+                setModified(pending || !canvas_->undoStack()->isClean());
+            });
 
     resize(1000, 800);
     updateWindowTitle();
@@ -355,14 +371,31 @@ void MainWindow::createActions()
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
     QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
-    QAction* undoAction =
-        canvas_->undoStack()->createUndoAction(this, tr("&Undo"));
+    QAction* undoAction = editMenu->addAction(tr("&Undo"));
     undoAction->setShortcut(QKeySequence::Undo);
-    editMenu->addAction(undoAction);
-    QAction* redoAction =
-        canvas_->undoStack()->createRedoAction(this, tr("&Redo"));
+    connect(undoAction, &QAction::triggered, this, [this] {
+        canvas_->commitSelection();
+        canvas_->undoStack()->undo();
+    });
+    QAction* redoAction = editMenu->addAction(tr("&Redo"));
     redoAction->setShortcut(QKeySequence::Redo);
-    editMenu->addAction(redoAction);
+    connect(redoAction, &QAction::triggered, this, [this] {
+        canvas_->commitSelection();
+        canvas_->undoStack()->redo();
+    });
+    editMenu->addSeparator();
+    QAction* copyAction = editMenu->addAction(tr("&Copy selection"));
+    copyAction->setShortcut(QKeySequence::Copy);
+    connect(copyAction, &QAction::triggered, canvas_,
+            &LevelCanvas::copySelection);
+    QAction* pasteAction = editMenu->addAction(tr("&Paste selection"));
+    pasteAction->setShortcut(QKeySequence::Paste);
+    connect(pasteAction, &QAction::triggered, canvas_,
+            &LevelCanvas::pasteSelection);
+    QAction* deleteAction = editMenu->addAction(tr("&Delete selection"));
+    deleteAction->setShortcut(QKeySequence::Delete);
+    connect(deleteAction, &QAction::triggered, canvas_,
+            &LevelCanvas::deleteSelection);
 }
 
 void MainWindow::createMaterialDock()
@@ -378,16 +411,21 @@ void MainWindow::createMaterialDock()
     grid->setSpacing(2);
     auto* toolGroup = new QButtonGroup(toolGrid);
     toolGroup->setExclusive(true);
-    const std::array<std::pair<const char*, DrawTool>, 9> tools{{
+    const std::array<std::pair<const char*, DrawTool>, 14> tools{{
         {"Pencil", DrawTool::Pencil},
         {"Eraser (index 0)", DrawTool::Eraser},
+        {"Spray", DrawTool::Spray},
         {"Line", DrawTool::Line},
         {"Rectangle", DrawTool::Rectangle},
         {"Filled rectangle", DrawTool::FilledRectangle},
-        {"Flood fill", DrawTool::FloodFill},
-        {"Eyedropper", DrawTool::Eyedropper},
         {"Ellipse", DrawTool::Ellipse},
         {"Filled ellipse", DrawTool::FilledEllipse},
+        {"Flood fill", DrawTool::FloodFill},
+        {"Eyedropper", DrawTool::Eyedropper},
+        {"Rectangle select", DrawTool::SelectRectangle},
+        {"Ellipse select", DrawTool::SelectEllipse},
+        {"Freehand select", DrawTool::SelectFreehand},
+        {"Move selection", DrawTool::MoveSelection},
     }};
     for (std::size_t index = 0; index < tools.size(); ++index) {
         const auto& [label, tool] = tools[index];
@@ -414,6 +452,13 @@ void MainWindow::createMaterialDock()
     layout->addWidget(toolGrid);
     auto* activeToolLabel = new QLabel(tr("Pencil"), contents);
     layout->addWidget(activeToolLabel);
+    auto* selectionHelp = new QLabel(
+        tr("Selection: draw a mask, then use Move or another drawing tool. "
+           "Enter commits, Esc cancels, Del removes, Ctrl+C/V copies and "
+           "pastes."),
+        contents);
+    selectionHelp->setWordWrap(true);
+    layout->addWidget(selectionHelp);
 
     auto* thicknessLayout = new QHBoxLayout();
     thicknessLayout->addWidget(new QLabel(tr("Thickness:"), contents));
@@ -453,7 +498,8 @@ void MainWindow::createMaterialDock()
                 selectedTool == DrawTool::Eraser ||
                 selectedTool == DrawTool::Line ||
                 selectedTool == DrawTool::Rectangle ||
-                selectedTool == DrawTool::Ellipse;
+                selectedTool == DrawTool::Ellipse ||
+                selectedTool == DrawTool::Spray;
             const QSignalBlocker blocker(thicknessSpinBox);
             thicknessSpinBox->setEnabled(supportsThickness);
             thicknessSpinBox->setValue(canvas_->toolThickness(selectedTool));
@@ -682,6 +728,7 @@ bool MainWindow::maybeSave()
 
 bool MainWindow::writeLevel(const std::filesystem::path& path)
 {
+    canvas_->commitSelection();
     std::string error;
     if (!saveLev(path, *level_, error)) {
         QMessageBox::critical(this, tr("Save failed"),

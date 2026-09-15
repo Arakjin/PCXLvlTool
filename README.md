@@ -27,12 +27,17 @@ The current milestone supports:
 - pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%
 - panning with the middle mouse button
 - Paint-style two-column toolbox with pencil, eraser, line, rectangle, filled
-  rectangle, ellipse, filled ellipse, flood-fill, and eyedropper tools
+  rectangle, ellipse, filled ellipse, spray, flood-fill, eyedropper, and
+  selection tools
 - independently remembered 1-32 pixel thickness for pencil, eraser, line,
   rectangle outline, and ellipse outline
 - live, non-destructive previews while dragging line and shape tools
 - `Shift`-constrained squares and circles, plus selectable sharp or rounded
   rectangle corners
+- rectangular, elliptical, and freehand selections stored as temporary indexed
+  layers; selections can be moved, deleted, or edited with the drawing tools
+- lossless indexed selection copy/paste with `Ctrl+C` and `Ctrl+V`; `Enter`
+  commits a floating selection and `Esc` cancels it
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
   documented V-Wing material information

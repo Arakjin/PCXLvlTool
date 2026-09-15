@@ -4,10 +4,12 @@
 #include <QApplication>
 #include <QIcon>
 #include <QImage>
+#include <QKeyEvent>
 #include <QMouseEvent>
 
 #include <cstddef>
 #include <iostream>
+#include <vector>
 
 namespace {
 
@@ -47,6 +49,28 @@ void drag(QWidget *target, const QPointF from, const QPointF to,
                    modifiers);
     sendMouseEvent(target, QEvent::MouseButtonRelease, to, Qt::LeftButton,
                    Qt::NoButton, modifiers);
+}
+
+void freehandDrag(QWidget *target, const std::vector<QPointF> &points)
+{
+    if (points.empty()) {
+        return;
+    }
+    sendMouseEvent(target, QEvent::MouseButtonPress, points.front(),
+                   Qt::LeftButton, Qt::LeftButton);
+    for (std::size_t index = 1; index < points.size(); ++index) {
+        sendMouseEvent(target, QEvent::MouseMove, points[index], Qt::NoButton,
+                       Qt::LeftButton);
+    }
+    sendMouseEvent(target, QEvent::MouseButtonRelease, points.back(),
+                   Qt::LeftButton, Qt::NoButton);
+}
+
+void sendKey(QWidget *target, const int key,
+             const Qt::KeyboardModifiers modifiers = Qt::NoModifier)
+{
+    QKeyEvent event(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(target, &event);
 }
 
 std::size_t offset(const int x, const int y)
@@ -345,6 +369,119 @@ int main(int argc, char *argv[])
                      level.pixels[offset(102, 102)] == 0,
                  "eraser should use its independently configured thickness");
 
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setSelectedIndex(60);
+    canvas.setDrawTool(DrawTool::Spray);
+    canvas.setToolThickness(DrawTool::Spray, 8);
+    click(viewport, {120.5, 160.5});
+    ok &= expect(level.pixels[offset(120, 160)] == 60,
+                 "spray should always paint its center pixel");
+    ok &= expect(canvas.undoStack()->count() == 1,
+                 "one spray gesture should create one undo command");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 10; y <= 11; ++y) {
+        for (int x = 10; x <= 11; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectRectangle);
+    drag(viewport, {10.5, 10.5}, {11.5, 11.5});
+    ok &= expect(canvas.hasSelection() && !canvas.hasPendingSelectionEdit() &&
+                     level.pixels[offset(10, 10)] == 77,
+                 "rectangle selection should remain floating until committed");
+    canvas.setDrawTool(DrawTool::MoveSelection);
+    drag(viewport, {10.5, 10.5}, {20.5, 20.5});
+    ok &=
+        expect(level.pixels[offset(10, 10)] == 77,
+               "moving a floating selection should not edit level data early");
+    ok &= expect(canvas.hasPendingSelectionEdit(),
+                 "moving a selection should mark a pending edit");
+    canvas.commitSelection();
+    ok &=
+        expect(level.pixels[offset(10, 10)] == 0 &&
+                   level.pixels[offset(20, 20)] == 77 &&
+                   level.pixels[offset(21, 21)] == 77,
+               "committing a moved selection should clear and move its pixels");
+    canvas.undoStack()->undo();
+    ok &= expect(level.pixels[offset(10, 10)] == 77 &&
+                     level.pixels[offset(20, 20)] == 0,
+                 "a committed selection move should undo as one operation");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 30; y <= 34; ++y) {
+        for (int x = 30; x <= 34; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectEllipse);
+    drag(viewport, {30.5, 30.5}, {34.5, 34.5});
+    sendKey(&canvas, Qt::Key_Delete);
+    ok &= expect(level.pixels[offset(32, 32)] == 0 &&
+                     level.pixels[offset(30, 30)] == 77,
+                 "Delete should clear only pixels inside an ellipse selection");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 40; y <= 44; ++y) {
+        for (int x = 40; x <= 44; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectFreehand);
+    freehandDrag(viewport,
+                 {{40.5, 40.5}, {44.5, 40.5}, {40.5, 44.5}, {40.5, 40.5}});
+    ok &= expect(canvas.hasSelection(),
+                 "a closed freehand path should create a selection");
+    canvas.deleteSelection();
+    ok &= expect(level.pixels[offset(41, 41)] == 0 &&
+                     level.pixels[offset(44, 44)] == 77,
+                 "freehand Delete should respect the lasso mask");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 50; y <= 54; ++y) {
+        for (int x = 50; x <= 54; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectRectangle);
+    drag(viewport, {50.5, 50.5}, {54.5, 54.5});
+    canvas.setDrawTool(DrawTool::Pencil);
+    canvas.setToolThickness(DrawTool::Pencil, 1);
+    canvas.setSelectedIndex(60);
+    click(viewport, {52.5, 52.5});
+    click(viewport, {60.5, 60.5});
+    ok &= expect(level.pixels[offset(52, 52)] == 77,
+                 "drawing in a selection should stay on the floating layer");
+    canvas.commitSelection();
+    ok &= expect(level.pixels[offset(52, 52)] == 60 &&
+                     level.pixels[offset(60, 60)] == 0,
+                 "selection drawing should commit inside the mask only");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    level.pixels[offset(70, 70)] = 88;
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectRectangle);
+    drag(viewport, {70.5, 70.5}, {70.5, 70.5});
+    sendKey(&canvas, Qt::Key_C, Qt::ControlModifier);
+    sendKey(&canvas, Qt::Key_V, Qt::ControlModifier);
+    ok &= expect(canvas.hasSelection() && canvas.hasPendingSelectionEdit(),
+                 "Ctrl+V data should create a floating selection");
+    canvas.commitSelection();
+    ok &= expect(level.pixels[offset(70, 70)] == 88 &&
+                     level.pixels[offset(71, 71)] == 88,
+                 "copied indexed pixels should paste without changing source");
+
     PaletteWidget palette;
     palette.setLevel(&level);
     palette.show();
@@ -377,10 +514,13 @@ int main(int argc, char *argv[])
     ok &= expect(editRequestedIndex == 19,
                  "palette double-click should edit the exact filtered index");
 
-    ok &= expect(
-        !QIcon(QStringLiteral(":/icons/icons/pencil.svg")).isNull() &&
-            !QIcon(QStringLiteral(":/icons/icons/bucket-droplet.svg")).isNull(),
-        "embedded Tabler tool icons should load from resources");
+    ok &=
+        expect(!QIcon(QStringLiteral(":/icons/icons/pencil.svg")).isNull() &&
+                   !QIcon(QStringLiteral(":/icons/icons/bucket-droplet.svg"))
+                        .isNull() &&
+                   !QIcon(QStringLiteral(":/icons/icons/spray.svg")).isNull() &&
+                   !QIcon(QStringLiteral(":/icons/icons/lasso.svg")).isNull(),
+               "embedded toolbox icons should load from resources");
 
     if (ok) {
         std::cout << "All level canvas tests passed\n";

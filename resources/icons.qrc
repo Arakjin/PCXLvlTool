@@ -9,5 +9,10 @@
     <file>icons/color-picker.svg</file>
     <file>icons/ellipse.svg</file>
     <file>icons/ellipse-filled.svg</file>
+    <file>icons/spray.svg</file>
+    <file>icons/select-rectangle.svg</file>
+    <file>icons/select-ellipse.svg</file>
+    <file>icons/lasso.svg</file>
+    <file>icons/hand-move.svg</file>
   </qresource>
 </RCC>

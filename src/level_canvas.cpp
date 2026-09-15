@@ -2,10 +2,17 @@
 
 #include "palette_rules.h"
 
+#include <QApplication>
+#include <QClipboard>
+#include <QDataStream>
 #include <QEvent>
 #include <QImage>
+#include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QRandomGenerator>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QUndoCommand>
@@ -15,6 +22,8 @@
 #include <utility>
 
 namespace {
+
+constexpr auto kSelectionMimeType = "application/x-vwing-level-selection";
 
 class PixelEditCommand final : public QUndoCommand {
 public:
@@ -91,12 +100,14 @@ private:
 LevelCanvas::LevelCanvas(QWidget* parent) : QAbstractScrollArea(parent)
 {
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
     setBackgroundRole(QPalette::Dark);
     viewport()->setCursor(Qt::CrossCursor);
 }
 
 void LevelCanvas::setLevel(Level* level)
 {
+    clearSelection();
     level_ = level;
     drawing_ = false;
     undoStack_.clear();
@@ -135,7 +146,11 @@ void LevelCanvas::setSelectedIndex(const std::uint8_t index)
     emit selectedIndexChanged(index);
 }
 
-void LevelCanvas::setDrawTool(const DrawTool tool) { drawTool_ = tool; }
+void LevelCanvas::setDrawTool(const DrawTool tool)
+{
+    drawTool_ = tool;
+    updateToolCursor();
+}
 
 void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
 {
@@ -150,6 +165,8 @@ void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
         rectangleThickness_ = value;
     } else if (tool == DrawTool::Ellipse) {
         ellipseThickness_ = value;
+    } else if (tool == DrawTool::Spray) {
+        sprayThickness_ = value;
     }
 }
 
@@ -169,6 +186,9 @@ int LevelCanvas::toolThickness(const DrawTool tool) const
     }
     if (tool == DrawTool::Ellipse) {
         return ellipseThickness_;
+    }
+    if (tool == DrawTool::Spray) {
+        return sprayThickness_;
     }
     return 1;
 }
@@ -220,6 +240,174 @@ void LevelCanvas::applyPalette(const std::array<RGB, 256>& palette)
     emit paletteColorChanged(-1);
 }
 
+void LevelCanvas::commitSelection()
+{
+    if (!selectionActive_ || level_ == nullptr) {
+        return;
+    }
+
+    std::unordered_map<std::size_t, std::uint8_t> finalValues;
+    const int width = selectionBounds_.width();
+    const int height = selectionBounds_.height();
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const std::size_t localOffset =
+                static_cast<std::size_t>(y) * width + x;
+            if (selectionMask_[localOffset] == 0) {
+                continue;
+            }
+            if (selectionHasSource_) {
+                const QPoint source = selectionSourcePosition_ + QPoint(x, y);
+                finalValues[static_cast<std::size_t>(source.y()) *
+                                Level::Width +
+                            source.x()] = 0;
+            }
+            const QPoint destination = selectionPosition_ + QPoint(x, y);
+            finalValues[static_cast<std::size_t>(destination.y()) *
+                            Level::Width +
+                        destination.x()] = selectionPixels_[localOffset];
+        }
+    }
+
+    std::vector<PixelChange> changes;
+    changes.reserve(finalValues.size());
+    for (const auto& [offset, value] : finalValues) {
+        if (level_->pixels[offset] != value) {
+            changes.push_back({offset, level_->pixels[offset], value});
+        }
+    }
+    std::sort(changes.begin(), changes.end(),
+              [](const PixelChange& left, const PixelChange& right) {
+                  return left.offset < right.offset;
+              });
+    clearSelection();
+    if (!changes.empty()) {
+        undoStack_.push(new PixelEditCommand(level_, std::move(changes), this,
+                                             tr("Commit selection")));
+    }
+}
+
+void LevelCanvas::deleteSelection()
+{
+    if (!selectionActive_ || level_ == nullptr) {
+        return;
+    }
+
+    std::vector<PixelChange> changes;
+    if (selectionHasSource_) {
+        const int width = selectionBounds_.width();
+        const int height = selectionBounds_.height();
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const std::size_t localOffset =
+                    static_cast<std::size_t>(y) * width + x;
+                if (selectionMask_[localOffset] == 0) {
+                    continue;
+                }
+                const QPoint source = selectionSourcePosition_ + QPoint(x, y);
+                const std::size_t offset =
+                    static_cast<std::size_t>(source.y()) * Level::Width +
+                    source.x();
+                if (level_->pixels[offset] != 0) {
+                    changes.push_back({offset, level_->pixels[offset], 0});
+                }
+            }
+        }
+    }
+    clearSelection();
+    if (!changes.empty()) {
+        undoStack_.push(new PixelEditCommand(level_, std::move(changes), this,
+                                             tr("Delete selection")));
+    }
+}
+
+void LevelCanvas::copySelection()
+{
+    if (!selectionActive_) {
+        return;
+    }
+    QByteArray payload;
+    QDataStream stream(&payload, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_6_2);
+    const quint32 width = static_cast<quint32>(selectionBounds_.width());
+    const quint32 height = static_cast<quint32>(selectionBounds_.height());
+    stream << width << height << static_cast<qint32>(selectionPosition_.x())
+           << static_cast<qint32>(selectionPosition_.y());
+    for (std::size_t index = 0; index < selectionMask_.size(); ++index) {
+        stream << static_cast<quint8>(selectionMask_[index])
+               << static_cast<quint8>(selectionPixels_[index]);
+    }
+    auto* mimeData = new QMimeData();
+    mimeData->setData(QString::fromLatin1(kSelectionMimeType), payload);
+    QApplication::clipboard()->setMimeData(mimeData);
+}
+
+void LevelCanvas::pasteSelection()
+{
+    if (level_ == nullptr) {
+        return;
+    }
+    const QMimeData* mimeData = QApplication::clipboard()->mimeData();
+    if (!mimeData->hasFormat(QString::fromLatin1(kSelectionMimeType))) {
+        return;
+    }
+    QByteArray payload =
+        mimeData->data(QString::fromLatin1(kSelectionMimeType));
+    QDataStream stream(&payload, QIODevice::ReadOnly);
+    stream.setVersion(QDataStream::Qt_6_2);
+    quint32 width = 0;
+    quint32 height = 0;
+    qint32 sourceX = 0;
+    qint32 sourceY = 0;
+    stream >> width >> height >> sourceX >> sourceY;
+    if (stream.status() != QDataStream::Ok || width == 0 || height == 0 ||
+        width > Level::Width || height > Level::Height ||
+        static_cast<std::size_t>(width) * height > Level::PixelCount) {
+        return;
+    }
+    const std::size_t size = static_cast<std::size_t>(width) * height;
+    std::vector<std::uint8_t> mask(size);
+    std::vector<std::uint8_t> pixels(size);
+    bool containsPixels = false;
+    for (std::size_t index = 0; index < size; ++index) {
+        quint8 maskValue = 0;
+        quint8 pixelValue = 0;
+        stream >> maskValue >> pixelValue;
+        mask[index] = maskValue == 0 ? 0 : 1;
+        pixels[index] = pixelValue;
+        containsPixels |= mask[index] != 0;
+    }
+    if (stream.status() != QDataStream::Ok || !containsPixels) {
+        return;
+    }
+
+    commitSelection();
+    selectionBounds_ =
+        QRect(0, 0, static_cast<int>(width), static_cast<int>(height));
+    selectionMask_ = std::move(mask);
+    selectionPixels_ = std::move(pixels);
+    selectionHasSource_ = false;
+    selectionActive_ = true;
+    selectionEditPending_ = true;
+    emit pendingSelectionEditChanged(true);
+    const qint64 maximumX = static_cast<qint64>(Level::Width) - width;
+    const qint64 maximumY = static_cast<qint64>(Level::Height) - height;
+    selectionPosition_ = {
+        static_cast<int>(
+            std::clamp(static_cast<qint64>(sourceX) + 1, qint64{0}, maximumX)),
+        static_cast<int>(
+            std::clamp(static_cast<qint64>(sourceY) + 1, qint64{0}, maximumY)),
+    };
+    viewport()->update();
+}
+
+bool LevelCanvas::hasSelection() const { return selectionActive_; }
+
+bool LevelCanvas::hasPendingSelectionEdit() const
+{
+    return selectionEditPending_;
+}
+
 QUndoStack* LevelCanvas::undoStack() { return &undoStack_; }
 
 void LevelCanvas::refreshImage() { viewport()->update(); }
@@ -236,7 +424,39 @@ void LevelCanvas::paintEvent(QPaintEvent*)
         return;
     }
 
-    QImage image(level_->pixels.data(), static_cast<int>(Level::Width),
+    std::vector<std::uint8_t> composedPixels;
+    const std::uint8_t* imagePixels = level_->pixels.data();
+    if (selectionActive_) {
+        composedPixels.assign(level_->pixels.begin(), level_->pixels.end());
+        const int width = selectionBounds_.width();
+        const int height = selectionBounds_.height();
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const std::size_t localOffset =
+                    static_cast<std::size_t>(y) * width + x;
+                if (selectionMask_[localOffset] == 0) {
+                    continue;
+                }
+                if (selectionHasSource_) {
+                    const QPoint source =
+                        selectionSourcePosition_ + QPoint(x, y);
+                    const std::size_t sourceOffset =
+                        static_cast<std::size_t>(source.y()) * Level::Width +
+                        source.x();
+                    composedPixels[sourceOffset] = 0;
+                }
+                const QPoint destination = selectionPosition_ + QPoint(x, y);
+                const std::size_t destinationOffset =
+                    static_cast<std::size_t>(destination.y()) * Level::Width +
+                    destination.x();
+                composedPixels[destinationOffset] =
+                    selectionPixels_[localOffset];
+            }
+        }
+        imagePixels = composedPixels.data();
+    }
+
+    QImage image(imagePixels, static_cast<int>(Level::Width),
                  static_cast<int>(Level::Height),
                  static_cast<int>(Level::Width), QImage::Format_Indexed8);
     QList<QRgb> colors;
@@ -252,6 +472,7 @@ void LevelCanvas::paintEvent(QPaintEvent*)
     painter.drawImage(QRectF(0, 0, Level::Width * zoom_, Level::Height * zoom_),
                       image);
     paintShapePreview(painter);
+    paintSelection(painter);
 }
 
 void LevelCanvas::resizeEvent(QResizeEvent* event)
@@ -271,8 +492,25 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
     }
 
     if (event->button() == Qt::LeftButton && level_ != nullptr) {
+        setFocus(Qt::MouseFocusReason);
         const QPoint point = imagePoint(event->position());
         if (point.x() >= 0) {
+            if (drawTool_ == DrawTool::MoveSelection) {
+                if (selectionContains(point.x(), point.y())) {
+                    movingSelection_ = true;
+                    selectionMoveAnchor_ = point;
+                    selectionMoveStart_ = selectionPosition_;
+                    viewport()->setCursor(Qt::ClosedHandCursor);
+                } else if (selectionActive_) {
+                    commitSelection();
+                }
+                event->accept();
+                return;
+            }
+
+            if (isSelectionTool(drawTool_) && selectionActive_) {
+                commitSelection();
+            }
             lastImagePoint_ = point;
             strokeStartPoint_ = point;
             strokeTool_ = drawTool_;
@@ -281,20 +519,27 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
             strokeCornerRadius_ = rectangleCornerRadius_;
 
             if (strokeTool_ == DrawTool::Eyedropper) {
-                const std::size_t offset =
-                    static_cast<std::size_t>(point.y()) * Level::Width +
-                    static_cast<std::size_t>(point.x());
-                setSelectedIndex(level_->pixels[offset]);
+                setSelectedIndex(pixelAt(point.x(), point.y()));
             } else if (strokeTool_ == DrawTool::FloodFill) {
                 beginStroke(tr("Flood fill"));
                 floodFill(point, strokePaintIndex_);
                 commitStroke();
+            } else if (isSelectionTool(strokeTool_)) {
+                drawing_ = true;
+                freehandSelectionPoints_.clear();
+                if (strokeTool_ == DrawTool::SelectFreehand) {
+                    freehandSelectionPoints_.push_back(point);
+                }
             } else {
                 drawing_ = true;
                 const bool freehand = strokeTool_ == DrawTool::Pencil ||
-                                      strokeTool_ == DrawTool::Eraser;
+                                      strokeTool_ == DrawTool::Eraser ||
+                                      strokeTool_ == DrawTool::Spray;
                 beginStroke(commandText());
-                if (freehand) {
+                if (strokeTool_ == DrawTool::Spray) {
+                    sprayAt(point, strokePaintIndex_, strokeThickness_);
+                    viewport()->update();
+                } else if (freehand) {
                     setBrushPixel(point.x(), point.y(), strokePaintIndex_,
                                   strokeThickness_);
                     viewport()->update();
@@ -325,12 +570,31 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
     const QPoint point = imagePoint(event->position());
     if (point.x() >= 0) {
         reportPosition(point);
+        if (movingSelection_ && (event->buttons() & Qt::LeftButton)) {
+            setSelectionPosition(selectionMoveStart_ +
+                                 (point - selectionMoveAnchor_));
+            viewport()->update();
+            return;
+        }
         if (drawing_ && (event->buttons() & Qt::LeftButton) &&
             (strokeTool_ == DrawTool::Pencil ||
              strokeTool_ == DrawTool::Eraser)) {
             drawLine(lastImagePoint_, point, strokePaintIndex_,
                      strokeThickness_);
             lastImagePoint_ = point;
+        } else if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+                   strokeTool_ == DrawTool::Spray) {
+            sprayLine(lastImagePoint_, point, strokePaintIndex_,
+                      strokeThickness_);
+            lastImagePoint_ = point;
+        } else if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+                   strokeTool_ == DrawTool::SelectFreehand) {
+            if (freehandSelectionPoints_.empty() ||
+                freehandSelectionPoints_.back() != point) {
+                freehandSelectionPoints_.push_back(point);
+            }
+            lastImagePoint_ = point;
+            viewport()->update();
         } else if (drawing_ && (event->buttons() & Qt::LeftButton)) {
             lastImagePoint_ = event->modifiers() & Qt::ShiftModifier
                                   ? constrainedShapePoint(point)
@@ -346,11 +610,18 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
-        viewport()->setCursor(Qt::CrossCursor);
+        updateToolCursor();
         event->accept();
         return;
     }
     if (event->button() == Qt::LeftButton) {
+        if (movingSelection_) {
+            movingSelection_ = false;
+            updateToolCursor();
+            viewport()->update();
+            event->accept();
+            return;
+        }
         const bool wasDrawing = drawing_;
         drawing_ = false;
         if (wasDrawing) {
@@ -376,6 +647,13 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
             } else if (strokeTool_ == DrawTool::FilledEllipse) {
                 drawEllipse(strokeStartPoint_, lastImagePoint_,
                             strokePaintIndex_, 1, true);
+            } else if (isSelectionTool(strokeTool_)) {
+                if (strokeTool_ == DrawTool::SelectFreehand &&
+                    (freehandSelectionPoints_.empty() ||
+                     freehandSelectionPoints_.back() != lastImagePoint_)) {
+                    freehandSelectionPoints_.push_back(lastImagePoint_);
+                }
+                createSelection();
             }
             commitStroke();
         }
@@ -383,6 +661,36 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
         return;
     }
     QAbstractScrollArea::mouseReleaseEvent(event);
+}
+
+void LevelCanvas::keyPressEvent(QKeyEvent* event)
+{
+    if (event->matches(QKeySequence::Copy)) {
+        copySelection();
+        event->accept();
+        return;
+    }
+    if (event->matches(QKeySequence::Paste)) {
+        pasteSelection();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Delete) {
+        deleteSelection();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        commitSelection();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape && selectionActive_) {
+        clearSelection();
+        event->accept();
+        return;
+    }
+    QAbstractScrollArea::keyPressEvent(event);
 }
 
 void LevelCanvas::leaveEvent(QEvent* event)
@@ -409,6 +717,26 @@ QPoint LevelCanvas::imagePoint(const QPointF& viewportPoint) const
 
 bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
 {
+    if (selectionActive_) {
+        if (!selectionContains(x, y)) {
+            return false;
+        }
+        const int localX = x - selectionPosition_.x();
+        const int localY = y - selectionPosition_.y();
+        const std::size_t localOffset =
+            static_cast<std::size_t>(localY) * selectionBounds_.width() +
+            localX;
+        if (selectionPixels_[localOffset] == index) {
+            return false;
+        }
+        selectionPixels_[localOffset] = index;
+        if (!selectionEditPending_) {
+            selectionEditPending_ = true;
+            emit pendingSelectionEditChanged(true);
+        }
+        return true;
+    }
+
     const std::size_t offset = static_cast<std::size_t>(y) * Level::Width +
                                static_cast<std::size_t>(x);
     if (level_->pixels[offset] == index) {
@@ -445,6 +773,96 @@ bool LevelCanvas::setBrushPixel(const int x, const int y,
         }
     }
     return changed;
+}
+
+std::uint8_t LevelCanvas::pixelAt(const int x, const int y) const
+{
+    if (selectionContains(x, y)) {
+        const int localX = x - selectionPosition_.x();
+        const int localY = y - selectionPosition_.y();
+        const std::size_t localOffset =
+            static_cast<std::size_t>(localY) * selectionBounds_.width() +
+            localX;
+        return selectionPixels_[localOffset];
+    }
+    if (selectionActive_ && selectionHasSource_) {
+        const int localX = x - selectionSourcePosition_.x();
+        const int localY = y - selectionSourcePosition_.y();
+        if (localX >= 0 && localY >= 0 && localX < selectionBounds_.width() &&
+            localY < selectionBounds_.height() &&
+            selectionMask_[static_cast<std::size_t>(localY) *
+                               selectionBounds_.width() +
+                           localX] != 0) {
+            return 0;
+        }
+    }
+    return level_->pixels[static_cast<std::size_t>(y) * Level::Width + x];
+}
+
+bool LevelCanvas::selectionContains(const int x, const int y) const
+{
+    if (!selectionActive_) {
+        return false;
+    }
+    const int localX = x - selectionPosition_.x();
+    const int localY = y - selectionPosition_.y();
+    if (localX < 0 || localY < 0 || localX >= selectionBounds_.width() ||
+        localY >= selectionBounds_.height()) {
+        return false;
+    }
+    return selectionMask_[static_cast<std::size_t>(localY) *
+                              selectionBounds_.width() +
+                          localX] != 0;
+}
+
+void LevelCanvas::sprayLine(const QPoint& from, const QPoint& to,
+                            const std::uint8_t index, const int radius)
+{
+    int x = from.x();
+    int y = from.y();
+    const int dx = std::abs(to.x() - x);
+    const int sx = x < to.x() ? 1 : -1;
+    const int dy = -std::abs(to.y() - y);
+    const int sy = y < to.y() ? 1 : -1;
+    int error = dx + dy;
+    while (true) {
+        sprayAt({x, y}, index, radius);
+        if (x == to.x() && y == to.y()) {
+            break;
+        }
+        const int twiceError = 2 * error;
+        if (twiceError >= dy) {
+            error += dy;
+            x += sx;
+        }
+        if (twiceError <= dx) {
+            error += dx;
+            y += sy;
+        }
+    }
+    viewport()->update();
+}
+
+void LevelCanvas::sprayAt(const QPoint& point, const std::uint8_t index,
+                          const int radius)
+{
+    const int diameter = std::max(1, radius);
+    const int lower = diameter / 2;
+    const int samples = std::max(4, diameter * 2);
+    setPixel(point.x(), point.y(), index);
+    for (int sample = 0; sample < samples; ++sample) {
+        const int x =
+            point.x() + QRandomGenerator::global()->bounded(diameter) - lower;
+        const int y =
+            point.y() + QRandomGenerator::global()->bounded(diameter) - lower;
+        const int deltaX = x - point.x();
+        const int deltaY = y - point.y();
+        if (deltaX * deltaX + deltaY * deltaY <= lower * lower && x >= 0 &&
+            y >= 0 && x < static_cast<int>(Level::Width) &&
+            y < static_cast<int>(Level::Height)) {
+            setPixel(x, y, index);
+        }
+    }
 }
 
 void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
@@ -598,7 +1016,8 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         (strokeTool_ != DrawTool::Line && strokeTool_ != DrawTool::Rectangle &&
          strokeTool_ != DrawTool::FilledRectangle &&
          strokeTool_ != DrawTool::Ellipse &&
-         strokeTool_ != DrawTool::FilledEllipse)) {
+         strokeTool_ != DrawTool::FilledEllipse &&
+         !isSelectionTool(strokeTool_))) {
         return;
     }
 
@@ -613,6 +1032,32 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     const qreal height =
         (std::abs(lastImagePoint_.y() - strokeStartPoint_.y()) + 1) * zoom_;
     const QRectF bounds(left, top, width, height);
+
+    if (isSelectionTool(strokeTool_)) {
+        painter.save();
+        QPen selectionPen(palette().color(QPalette::BrightText), 1,
+                          Qt::DashLine);
+        selectionPen.setCosmetic(true);
+        painter.setPen(selectionPen);
+        painter.setBrush(Qt::NoBrush);
+        if (strokeTool_ == DrawTool::SelectEllipse) {
+            painter.drawEllipse(bounds);
+        } else if (strokeTool_ == DrawTool::SelectFreehand) {
+            QPolygonF outline;
+            outline.reserve(
+                static_cast<qsizetype>(freehandSelectionPoints_.size()));
+            for (const QPoint& point : freehandSelectionPoints_) {
+                outline.append(QPointF((point.x() + 0.5) * zoom_,
+                                       (point.y() + 0.5) * zoom_));
+            }
+            painter.drawPolyline(outline);
+        } else {
+            painter.drawRect(bounds);
+        }
+        painter.restore();
+        return;
+    }
+
     const bool outlinedShape = strokeTool_ == DrawTool::Line ||
                                strokeTool_ == DrawTool::Rectangle ||
                                strokeTool_ == DrawTool::Ellipse;
@@ -660,12 +1105,188 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     painter.restore();
 }
 
+void LevelCanvas::paintSelection(QPainter& painter) const
+{
+    if (!selectionActive_) {
+        return;
+    }
+
+    painter.save();
+    QPen pen(palette().color(QPalette::BrightText), 1, Qt::DashLine);
+    pen.setCosmetic(true);
+    painter.setPen(pen);
+    const int width = selectionBounds_.width();
+    const int height = selectionBounds_.height();
+    const auto masked = [this, width, height](const int x, const int y) {
+        return x >= 0 && y >= 0 && x < width && y < height &&
+               selectionMask_[static_cast<std::size_t>(y) * width + x] != 0;
+    };
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (!masked(x, y)) {
+                continue;
+            }
+            const qreal left = (selectionPosition_.x() + x) * zoom_;
+            const qreal top = (selectionPosition_.y() + y) * zoom_;
+            const qreal right = left + zoom_;
+            const qreal bottom = top + zoom_;
+            if (!masked(x, y - 1)) {
+                painter.drawLine(QPointF(left, top), QPointF(right, top));
+            }
+            if (!masked(x + 1, y)) {
+                painter.drawLine(QPointF(right, top), QPointF(right, bottom));
+            }
+            if (!masked(x, y + 1)) {
+                painter.drawLine(QPointF(left, bottom), QPointF(right, bottom));
+            }
+            if (!masked(x - 1, y)) {
+                painter.drawLine(QPointF(left, top), QPointF(left, bottom));
+            }
+        }
+    }
+    painter.restore();
+}
+
+void LevelCanvas::createSelection()
+{
+    QRect bounds;
+    if (strokeTool_ == DrawTool::SelectFreehand) {
+        if (freehandSelectionPoints_.size() < 3) {
+            freehandSelectionPoints_.clear();
+            return;
+        }
+        int left = freehandSelectionPoints_.front().x();
+        int right = left;
+        int top = freehandSelectionPoints_.front().y();
+        int bottom = top;
+        for (const QPoint& point : freehandSelectionPoints_) {
+            left = std::min(left, point.x());
+            right = std::max(right, point.x());
+            top = std::min(top, point.y());
+            bottom = std::max(bottom, point.y());
+        }
+        bounds = QRect(QPoint(left, top), QPoint(right, bottom));
+    } else {
+        bounds = QRect(strokeStartPoint_, lastImagePoint_).normalized();
+    }
+    if (bounds.isEmpty()) {
+        freehandSelectionPoints_.clear();
+        return;
+    }
+
+    selectionBounds_ = QRect(QPoint(0, 0), bounds.size());
+    selectionSourcePosition_ = bounds.topLeft();
+    selectionPosition_ = bounds.topLeft();
+    const int width = bounds.width();
+    const int height = bounds.height();
+    const std::size_t size = static_cast<std::size_t>(width) * height;
+    selectionMask_.assign(size, 0);
+    selectionPixels_.assign(size, 0);
+
+    QPainterPath freehandPath;
+    if (strokeTool_ == DrawTool::SelectFreehand) {
+        freehandPath.moveTo(freehandSelectionPoints_.front().x() + 0.5,
+                            freehandSelectionPoints_.front().y() + 0.5);
+        for (std::size_t index = 1; index < freehandSelectionPoints_.size();
+             ++index) {
+            freehandPath.lineTo(freehandSelectionPoints_[index].x() + 0.5,
+                                freehandSelectionPoints_[index].y() + 0.5);
+        }
+        freehandPath.closeSubpath();
+    }
+
+    const double radiusX = width / 2.0;
+    const double radiusY = height / 2.0;
+    bool containsPixels = false;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            bool selected = strokeTool_ == DrawTool::SelectRectangle;
+            if (strokeTool_ == DrawTool::SelectEllipse) {
+                const double normalizedX = (x + 0.5 - radiusX) / radiusX;
+                const double normalizedY = (y + 0.5 - radiusY) / radiusY;
+                selected =
+                    normalizedX * normalizedX + normalizedY * normalizedY <=
+                    1.0;
+            } else if (strokeTool_ == DrawTool::SelectFreehand) {
+                selected = freehandPath.contains(
+                    QPointF(bounds.left() + x + 0.5, bounds.top() + y + 0.5));
+            }
+            if (!selected) {
+                continue;
+            }
+            const std::size_t localOffset =
+                static_cast<std::size_t>(y) * width + x;
+            selectionMask_[localOffset] = 1;
+            selectionPixels_[localOffset] =
+                level_->pixels[static_cast<std::size_t>(bounds.top() + y) *
+                                   Level::Width +
+                               bounds.left() + x];
+            containsPixels = true;
+        }
+    }
+    selectionActive_ = containsPixels;
+    selectionHasSource_ = containsPixels;
+    freehandSelectionPoints_.clear();
+    viewport()->update();
+}
+
+void LevelCanvas::clearSelection()
+{
+    const bool wasPending = selectionEditPending_;
+    selectionActive_ = false;
+    selectionHasSource_ = false;
+    selectionEditPending_ = false;
+    movingSelection_ = false;
+    selectionBounds_ = {};
+    selectionMask_.clear();
+    selectionPixels_.clear();
+    freehandSelectionPoints_.clear();
+    updateToolCursor();
+    viewport()->update();
+    if (wasPending) {
+        emit pendingSelectionEditChanged(false);
+    }
+}
+
+void LevelCanvas::setSelectionPosition(const QPoint& position)
+{
+    const int maximumX =
+        static_cast<int>(Level::Width) - selectionBounds_.width();
+    const int maximumY =
+        static_cast<int>(Level::Height) - selectionBounds_.height();
+    const QPoint constrained{std::clamp(position.x(), 0, maximumX),
+                             std::clamp(position.y(), 0, maximumY)};
+    if (constrained != selectionPosition_) {
+        selectionPosition_ = constrained;
+        if (!selectionEditPending_) {
+            selectionEditPending_ = true;
+            emit pendingSelectionEditChanged(true);
+        }
+    }
+}
+
+bool LevelCanvas::isSelectionTool(const DrawTool tool) const
+{
+    return tool == DrawTool::SelectRectangle ||
+           tool == DrawTool::SelectEllipse || tool == DrawTool::SelectFreehand;
+}
+
+void LevelCanvas::updateToolCursor()
+{
+    if (viewport() == nullptr || panning_ || movingSelection_) {
+        return;
+    }
+    viewport()->setCursor(drawTool_ == DrawTool::MoveSelection
+                              ? Qt::OpenHandCursor
+                              : Qt::CrossCursor);
+}
+
 void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
 {
-    const auto startOffset =
-        static_cast<std::size_t>(point.y()) * Level::Width +
-        static_cast<std::size_t>(point.x());
-    const std::uint8_t target = level_->pixels[startOffset];
+    if (selectionActive_ && !selectionContains(point.x(), point.y())) {
+        return;
+    }
+    const std::uint8_t target = pixelAt(point.x(), point.y());
     if (target == index) {
         return;
     }
@@ -684,13 +1305,12 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
         for (const QPoint& neighbour : neighbours) {
             if (neighbour.x() < 0 || neighbour.y() < 0 ||
                 neighbour.x() >= static_cast<int>(Level::Width) ||
-                neighbour.y() >= static_cast<int>(Level::Height)) {
+                neighbour.y() >= static_cast<int>(Level::Height) ||
+                (selectionActive_ &&
+                 !selectionContains(neighbour.x(), neighbour.y()))) {
                 continue;
             }
-            const auto offset =
-                static_cast<std::size_t>(neighbour.y()) * Level::Width +
-                static_cast<std::size_t>(neighbour.x());
-            if (level_->pixels[offset] == target) {
+            if (pixelAt(neighbour.x(), neighbour.y()) == target) {
                 setPixel(neighbour.x(), neighbour.y(), index);
                 pending.push_back(neighbour);
             }
@@ -726,7 +1346,9 @@ QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
     const bool constrain = strokeTool_ == DrawTool::Rectangle ||
                            strokeTool_ == DrawTool::FilledRectangle ||
                            strokeTool_ == DrawTool::Ellipse ||
-                           strokeTool_ == DrawTool::FilledEllipse;
+                           strokeTool_ == DrawTool::FilledEllipse ||
+                           strokeTool_ == DrawTool::SelectRectangle ||
+                           strokeTool_ == DrawTool::SelectEllipse;
     if (!constrain) {
         return point;
     }
@@ -768,6 +1390,16 @@ QString LevelCanvas::commandText() const
         return tr("Ellipse");
     case DrawTool::FilledEllipse:
         return tr("Filled ellipse");
+    case DrawTool::Spray:
+        return tr("Spray stroke");
+    case DrawTool::SelectRectangle:
+        return tr("Rectangle selection");
+    case DrawTool::SelectEllipse:
+        return tr("Ellipse selection");
+    case DrawTool::SelectFreehand:
+        return tr("Freehand selection");
+    case DrawTool::MoveSelection:
+        return tr("Move selection");
     }
     return tr("Edit");
 }
@@ -790,8 +1422,6 @@ void LevelCanvas::updateScrollBars()
 
 void LevelCanvas::reportPosition(const QPoint& point)
 {
-    const std::size_t offset =
-        static_cast<std::size_t>(point.y()) * Level::Width +
-        static_cast<std::size_t>(point.x());
-    emit cursorPositionChanged(point.x(), point.y(), level_->pixels[offset]);
+    emit cursorPositionChanged(point.x(), point.y(),
+                               pixelAt(point.x(), point.y()));
 }
