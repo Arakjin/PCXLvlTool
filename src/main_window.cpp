@@ -476,6 +476,14 @@ void MainWindow::createToolBars()
         } else if (tool == DrawTool::Polygon) {
             button->setToolTip(tr("Polygon: click corners, double-click or "
                                   "press Enter to finish"));
+        } else if (tool == DrawTool::Line) {
+            button->setToolTip(
+                tr("Line: hold Shift for horizontal, vertical, or 45-degree "
+                   "directions"));
+        } else if (tool == DrawTool::BezierCurve) {
+            button->setToolTip(
+                tr("Bezier curve: hold Shift to constrain only the initial "
+                   "line; control-point adjustments remain free"));
         } else if (tool == DrawTool::Eraser) {
             button->setToolTip(tr("Eraser: makes upper layers transparent; "
                                   "writes Color Chart 1 (file index 0) on "

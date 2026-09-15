@@ -49,6 +49,8 @@ The current milestone supports:
 - sparse spray dragging with distance-based spacing, while a single click keeps
   the full spray dab
 - live, non-destructive previews while dragging line and shape tools
+- `Shift` constrains lines to the nearest horizontal, vertical, or 45-degree
+  direction; for Bezier curves it constrains only the initial baseline
 - Paint-style Bezier workflow: drag a baseline and then its two bend points;
   the completed curve is committed as one undo operation
 - `Shift`-constrained squares and circles, plus selectable sharp or rounded

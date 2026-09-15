@@ -468,6 +468,25 @@ int main(int argc, char *argv[])
     canvas.setLevel(nullptr);
     clearLevel(level);
     canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::Line);
+    canvas.setSelectedIndex(59);
+    canvas.setToolThickness(DrawTool::Line, 1);
+    drag(viewport, {80.5, 100.5}, {90.5, 103.5}, Qt::ShiftModifier);
+    ok &= expect(level.pixels[offset(90, 100)] == 59 &&
+                     level.pixels[offset(90, 103)] == 0,
+                 "Shift should snap a line to its nearest horizontal axis");
+    drag(viewport, {100.5, 100.5}, {103.5, 110.5}, Qt::ShiftModifier);
+    ok &= expect(level.pixels[offset(100, 110)] == 59 &&
+                     level.pixels[offset(103, 110)] == 0,
+                 "Shift should snap a line to its nearest vertical axis");
+    drag(viewport, {80.5, 110.5}, {90.5, 117.5}, Qt::ShiftModifier);
+    ok &= expect(level.pixels[offset(89, 119)] == 59 &&
+                     level.pixels[offset(90, 117)] == 0,
+                 "Shift should snap a line to its nearest 45-degree diagonal");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
     canvas.setDrawTool(DrawTool::BezierCurve);
     canvas.setSelectedIndex(61);
     canvas.setToolThickness(DrawTool::BezierCurve, 2);
@@ -491,6 +510,27 @@ int main(int argc, char *argv[])
                  "second Bezier bend should commit one curved undo operation");
     ok &= expect(canvas.toolThickness(DrawTool::BezierCurve) == 2,
                  "Bezier curve should remember its own thickness");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::BezierCurve);
+    canvas.setSelectedIndex(62);
+    canvas.setToolThickness(DrawTool::BezierCurve, 1);
+    drag(viewport, {130.5, 220.5}, {150.5, 226.5}, Qt::ShiftModifier);
+    drag(viewport, {136.5, 220.5}, {136.5, 210.5}, Qt::ShiftModifier);
+    drag(viewport, {144.5, 220.5}, {144.5, 210.5}, Qt::ShiftModifier);
+    bool shiftedBezierAboveBaseline = false;
+    for (int y = 208; y < 220; ++y) {
+        for (int x = 130; x <= 150; ++x) {
+            shiftedBezierAboveBaseline |= level.pixels[offset(x, y)] == 62;
+        }
+    }
+    ok &= expect(level.pixels[offset(130, 220)] == 62 &&
+                     level.pixels[offset(150, 220)] == 62 &&
+                     level.pixels[offset(150, 226)] == 0 &&
+                     shiftedBezierAboveBaseline,
+                 "Shift should constrain only the Bezier baseline");
 
     canvas.setLevel(nullptr);
     clearLevel(level);

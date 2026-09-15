@@ -937,9 +937,13 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
         }
         if (drawing_ && (event->buttons() & strokeButton_) &&
             strokeTool_ == DrawTool::BezierCurve) {
-            lastImagePoint_ = point;
+            lastImagePoint_ =
+                curveStage_ == CurveStage::Baseline &&
+                        (event->modifiers() & Qt::ShiftModifier)
+                    ? constrainedLinePoint(point)
+                    : point;
             if (curveStage_ == CurveStage::Baseline) {
-                curveEndPoint_ = point;
+                curveEndPoint_ = lastImagePoint_;
                 const QPoint delta = curveEndPoint_ - curveStartPoint_;
                 curveControl1_ = curveStartPoint_ + delta / 3;
                 curveControl2_ = curveStartPoint_ + delta * 2 / 3;
@@ -2242,6 +2246,12 @@ std::uint8_t LevelCanvas::paintIndex(const Qt::MouseButton button) const
 
 QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
 {
+    if (strokeTool_ == DrawTool::Line ||
+        (strokeTool_ == DrawTool::BezierCurve &&
+         curveStage_ == CurveStage::Baseline)) {
+        return constrainedLinePoint(point);
+    }
+
     const bool constrain = strokeTool_ == DrawTool::Rectangle ||
                            strokeTool_ == DrawTool::Ellipse ||
                            strokeTool_ == DrawTool::SelectRectangle ||
@@ -2264,6 +2274,31 @@ QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
         {std::max(std::abs(deltaX), std::abs(deltaY)), availableX, availableY});
     return {strokeStartPoint_.x() + directionX * side,
             strokeStartPoint_.y() + directionY * side};
+}
+
+QPoint LevelCanvas::constrainedLinePoint(const QPoint& point) const
+{
+    const int deltaX = point.x() - strokeStartPoint_.x();
+    const int deltaY = point.y() - strokeStartPoint_.y();
+    const int absoluteX = std::abs(deltaX);
+    const int absoluteY = std::abs(deltaY);
+    if (absoluteX == 0 && absoluteY == 0) {
+        return strokeStartPoint_;
+    }
+
+    // tan(22.5 degrees): the boundary halfway between an axis and a diagonal.
+    constexpr double AxisThreshold = 0.4142135623730951;
+    if (absoluteY <= absoluteX * AxisThreshold) {
+        return {point.x(), strokeStartPoint_.y()};
+    }
+    if (absoluteX <= absoluteY * AxisThreshold) {
+        return {strokeStartPoint_.x(), point.y()};
+    }
+
+    // Orthogonally project the cursor onto the nearest 45-degree diagonal.
+    const int distance = (absoluteX + absoluteY + 1) / 2;
+    return {strokeStartPoint_.x() + (deltaX < 0 ? -distance : distance),
+            strokeStartPoint_.y() + (deltaY < 0 ? -distance : distance)};
 }
 
 QString LevelCanvas::commandText() const

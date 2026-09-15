@@ -169,6 +169,7 @@ private:
     void beginStroke(const QString& commandText);
     void commitStroke();
     std::uint8_t paintIndex(Qt::MouseButton button) const;
+    QPoint constrainedLinePoint(const QPoint& point) const;
     QPoint constrainedShapePoint(const QPoint& point) const;
     QString commandText() const;
     void updateScrollBars();
