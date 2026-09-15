@@ -1,7 +1,6 @@
 #include "layer_model.h"
 
 #include <algorithm>
-#include <utility>
 
 void initializeBackgroundLayer(Level& level)
 {
@@ -10,11 +9,11 @@ void initializeBackgroundLayer(Level& level)
             std::min(level.activeLayer, level.layers.size() - 1);
         return;
     }
-    Level::Layer background;
+    level.layers.emplace_back();
+    Level::Layer& background = level.layers.back();
     background.name = "Background";
     background.pixels = level.pixels;
     background.mask.fill(1);
-    level.layers.push_back(std::move(background));
     level.activeLayer = 0;
 }
 

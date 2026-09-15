@@ -113,7 +113,8 @@ int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
 
-    Level level;
+    auto levelStorage = std::make_unique<Level>();
+    Level& level = *levelStorage;
     LevelCanvas canvas;
     canvas.resize(320, 240);
     canvas.setLevel(&level);

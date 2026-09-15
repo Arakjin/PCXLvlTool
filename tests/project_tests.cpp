@@ -43,13 +43,13 @@ int main()
     source->palette[57] = {12, 34, 56};
     initializeBackgroundLayer(*source);
     source->layers[0].pixels[123] = 57;
-    Level::Layer upper;
+    source->layers.emplace_back();
+    Level::Layer& upper = source->layers.back();
     upper.name = "Foreground";
     upper.visible = false;
     upper.locked = true;
     upper.pixels[456] = 99;
     upper.mask[456] = 1;
-    source->layers.push_back(std::move(upper));
     source->activeLayer = 1;
     flattenLayers(*source);
 

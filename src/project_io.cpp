@@ -7,6 +7,7 @@
 #include <exception>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -131,9 +132,9 @@ bool loadProject(const std::filesystem::path& path, Level& level,
             throw std::runtime_error("project dimensions are not 640 x 800");
         }
 
-        Level loaded;
-        loaded.name = readString(input);
-        for (RGB& color : loaded.palette) {
+        auto loaded = std::make_unique<Level>();
+        loaded->name = readString(input);
+        for (RGB& color : loaded->palette) {
             const int red = input.get();
             const int green = input.get();
             const int blue = input.get();
@@ -152,9 +153,9 @@ bool loadProject(const std::filesystem::path& path, Level& level,
             activeLayer >= layerCount) {
             throw std::runtime_error("project has invalid layer metadata");
         }
-        loaded.layers.resize(layerCount);
-        loaded.activeLayer = activeLayer;
-        for (Level::Layer& layer : loaded.layers) {
+        loaded->layers.resize(layerCount);
+        loaded->activeLayer = activeLayer;
+        for (Level::Layer& layer : loaded->layers) {
             layer.name = readString(input);
             const int flags = input.get();
             if (flags == std::char_traits<char>::eof()) {
@@ -173,11 +174,11 @@ bool loadProject(const std::filesystem::path& path, Level& level,
         if (input.peek() != std::char_traits<char>::eof()) {
             throw std::runtime_error("unexpected data after project layers");
         }
-        loaded.layers.front().name = "Background";
-        loaded.layers.front().visible = true;
-        loaded.layers.front().mask.fill(1);
-        flattenLayers(loaded);
-        level = std::move(loaded);
+        loaded->layers.front().name = "Background";
+        loaded->layers.front().visible = true;
+        loaded->layers.front().mask.fill(1);
+        flattenLayers(*loaded);
+        level = std::move(*loaded);
         return true;
     } catch (const std::exception& exception) {
         error = exception.what();

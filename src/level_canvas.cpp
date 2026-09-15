@@ -776,9 +776,9 @@ bool LevelCanvas::addLayer()
         return false;
     }
     commitSelection();
-    Level::Layer layer;
-    layer.name = "Layer " + std::to_string(level_->layers.size());
-    level_->layers.push_back(std::move(layer));
+    level_->layers.emplace_back();
+    level_->layers.back().name =
+        "Layer " + std::to_string(level_->layers.size() - 1);
     level_->activeLayer = level_->layers.size() - 1;
     undoStack_.clear();
     emit layersChanged();
@@ -808,11 +808,16 @@ bool LevelCanvas::duplicateActiveLayer()
         return false;
     }
     commitSelection();
-    Level::Layer copy = level_->layers[level_->activeLayer];
-    copy.name += " copy";
+    const std::size_t sourceIndex = level_->activeLayer;
     const auto position = level_->layers.begin() +
-                          static_cast<std::ptrdiff_t>(level_->activeLayer + 1);
-    level_->layers.insert(position, std::move(copy));
+                          static_cast<std::ptrdiff_t>(sourceIndex + 1);
+    auto inserted = level_->layers.emplace(position);
+    const Level::Layer& source = level_->layers[sourceIndex];
+    inserted->name = source.name + " copy";
+    inserted->visible = source.visible;
+    inserted->locked = source.locked;
+    inserted->pixels = source.pixels;
+    inserted->mask = source.mask;
     ++level_->activeLayer;
     undoStack_.clear();
     flattenLayers(*level_);
