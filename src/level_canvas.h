@@ -40,6 +40,7 @@ enum class DrawTool {
     SelectEllipse,
     SelectFreehand,
     MoveSelection,
+    BezierCurve,
 };
 
 class LevelCanvas final : public QAbstractScrollArea {
@@ -86,6 +87,13 @@ protected:
     void leaveEvent(QEvent* event) override;
 
 private:
+    enum class CurveStage {
+        None,
+        Baseline,
+        FirstControl,
+        SecondControl,
+    };
+
     QPoint imagePoint(const QPointF& viewportPoint) const;
     bool setPixel(int x, int y, std::uint8_t index);
     bool setBrushPixel(int x, int y, std::uint8_t index, int thickness);
@@ -93,6 +101,9 @@ private:
     bool selectionContains(int x, int y) const;
     void drawLine(const QPoint& from, const QPoint& to, std::uint8_t index,
                   int thickness);
+    void drawBezier(const QPoint& start, const QPoint& control1,
+                    const QPoint& control2, const QPoint& end,
+                    std::uint8_t index, int thickness);
     void sprayLine(const QPoint& from, const QPoint& to, std::uint8_t index,
                    int radius);
     void sprayAt(const QPoint& point, std::uint8_t index, int radius);
@@ -108,6 +119,8 @@ private:
     void setSelectionPosition(const QPoint& position);
     bool isSelectionTool(DrawTool tool) const;
     void updateToolCursor();
+    void cancelCurve();
+    void commitCurve();
     void beginStroke(const QString& commandText);
     void commitStroke();
     std::uint8_t paintIndex() const;
@@ -129,11 +142,13 @@ private:
     int rectangleThickness_ = 1;
     int ellipseThickness_ = 1;
     int sprayThickness_ = 8;
+    int curveThickness_ = 1;
     int rectangleCornerRadius_ = 0;
     int strokeCornerRadius_ = 0;
     bool drawing_ = false;
     bool panning_ = false;
     bool movingSelection_ = false;
+    CurveStage curveStage_ = CurveStage::None;
     QPoint lastImagePoint_;
     QPoint strokeStartPoint_;
     QString strokeCommandText_;
@@ -142,6 +157,10 @@ private:
     QPoint selectionMoveStart_;
     QPoint selectionSourcePosition_;
     QPoint selectionPosition_;
+    QPoint curveStartPoint_;
+    QPoint curveEndPoint_;
+    QPoint curveControl1_;
+    QPoint curveControl2_;
     QRect selectionBounds_;
     bool selectionActive_ = false;
     bool selectionHasSource_ = false;

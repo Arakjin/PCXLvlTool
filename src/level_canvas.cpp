@@ -108,6 +108,7 @@ LevelCanvas::LevelCanvas(QWidget* parent) : QAbstractScrollArea(parent)
 void LevelCanvas::setLevel(Level* level)
 {
     clearSelection();
+    curveStage_ = CurveStage::None;
     level_ = level;
     drawing_ = false;
     undoStack_.clear();
@@ -148,6 +149,9 @@ void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 
 void LevelCanvas::setDrawTool(const DrawTool tool)
 {
+    if (drawTool_ == DrawTool::BezierCurve && tool != DrawTool::BezierCurve) {
+        cancelCurve();
+    }
     drawTool_ = tool;
     updateToolCursor();
 }
@@ -167,6 +171,8 @@ void LevelCanvas::setToolThickness(const DrawTool tool, const int thickness)
         ellipseThickness_ = value;
     } else if (tool == DrawTool::Spray) {
         sprayThickness_ = value;
+    } else if (tool == DrawTool::BezierCurve) {
+        curveThickness_ = value;
     }
 }
 
@@ -189,6 +195,9 @@ int LevelCanvas::toolThickness(const DrawTool tool) const
     }
     if (tool == DrawTool::Spray) {
         return sprayThickness_;
+    }
+    if (tool == DrawTool::BezierCurve) {
+        return curveThickness_;
     }
     return 1;
 }
@@ -242,6 +251,9 @@ void LevelCanvas::applyPalette(const std::array<RGB, 256>& palette)
 
 void LevelCanvas::commitSelection()
 {
+    if (curveStage_ != CurveStage::None) {
+        commitCurve();
+    }
     if (!selectionActive_ || level_ == nullptr) {
         return;
     }
@@ -289,6 +301,7 @@ void LevelCanvas::commitSelection()
 
 void LevelCanvas::deleteSelection()
 {
+    cancelCurve();
     if (!selectionActive_ || level_ == nullptr) {
         return;
     }
@@ -511,6 +524,20 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
             if (isSelectionTool(drawTool_) && selectionActive_) {
                 commitSelection();
             }
+            if (drawTool_ == DrawTool::BezierCurve &&
+                curveStage_ != CurveStage::None) {
+                drawing_ = true;
+                lastImagePoint_ = point;
+                if (curveStage_ == CurveStage::FirstControl) {
+                    curveControl1_ = point;
+                } else if (curveStage_ == CurveStage::SecondControl) {
+                    curveControl2_ = point;
+                }
+                reportPosition(point);
+                viewport()->update();
+                event->accept();
+                return;
+            }
             lastImagePoint_ = point;
             strokeStartPoint_ = point;
             strokeTool_ = drawTool_;
@@ -536,7 +563,14 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                                       strokeTool_ == DrawTool::Eraser ||
                                       strokeTool_ == DrawTool::Spray;
                 beginStroke(commandText());
-                if (strokeTool_ == DrawTool::Spray) {
+                if (strokeTool_ == DrawTool::BezierCurve) {
+                    curveStage_ = CurveStage::Baseline;
+                    curveStartPoint_ = point;
+                    curveEndPoint_ = point;
+                    curveControl1_ = point;
+                    curveControl2_ = point;
+                    viewport()->update();
+                } else if (strokeTool_ == DrawTool::Spray) {
                     sprayAt(point, strokePaintIndex_, strokeThickness_);
                     viewport()->update();
                 } else if (freehand) {
@@ -573,6 +607,22 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
         if (movingSelection_ && (event->buttons() & Qt::LeftButton)) {
             setSelectionPosition(selectionMoveStart_ +
                                  (point - selectionMoveAnchor_));
+            viewport()->update();
+            return;
+        }
+        if (drawing_ && (event->buttons() & Qt::LeftButton) &&
+            strokeTool_ == DrawTool::BezierCurve) {
+            lastImagePoint_ = point;
+            if (curveStage_ == CurveStage::Baseline) {
+                curveEndPoint_ = point;
+                const QPoint delta = curveEndPoint_ - curveStartPoint_;
+                curveControl1_ = curveStartPoint_ + delta / 3;
+                curveControl2_ = curveStartPoint_ + delta * 2 / 3;
+            } else if (curveStage_ == CurveStage::FirstControl) {
+                curveControl1_ = point;
+            } else if (curveStage_ == CurveStage::SecondControl) {
+                curveControl2_ = point;
+            }
             viewport()->update();
             return;
         }
@@ -631,6 +681,24 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
                                       ? constrainedShapePoint(releasePoint)
                                       : releasePoint;
             }
+            if (strokeTool_ == DrawTool::BezierCurve) {
+                if (curveStage_ == CurveStage::Baseline) {
+                    curveEndPoint_ = lastImagePoint_;
+                    const QPoint delta = curveEndPoint_ - curveStartPoint_;
+                    curveControl1_ = curveStartPoint_ + delta / 3;
+                    curveControl2_ = curveStartPoint_ + delta * 2 / 3;
+                    curveStage_ = CurveStage::FirstControl;
+                } else if (curveStage_ == CurveStage::FirstControl) {
+                    curveControl1_ = lastImagePoint_;
+                    curveStage_ = CurveStage::SecondControl;
+                } else if (curveStage_ == CurveStage::SecondControl) {
+                    curveControl2_ = lastImagePoint_;
+                    commitCurve();
+                }
+                viewport()->update();
+                event->accept();
+                return;
+            }
             if (strokeTool_ == DrawTool::Line) {
                 drawLine(strokeStartPoint_, lastImagePoint_, strokePaintIndex_,
                          strokeThickness_);
@@ -681,12 +749,19 @@ void LevelCanvas::keyPressEvent(QKeyEvent* event)
         return;
     }
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        if (curveStage_ != CurveStage::None) {
+            commitCurve();
+        }
         commitSelection();
         event->accept();
         return;
     }
-    if (event->key() == Qt::Key_Escape && selectionActive_) {
-        clearSelection();
+    if (event->key() == Qt::Key_Escape &&
+        (selectionActive_ || curveStage_ != CurveStage::None)) {
+        cancelCurve();
+        if (selectionActive_) {
+            clearSelection();
+        }
         event->accept();
         return;
     }
@@ -900,6 +975,46 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
     }
 }
 
+void LevelCanvas::drawBezier(const QPoint& start, const QPoint& control1,
+                             const QPoint& control2, const QPoint& end,
+                             const std::uint8_t index, const int thickness)
+{
+    const auto distance = [](const QPoint& first, const QPoint& second) {
+        const double x = second.x() - first.x();
+        const double y = second.y() - first.y();
+        return std::sqrt(x * x + y * y);
+    };
+    const double controlLength = distance(start, control1) +
+                                 distance(control1, control2) +
+                                 distance(control2, end);
+    const int steps =
+        std::clamp(static_cast<int>(std::ceil(controlLength * 2)), 1, 4096);
+    QPoint previous = start;
+    for (int step = 1; step <= steps; ++step) {
+        const double t = static_cast<double>(step) / steps;
+        const double inverse = 1.0 - t;
+        const double startWeight = inverse * inverse * inverse;
+        const double control1Weight = 3.0 * inverse * inverse * t;
+        const double control2Weight = 3.0 * inverse * t * t;
+        const double endWeight = t * t * t;
+        const QPoint current{
+            static_cast<int>(std::round(
+                startWeight * start.x() + control1Weight * control1.x() +
+                control2Weight * control2.x() + endWeight * end.x())),
+            static_cast<int>(std::round(
+                startWeight * start.y() + control1Weight * control1.y() +
+                control2Weight * control2.y() + endWeight * end.y())),
+        };
+        if (current != previous) {
+            drawLine(previous, current, index, thickness);
+            previous = current;
+        }
+    }
+    if (previous != end) {
+        drawLine(previous, end, index, thickness);
+    }
+}
+
 void LevelCanvas::drawRectangle(const QPoint& from, const QPoint& to,
                                 const std::uint8_t index, const int thickness,
                                 const int cornerRadius, const bool filled)
@@ -1012,7 +1127,44 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
 
 void LevelCanvas::paintShapePreview(QPainter& painter) const
 {
-    if (!drawing_ || level_ == nullptr ||
+    if (level_ == nullptr) {
+        return;
+    }
+    if (curveStage_ != CurveStage::None) {
+        const RGB& rgb = level_->palette[strokePaintIndex_];
+        const QColor color(rgb.r, rgb.g, rgb.b);
+        const auto canvasPoint = [this](const QPoint& point) {
+            return QPointF((point.x() + 0.5) * zoom_,
+                           (point.y() + 0.5) * zoom_);
+        };
+        QPainterPath curve;
+        curve.moveTo(canvasPoint(curveStartPoint_));
+        curve.cubicTo(canvasPoint(curveControl1_), canvasPoint(curveControl2_),
+                      canvasPoint(curveEndPoint_));
+
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(
+            QPen(color, std::max<qreal>(1.0, zoom_ * strokeThickness_)));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(curve);
+
+        QPen guidePen(palette().color(QPalette::BrightText), 1, Qt::DashLine);
+        guidePen.setCosmetic(true);
+        painter.setPen(guidePen);
+        painter.drawLine(canvasPoint(curveStartPoint_),
+                         canvasPoint(curveControl1_));
+        painter.drawLine(canvasPoint(curveControl2_),
+                         canvasPoint(curveEndPoint_));
+        const qreal handleRadius = 3.0;
+        painter.drawEllipse(canvasPoint(curveControl1_), handleRadius,
+                            handleRadius);
+        painter.drawEllipse(canvasPoint(curveControl2_), handleRadius,
+                            handleRadius);
+        painter.restore();
+        return;
+    }
+    if (!drawing_ ||
         (strokeTool_ != DrawTool::Line && strokeTool_ != DrawTool::Rectangle &&
          strokeTool_ != DrawTool::FilledRectangle &&
          strokeTool_ != DrawTool::Ellipse &&
@@ -1281,6 +1433,31 @@ void LevelCanvas::updateToolCursor()
                               : Qt::CrossCursor);
 }
 
+void LevelCanvas::cancelCurve()
+{
+    if (curveStage_ == CurveStage::None) {
+        return;
+    }
+    curveStage_ = CurveStage::None;
+    drawing_ = false;
+    strokeChanges_.clear();
+    strokeChangeIndices_.clear();
+    viewport()->update();
+}
+
+void LevelCanvas::commitCurve()
+{
+    if (curveStage_ == CurveStage::None || level_ == nullptr) {
+        return;
+    }
+    curveStage_ = CurveStage::None;
+    drawing_ = false;
+    drawBezier(curveStartPoint_, curveControl1_, curveControl2_, curveEndPoint_,
+               strokePaintIndex_, strokeThickness_);
+    commitStroke();
+    viewport()->update();
+}
+
 void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
 {
     if (selectionActive_ && !selectionContains(point.x(), point.y())) {
@@ -1400,6 +1577,8 @@ QString LevelCanvas::commandText() const
         return tr("Freehand selection");
     case DrawTool::MoveSelection:
         return tr("Move selection");
+    case DrawTool::BezierCurve:
+        return tr("Bezier curve");
     }
     return tr("Edit");
 }

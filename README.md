@@ -26,12 +26,14 @@ The current milestone supports:
 - opening, saving, and saving `.LEV` files under a new name
 - pixel-perfect indexed rendering at 25%, 50%, 100%, 200%, 400%, and 800%
 - panning with the middle mouse button
-- Paint-style two-column toolbox with pencil, eraser, line, rectangle, filled
-  rectangle, ellipse, filled ellipse, spray, flood-fill, eyedropper, and
-  selection tools
+- Paint-style two-column toolbox with pencil, eraser, line, cubic Bezier curve,
+  rectangle, filled rectangle, ellipse, filled ellipse, spray, flood-fill,
+  eyedropper, and selection tools
 - independently remembered 1-32 pixel thickness for pencil, eraser, line,
   rectangle outline, and ellipse outline
 - live, non-destructive previews while dragging line and shape tools
+- Paint-style Bezier workflow: drag a baseline and then its two bend points;
+  the completed curve is committed as one undo operation
 - `Shift`-constrained squares and circles, plus selectable sharp or rounded
   rectangle corners
 - rectangular, elliptical, and freehand selections stored as temporary indexed

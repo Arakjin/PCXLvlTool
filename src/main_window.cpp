@@ -299,6 +299,8 @@ QIcon toolIcon(const DrawTool tool)
         return QIcon(QStringLiteral(":/icons/icons/lasso.svg"));
     case DrawTool::MoveSelection:
         return QIcon(QStringLiteral(":/icons/icons/hand-move.svg"));
+    case DrawTool::BezierCurve:
+        return QIcon(QStringLiteral(":/icons/icons/bezier.svg"));
     }
     return {};
 }
@@ -411,11 +413,12 @@ void MainWindow::createMaterialDock()
     grid->setSpacing(2);
     auto* toolGroup = new QButtonGroup(toolGrid);
     toolGroup->setExclusive(true);
-    const std::array<std::pair<const char*, DrawTool>, 14> tools{{
+    const std::array<std::pair<const char*, DrawTool>, 15> tools{{
         {"Pencil", DrawTool::Pencil},
         {"Eraser (index 0)", DrawTool::Eraser},
         {"Spray", DrawTool::Spray},
         {"Line", DrawTool::Line},
+        {"Bezier curve", DrawTool::BezierCurve},
         {"Rectangle", DrawTool::Rectangle},
         {"Filled rectangle", DrawTool::FilledRectangle},
         {"Ellipse", DrawTool::Ellipse},
@@ -459,6 +462,10 @@ void MainWindow::createMaterialDock()
         contents);
     selectionHelp->setWordWrap(true);
     layout->addWidget(selectionHelp);
+    auto* curveHelp = new QLabel(
+        tr("Curve: drag the baseline, then drag both bend points."), contents);
+    curveHelp->setWordWrap(true);
+    layout->addWidget(curveHelp);
 
     auto* thicknessLayout = new QHBoxLayout();
     thicknessLayout->addWidget(new QLabel(tr("Thickness:"), contents));
@@ -499,7 +506,8 @@ void MainWindow::createMaterialDock()
                 selectedTool == DrawTool::Line ||
                 selectedTool == DrawTool::Rectangle ||
                 selectedTool == DrawTool::Ellipse ||
-                selectedTool == DrawTool::Spray;
+                selectedTool == DrawTool::Spray ||
+                selectedTool == DrawTool::BezierCurve;
             const QSignalBlocker blocker(thicknessSpinBox);
             thicknessSpinBox->setEnabled(supportsThickness);
             thicknessSpinBox->setValue(canvas_->toolThickness(selectedTool));

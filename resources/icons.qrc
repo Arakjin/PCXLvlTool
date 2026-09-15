@@ -14,5 +14,6 @@
     <file>icons/select-ellipse.svg</file>
     <file>icons/lasso.svg</file>
     <file>icons/hand-move.svg</file>
+    <file>icons/bezier.svg</file>
   </qresource>
 </RCC>

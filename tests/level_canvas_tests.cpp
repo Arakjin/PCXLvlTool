@@ -356,6 +356,33 @@ int main(int argc, char *argv[])
 
     canvas.setLevel(nullptr);
     clearLevel(level);
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::BezierCurve);
+    canvas.setSelectedIndex(61);
+    canvas.setToolThickness(DrawTool::BezierCurve, 2);
+    drag(viewport, {100.5, 200.5}, {120.5, 200.5});
+    ok &= expect(level.pixels[offset(110, 200)] == 0 &&
+                     canvas.undoStack()->count() == 0,
+                 "Bezier baseline should remain a non-destructive preview");
+    drag(viewport, {106.5, 200.5}, {106.5, 190.5});
+    ok &= expect(canvas.undoStack()->count() == 0,
+                 "first Bezier bend should keep the curve in preview");
+    drag(viewport, {114.5, 200.5}, {114.5, 190.5});
+    bool curvedAboveBaseline = false;
+    for (int y = 188; y < 199; ++y) {
+        for (int x = 100; x <= 120; ++x) {
+            curvedAboveBaseline |= level.pixels[offset(x, y)] == 61;
+        }
+    }
+    ok &= expect(level.pixels[offset(100, 200)] == 61 &&
+                     level.pixels[offset(120, 200)] == 61 &&
+                     curvedAboveBaseline && canvas.undoStack()->count() == 1,
+                 "second Bezier bend should commit one curved undo operation");
+    ok &= expect(canvas.toolThickness(DrawTool::BezierCurve) == 2,
+                 "Bezier curve should remember its own thickness");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
     for (int y = 99; y <= 102; ++y) {
         for (int x = 99; x <= 102; ++x) {
             level.pixels[offset(x, y)] = 77;
