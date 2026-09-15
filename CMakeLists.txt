@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(VWingLevTools LANGUAGES CXX)
 
+find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+
 add_library(vwing_level_format
     src/lev_reader.cpp
     src/lev_writer.cpp
@@ -32,7 +34,20 @@ add_executable(levroundtrip
 )
 target_link_libraries(levroundtrip PRIVATE vwing_level_format)
 
-foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx levroundtrip)
+add_executable(VWingLevelEditor WIN32
+    src/main.cpp
+    src/main_window.cpp
+    src/main_window.h
+    src/level_canvas.cpp
+    src/level_canvas.h
+)
+target_link_libraries(VWingLevelEditor PRIVATE
+    vwing_level_format
+    Qt6::Widgets
+)
+set_target_properties(VWingLevelEditor PROPERTIES AUTOMOC ON)
+
+foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx levroundtrip VWingLevelEditor)
     target_compile_features(${target} PRIVATE cxx_std_17)
     set_target_properties(${target} PROPERTIES
         CXX_EXTENSIONS OFF
@@ -91,4 +106,9 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME lev_writer_tests COMMAND lev_writer_tests)
+
+    add_test(NAME gui_smoke_test COMMAND VWingLevelEditor --smoke-test)
+    set_tests_properties(gui_smoke_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()

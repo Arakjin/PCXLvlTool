@@ -95,6 +95,11 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   1.91 output, and all ten reference levels preserve decoded content across a
   round trip. A writer-generated `LEVEL11.LEV`, renamed internally to `TEST`,
   loaded and played correctly in the original game.
+- Milestone 5, minimal GUI: implemented and build-tested with Qt 6 using both
+  GCC and Clang. Open, Save, Save As, indexed canvas rendering, fixed zoom
+  levels, middle-button pan, pencil drawing, material-index selection, cursor
+  status, and unsaved-change prompts are present. Interactive visual testing is
+  still pending.
 
 ## Questions to investigate
 
