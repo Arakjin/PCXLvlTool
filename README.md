@@ -18,7 +18,7 @@ CMake, and the C++ standard library.
 ## License
 
 PCX Level Tool is released under the [MIT License](LICENSE). Copyright (c)
-2026 Weckman. Third-party artwork retains its own licenses as documented
+2026 Panu Weckman. Third-party artwork retains its own licenses as documented
 below.
 
 ## Documentation
