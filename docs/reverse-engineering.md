@@ -30,6 +30,7 @@ cmake --build build
 ./build/levcompare ../LEVEL1.LEV ../LEVEL2.LEV
 ./build/pcxfixtures build/oracle
 ./build/lev_tests build/oracle
+./build/lev2pcx ../LEVEL1.LEV build/LEVEL1.PCX
 ```
 
 `levdump` currently reports only directly observable byte-level properties:
@@ -48,6 +49,10 @@ byte-level comparison boundaries, not assumed format block boundaries.
 controlled converter experiments. Its DOS-compatible filenames cover uniform
 images, individual corner/ordering pixels, stripe and checkerboard patterns,
 long runs, deterministic random pixels, and a palette-only change.
+
+`lev2pcx` decodes a validated LEV into the internal `Level` model and writes a
+standard 640 x 800, 8-bit indexed PCX while preserving every palette index and
+RGB palette entry.
 
 The raw inspection sections do not assign format meanings to bytes. After
 those sections were implemented, controlled converter tests established the
@@ -74,6 +79,10 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
   palette; some header fields remain intentionally unknown.
 - Milestone 2, LEV reader: implemented and validated against the ten-file
   reference corpus and controlled converter outputs.
+- Milestone 3, PCX export: implemented. All ten reference levels export to PCX
+  files accepted by an independent decoder. All 15 controlled pixel/palette
+  fixtures round-trip from LEV to PCX byte-for-byte identically to their source
+  PCX files.
 
 ## Questions to investigate
 

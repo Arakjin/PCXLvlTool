@@ -4,6 +4,7 @@ project(VWingLevTools LANGUAGES CXX)
 
 add_library(vwing_level_format
     src/lev_reader.cpp
+    src/pcx_writer.cpp
 )
 target_include_directories(vwing_level_format PUBLIC src)
 
@@ -20,7 +21,12 @@ add_executable(pcxfixtures
     tools/pcxfixtures/main.cpp
 )
 
-foreach(target vwing_level_format levdump levcompare pcxfixtures)
+add_executable(lev2pcx
+    tools/lev2pcx/main.cpp
+)
+target_link_libraries(lev2pcx PRIVATE vwing_level_format)
+
+foreach(target vwing_level_format levdump levcompare pcxfixtures lev2pcx)
     target_compile_features(${target} PRIVATE cxx_std_17)
     set_target_properties(${target} PROPERTIES
         CXX_EXTENSIONS OFF
@@ -49,4 +55,19 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME lev_reader_tests COMMAND lev_tests)
+
+    add_executable(pcx_tests
+        tests/pcx_tests.cpp
+    )
+    target_link_libraries(pcx_tests PRIVATE vwing_level_format)
+    target_compile_features(pcx_tests PRIVATE cxx_std_17)
+    set_target_properties(pcx_tests PROPERTIES CXX_EXTENSIONS OFF)
+
+    if(MSVC)
+        target_compile_options(pcx_tests PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(pcx_tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME pcx_writer_tests COMMAND pcx_tests)
 endif()

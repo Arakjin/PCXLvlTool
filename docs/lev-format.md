@@ -84,8 +84,6 @@ must not be silently translated into a parser rule.
 
 ## Next confirmation tests
 
-1. Decode all ten freeware levels and reconstruct standard PCX files for an
-   independent image decoder.
-2. Test level-name lengths 0, 19, and 20 to determine termination and padding.
-3. Determine whether the freeware header difference represents a distinct
+1. Test level-name lengths 0, 19, and 20 to determine termination and padding.
+2. Determine whether the freeware header difference represents a distinct
    format version or only different converter behavior.
