@@ -16,9 +16,12 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontComboBox>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
@@ -30,6 +33,8 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -388,6 +393,12 @@ void MainWindow::createActions()
     QAction* publishAction = fileMenu->addAction(tr("&Publish LEV..."));
     connect(publishAction, &QAction::triggered, this,
             [this] { publishLevel(); });
+
+    QMenu* levelMenu = menuBar()->addMenu(tr("&Level"));
+    QAction* propertiesAction =
+        levelMenu->addAction(tr("&Properties..."));
+    connect(propertiesAction, &QAction::triggered, this,
+            &MainWindow::editLevelProperties);
 
     fileMenu->addSeparator();
     QAction* exitAction = fileMenu->addAction(tr("E&xit"));
@@ -1077,6 +1088,53 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
     return true;
 }
 
+void MainWindow::editLevelProperties()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Level properties"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+    auto* nameEdit = new QLineEdit(
+        QString::fromLatin1(level_->name.data(),
+                            static_cast<int>(level_->name.size())),
+        &dialog);
+    nameEdit->setMaxLength(20);
+    nameEdit->setValidator(new QRegularExpressionValidator(
+        QRegularExpression(QStringLiteral("[\\x20-\\x7E]{0,20}")),
+        nameEdit));
+    nameEdit->setToolTip(tr("Up to 20 printable ASCII characters"));
+    form->addRow(tr("Level name:"), nameEdit);
+    layout->addLayout(form);
+    auto* formatNote = new QLabel(
+        tr("The LEV format contains no known description or author field."),
+        &dialog);
+    formatNote->setWordWrap(true);
+    layout->addWidget(formatNote);
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    nameEdit->selectAll();
+    nameEdit->setFocus();
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const std::string name = nameEdit->text().toLatin1().toStdString();
+    if (name == level_->name) {
+        return;
+    }
+    level_->name = name;
+    nonUndoModified_ = true;
+    setModified(true);
+    statusBar()->showMessage(tr("Level name changed to %1")
+                                 .arg(nameEdit->text().isEmpty()
+                                          ? tr("(empty)")
+                                          : nameEdit->text()),
+                             3000);
+}
+
 void MainWindow::editSelectedPaletteColor()
 {
     const int index = paletteIndexFromColorChart(
@@ -1140,11 +1198,18 @@ void MainWindow::setModified(const bool modified)
 
 void MainWindow::updateWindowTitle()
 {
-    const QString name = projectPath_.empty()
-                             ? (publishPath_.empty()
-                                    ? tr("Untitled")
-                                    : toQString(publishPath_.filename()))
-                             : toQString(projectPath_.filename());
+    const QString filename = projectPath_.empty()
+                                 ? (publishPath_.empty()
+                                        ? tr("Untitled")
+                                        : toQString(publishPath_.filename()))
+                                 : toQString(projectPath_.filename());
+    const QString levelName =
+        QString::fromLatin1(level_->name.data(),
+                            static_cast<int>(level_->name.size()));
+    const QString document = levelName.isEmpty()
+                                 ? filename
+                                 : tr("%1 [%2]").arg(filename, levelName);
     setWindowTitle(tr("%1%2 — V-Wing Level Editor")
-                       .arg(modified_ ? QStringLiteral("*") : QString(), name));
+                       .arg(modified_ ? QStringLiteral("*") : QString(),
+                            document));
 }

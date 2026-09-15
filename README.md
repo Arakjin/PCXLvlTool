@@ -25,6 +25,8 @@ Run:
 The current milestone supports:
 
 - opening `.LEV` levels and layered `.vwp` projects
+- editing the in-game level-menu name through **Level > Properties**; LEV names
+  are limited to 20 printable ASCII characters
 - saving editable work as `.vwp`, plus a separate **Publish LEV** action that
   flattens the visible layers into a game-compatible `.LEV` file
 - up to five reorderable, binary visible/hidden layers; transparent pixels in
@@ -88,6 +90,8 @@ always uses that file's embedded palette unchanged.
 The converter's Color Chart uses human-facing numbers 1-256, while PCX and LEV
 store palette indices 0-255. The editor's color selectors show Color Chart
 numbers and the details panel also reports the corresponding file index.
+The researched LEV header has no description or author field, so those cannot
+be embedded in a published level.
 
 ## Command-line tools
 

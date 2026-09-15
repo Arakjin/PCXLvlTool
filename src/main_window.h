@@ -37,6 +37,7 @@ private:
     bool maybeSave();
     bool writeProject(const std::filesystem::path& path);
     bool writePublishedLevel(const std::filesystem::path& path);
+    void editLevelProperties();
     void refreshLayerList();
     void editSelectedPaletteColor();
     void loadPalette();

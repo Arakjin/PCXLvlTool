@@ -41,6 +41,12 @@ The files are read from the parent V-Wing directory and remain unmodified.
 | EOF - 769 | 1 | Confirmed | Standard 256-color PCX palette marker `0C`. It is copied unchanged by the converter and is present in all ten reference levels. |
 | EOF - 768 | 768 | Confirmed | 256 RGB palette entries, copied byte-for-byte from the PCX input by converter 1.91. |
 
+No description or author text exists in the headers of the eleven inspected
+levels. The converter asks only for the level-menu name, input PCX filename,
+and output LEV filename. Consequently, the name is the only supported editable
+LEV metadata field; description and author fields must not be inferred from the
+remaining binary header bytes.
+
 The `LEVEL3.LEV` name area differs from the other nine samples around offsets
 `0x0015` through `0x0018`. This is recorded as an anomaly only; it is not yet
 evidence for a variable-length field.
