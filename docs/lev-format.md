@@ -94,4 +94,3 @@ must not be silently translated into a parser rule.
 
 1. Determine whether the freeware header difference represents a distinct
    format version or only different converter behavior.
-2. Smoke-test classic writer output in the original V-Wing executable.

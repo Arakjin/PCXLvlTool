@@ -93,13 +93,11 @@ Raw format observations are maintained in [`lev-format.md`](lev-format.md).
 - Milestone 4, LEV writer: implementation and binary converter-oracle checks
   complete. All 20 controlled cases are byte-for-byte identical to converter
   1.91 output, and all ten reference levels preserve decoded content across a
-  round trip. Final completion still requires a smoke test in the original
-  game executable.
+  round trip. A writer-generated `LEVEL11.LEV`, renamed internally to `TEST`,
+  loaded and played correctly in the original game.
 
 ## Questions to investigate
 
 - What are the meanings of the still-unknown constant header bytes?
 - Does the one-byte freeware header shift identify a distinct format version
   or only a newer converter implementation?
-- Does a newly written classic-format level load and play correctly in the
-  original game executable?
