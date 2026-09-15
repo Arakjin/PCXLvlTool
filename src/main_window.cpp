@@ -484,6 +484,12 @@ void MainWindow::createToolBars()
             button->setToolTip(
                 tr("Bezier curve: hold Shift to constrain only the initial "
                    "line; control-point adjustments remain free"));
+        } else if (tool == DrawTool::SelectRectangle ||
+                   tool == DrawTool::SelectEllipse ||
+                   tool == DrawTool::SelectFreehand) {
+            button->setToolTip(
+                tr("Selection: Shift adds, Ctrl subtracts, Shift+Ctrl "
+                   "intersects with the current selection"));
         } else if (tool == DrawTool::Eraser) {
             button->setToolTip(tr("Eraser: makes upper layers transparent; "
                                   "writes Color Chart 1 (file index 0) on "

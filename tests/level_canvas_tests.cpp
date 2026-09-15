@@ -574,6 +574,56 @@ int main(int argc, char *argv[])
 
     canvas.setLevel(nullptr);
     clearLevel(level);
+    level.pixels[offset(10, 10)] = 77;
+    level.pixels[offset(15, 15)] = 77;
+    level.pixels[offset(20, 20)] = 77;
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectRectangle);
+    drag(viewport, {10.5, 10.5}, {10.5, 10.5});
+    drag(viewport, {20.5, 20.5}, {20.5, 20.5}, Qt::ShiftModifier);
+    canvas.deleteSelection();
+    ok &= expect(level.pixels[offset(10, 10)] == 0 &&
+                     level.pixels[offset(20, 20)] == 0 &&
+                     level.pixels[offset(15, 15)] == 77,
+                 "Shift should add a disjoint area to the selection");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 30; y <= 40; ++y) {
+        for (int x = 30; x <= 40; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectRectangle);
+    drag(viewport, {30.5, 30.5}, {40.5, 40.5});
+    drag(viewport, {34.5, 34.5}, {36.5, 36.5}, Qt::ControlModifier);
+    canvas.deleteSelection();
+    ok &= expect(level.pixels[offset(30, 30)] == 0 &&
+                     level.pixels[offset(35, 35)] == 77 &&
+                     level.pixels[offset(40, 40)] == 0,
+                 "Ctrl should subtract an area from the selection");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    for (int y = 50; y <= 60; ++y) {
+        for (int x = 50; x <= 60; ++x) {
+            level.pixels[offset(x, y)] = 77;
+        }
+    }
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::SelectRectangle);
+    drag(viewport, {50.5, 50.5}, {58.5, 58.5});
+    drag(viewport, {55.5, 55.5}, {60.5, 60.5},
+         Qt::ShiftModifier | Qt::ControlModifier);
+    canvas.deleteSelection();
+    ok &= expect(level.pixels[offset(52, 52)] == 77 &&
+                     level.pixels[offset(56, 56)] == 0 &&
+                     level.pixels[offset(59, 59)] == 77,
+                 "Shift+Ctrl should intersect two selections");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
     for (int y = 10; y <= 11; ++y) {
         for (int x = 10; x <= 11; ++x) {
             level.pixels[offset(x, y)] = 77;

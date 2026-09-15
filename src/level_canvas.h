@@ -125,6 +125,13 @@ private:
         SecondControl,
     };
 
+    enum class SelectionCombineMode {
+        Replace,
+        Add,
+        Subtract,
+        Intersect,
+    };
+
     QPoint imagePoint(const QPointF& viewportPoint) const;
     bool setPixel(int x, int y, std::uint8_t index);
     void recompositePixel(std::size_t offset);
@@ -196,6 +203,8 @@ private:
     int strokeCornerRadius_ = 0;
     ShapeMode shapeMode_ = ShapeMode::Outline;
     ShapeMode strokeShapeMode_ = ShapeMode::Outline;
+    SelectionCombineMode strokeSelectionCombineMode_ =
+        SelectionCombineMode::Replace;
     std::uint8_t strokeFillIndex_ = 58;
     QString textFontFamily_;
     int textPixelSize_ = 12;

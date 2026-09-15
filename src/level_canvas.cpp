@@ -822,8 +822,26 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                 event->accept();
                 return;
             }
-            if (isSelectionTool(drawTool_) && selectionActive_) {
-                commitSelection();
+            if (isSelectionTool(drawTool_)) {
+                const bool add =
+                    event->modifiers() & Qt::ShiftModifier;
+                const bool subtract =
+                    event->modifiers() & Qt::ControlModifier;
+                strokeSelectionCombineMode_ =
+                    add && subtract
+                        ? SelectionCombineMode::Intersect
+                        : add ? SelectionCombineMode::Add
+                              : subtract ? SelectionCombineMode::Subtract
+                                         : SelectionCombineMode::Replace;
+                if (selectionActive_ && selectionEditPending_) {
+                    commitSelection();
+                    strokeSelectionCombineMode_ =
+                        SelectionCombineMode::Replace;
+                } else if (selectionActive_ &&
+                           strokeSelectionCombineMode_ ==
+                               SelectionCombineMode::Replace) {
+                    commitSelection();
+                }
             }
             if (drawTool_ == DrawTool::BezierCurve &&
                 curveStage_ != CurveStage::None) {
@@ -1943,16 +1961,9 @@ void LevelCanvas::createSelection()
         return;
     }
 
-    selectionBounds_ = QRect(QPoint(0, 0), bounds.size());
-    selectionSourcePosition_ = bounds.topLeft();
-    selectionPosition_ = bounds.topLeft();
     const int width = bounds.width();
     const int height = bounds.height();
-    const std::size_t size = static_cast<std::size_t>(width) * height;
-    selectionMask_.assign(size, 0);
-    selectionPixels_.assign(size, 0);
-    selectionOpacity_.assign(size, 0);
-    const Level::Layer& layer = level_->layers[level_->activeLayer];
+    std::vector<std::uint8_t> candidate(Level::PixelCount, 0);
 
     QPainterPath freehandPath;
     if (strokeTool_ == DrawTool::SelectFreehand) {
@@ -1968,7 +1979,6 @@ void LevelCanvas::createSelection()
 
     const double radiusX = width / 2.0;
     const double radiusY = height / 2.0;
-    bool containsPixels = false;
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             bool selected = strokeTool_ == DrawTool::SelectRectangle;
@@ -1985,20 +1995,100 @@ void LevelCanvas::createSelection()
             if (!selected) {
                 continue;
             }
-            const std::size_t localOffset =
-                static_cast<std::size_t>(y) * width + x;
-            selectionMask_[localOffset] = 1;
             const std::size_t levelOffset =
                 static_cast<std::size_t>(bounds.top() + y) * Level::Width +
                 bounds.left() + x;
-            selectionPixels_[localOffset] = layer.pixels[levelOffset];
-            selectionOpacity_[localOffset] = layer.mask[levelOffset];
-            containsPixels = true;
+            candidate[levelOffset] = 1;
         }
     }
-    selectionActive_ = containsPixels;
-    selectionHasSource_ = containsPixels;
+
+    if (strokeSelectionCombineMode_ != SelectionCombineMode::Replace) {
+        std::vector<std::uint8_t> previous(Level::PixelCount, 0);
+        if (selectionActive_) {
+            const int previousWidth = selectionBounds_.width();
+            const int previousHeight = selectionBounds_.height();
+            for (int y = 0; y < previousHeight; ++y) {
+                for (int x = 0; x < previousWidth; ++x) {
+                    const std::size_t localOffset =
+                        static_cast<std::size_t>(y) * previousWidth + x;
+                    if (selectionMask_[localOffset] != 0) {
+                        const QPoint global =
+                            selectionPosition_ + QPoint(x, y);
+                        previous[static_cast<std::size_t>(global.y()) *
+                                     Level::Width +
+                                 global.x()] = 1;
+                    }
+                }
+            }
+        }
+        for (std::size_t offset = 0; offset < Level::PixelCount; ++offset) {
+            switch (strokeSelectionCombineMode_) {
+            case SelectionCombineMode::Add:
+                candidate[offset] = previous[offset] || candidate[offset];
+                break;
+            case SelectionCombineMode::Subtract:
+                candidate[offset] = previous[offset] && !candidate[offset];
+                break;
+            case SelectionCombineMode::Intersect:
+                candidate[offset] = previous[offset] && candidate[offset];
+                break;
+            case SelectionCombineMode::Replace:
+                break;
+            }
+        }
+    }
+
+    int left = static_cast<int>(Level::Width);
+    int right = -1;
+    int top = static_cast<int>(Level::Height);
+    int bottom = -1;
+    for (int y = 0; y < static_cast<int>(Level::Height); ++y) {
+        for (int x = 0; x < static_cast<int>(Level::Width); ++x) {
+            if (candidate[static_cast<std::size_t>(y) * Level::Width + x] !=
+                0) {
+                left = std::min(left, x);
+                right = std::max(right, x);
+                top = std::min(top, y);
+                bottom = std::max(bottom, y);
+            }
+        }
+    }
+
     freehandSelectionPoints_.clear();
+    if (right < left || bottom < top) {
+        clearSelection();
+        return;
+    }
+
+    const QRect combinedBounds(QPoint(left, top), QPoint(right, bottom));
+    selectionBounds_ = QRect(QPoint(0, 0), combinedBounds.size());
+    selectionSourcePosition_ = combinedBounds.topLeft();
+    selectionPosition_ = combinedBounds.topLeft();
+    const int combinedWidth = combinedBounds.width();
+    const int combinedHeight = combinedBounds.height();
+    const std::size_t size =
+        static_cast<std::size_t>(combinedWidth) * combinedHeight;
+    selectionMask_.assign(size, 0);
+    selectionPixels_.assign(size, 0);
+    selectionOpacity_.assign(size, 0);
+    const Level::Layer& layer = level_->layers[level_->activeLayer];
+    for (int y = 0; y < combinedHeight; ++y) {
+        for (int x = 0; x < combinedWidth; ++x) {
+            const std::size_t levelOffset =
+                static_cast<std::size_t>(top + y) * Level::Width + left + x;
+            if (candidate[levelOffset] == 0) {
+                continue;
+            }
+            const std::size_t localOffset =
+                static_cast<std::size_t>(y) * combinedWidth + x;
+            selectionMask_[localOffset] = 1;
+            selectionPixels_[localOffset] = layer.pixels[levelOffset];
+            selectionOpacity_[localOffset] = layer.mask[levelOffset];
+        }
+    }
+    selectionActive_ = true;
+    selectionHasSource_ = true;
+    selectionEditPending_ = false;
     viewport()->update();
 }
 
@@ -2253,9 +2343,7 @@ QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
     }
 
     const bool constrain = strokeTool_ == DrawTool::Rectangle ||
-                           strokeTool_ == DrawTool::Ellipse ||
-                           strokeTool_ == DrawTool::SelectRectangle ||
-                           strokeTool_ == DrawTool::SelectEllipse;
+                           strokeTool_ == DrawTool::Ellipse;
     if (!constrain) {
         return point;
     }

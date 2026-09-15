@@ -64,6 +64,8 @@ The current milestone supports:
   click or `Enter`; `Esc` cancels an unfinished polygon
 - rectangular, elliptical, and freehand selections stored as temporary indexed
   layers; selections can be moved, deleted, or edited with the drawing tools
+- selection shapes can be combined: `Shift` adds, `Ctrl` subtracts, and
+  `Shift+Ctrl` intersects with the existing selection
 - lossless indexed selection copy/paste with `Ctrl+C` and `Ctrl+V`; `Enter`
   commits a floating selection, `Esc` cancels it, and `Ctrl+A` selects the full
   640x800 canvas
