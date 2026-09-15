@@ -16,12 +16,9 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDockWidget>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontComboBox>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
@@ -394,12 +391,6 @@ void MainWindow::createActions()
     connect(publishAction, &QAction::triggered, this,
             [this] { publishLevel(); });
 
-    QMenu* levelMenu = menuBar()->addMenu(tr("&Level"));
-    QAction* propertiesAction =
-        levelMenu->addAction(tr("&Properties..."));
-    connect(propertiesAction, &QAction::triggered, this,
-            &MainWindow::editLevelProperties);
-
     fileMenu->addSeparator();
     QAction* exitAction = fileMenu->addAction(tr("E&xit"));
     exitAction->setShortcut(QKeySequence::Quit);
@@ -754,6 +745,31 @@ void MainWindow::createMaterialDock()
 void MainWindow::createZoomToolBar()
 {
     QToolBar* toolBar = addToolBar(tr("View"));
+    toolBar->addWidget(new QLabel(tr("Level name: "), toolBar));
+    levelNameEdit_ = new QLineEdit(
+        QString::fromLatin1(level_->name.data(),
+                            static_cast<int>(level_->name.size())),
+        toolBar);
+    levelNameEdit_->setMaxLength(20);
+    levelNameEdit_->setMaximumWidth(190);
+    levelNameEdit_->setValidator(new QRegularExpressionValidator(
+        QRegularExpression(QStringLiteral("[\\x20-\\x7E]{0,20}")),
+        levelNameEdit_));
+    levelNameEdit_->setToolTip(
+        tr("Maximum 20 printable ASCII characters. Ä, Ö, Å and other "
+           "non-ASCII characters are not supported by LEV files."));
+    connect(levelNameEdit_, &QLineEdit::textEdited, this,
+            [this](const QString& text) {
+                const std::string name = text.toLatin1().toStdString();
+                if (name == level_->name) {
+                    return;
+                }
+                level_->name = name;
+                nonUndoModified_ = true;
+                setModified(true);
+            });
+    toolBar->addWidget(levelNameEdit_);
+    toolBar->addSeparator();
     toolBar->addWidget(new QLabel(tr("Zoom: "), toolBar));
     auto* zoomCombo = new QComboBox(toolBar);
     const std::array<std::pair<const char*, double>, 6> zoomLevels{{
@@ -973,6 +989,12 @@ void MainWindow::openLevel()
     publishPath_ = isProject ? std::filesystem::path{} : path;
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
+    {
+        const QSignalBlocker blocker(levelNameEdit_);
+        levelNameEdit_->setText(
+            QString::fromLatin1(level_->name.data(),
+                                static_cast<int>(level_->name.size())));
+    }
     updateMaterialDetails(
         paletteIndexFromColorChart(materialIndexSpinBox_->value()));
     refreshLayerList();
@@ -1086,53 +1108,6 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
     publishPath_ = path;
     statusBar()->showMessage(tr("Published %1").arg(toQString(path)), 3000);
     return true;
-}
-
-void MainWindow::editLevelProperties()
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Level properties"));
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* form = new QFormLayout();
-    auto* nameEdit = new QLineEdit(
-        QString::fromLatin1(level_->name.data(),
-                            static_cast<int>(level_->name.size())),
-        &dialog);
-    nameEdit->setMaxLength(20);
-    nameEdit->setValidator(new QRegularExpressionValidator(
-        QRegularExpression(QStringLiteral("[\\x20-\\x7E]{0,20}")),
-        nameEdit));
-    nameEdit->setToolTip(tr("Up to 20 printable ASCII characters"));
-    form->addRow(tr("Level name:"), nameEdit);
-    layout->addLayout(form);
-    auto* formatNote = new QLabel(
-        tr("The LEV format contains no known description or author field."),
-        &dialog);
-    formatNote->setWordWrap(true);
-    layout->addWidget(formatNote);
-    auto* buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-    nameEdit->selectAll();
-    nameEdit->setFocus();
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-    const std::string name = nameEdit->text().toLatin1().toStdString();
-    if (name == level_->name) {
-        return;
-    }
-    level_->name = name;
-    nonUndoModified_ = true;
-    setModified(true);
-    statusBar()->showMessage(tr("Level name changed to %1")
-                                 .arg(nameEdit->text().isEmpty()
-                                          ? tr("(empty)")
-                                          : nameEdit->text()),
-                             3000);
 }
 
 void MainWindow::editSelectedPaletteColor()

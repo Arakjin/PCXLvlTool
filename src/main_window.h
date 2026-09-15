@@ -10,6 +10,7 @@
 class QAction;
 class QCloseEvent;
 class QLabel;
+class QLineEdit;
 class QListWidget;
 class QSpinBox;
 class LevelCanvas;
@@ -37,7 +38,6 @@ private:
     bool maybeSave();
     bool writeProject(const std::filesystem::path& path);
     bool writePublishedLevel(const std::filesystem::path& path);
-    void editLevelProperties();
     void refreshLayerList();
     void editSelectedPaletteColor();
     void loadPalette();
@@ -53,6 +53,7 @@ private:
     QSpinBox* secondaryIndexSpinBox_ = nullptr;
     QLabel* materialDetailsLabel_ = nullptr;
     QLabel* positionLabel_ = nullptr;
+    QLineEdit* levelNameEdit_ = nullptr;
     QListWidget* layerListWidget_ = nullptr;
     QAction* saveAction_ = nullptr;
     std::filesystem::path projectPath_;

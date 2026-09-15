@@ -100,6 +100,11 @@ int main()
     ok &= expect(!saveLev(file.path(), *source, error),
                  "writer accepted a non-printable level name");
 
+    source->name = std::string("PÄIVÄ");
+    error.clear();
+    ok &= expect(!saveLev(file.path(), *source, error),
+                 "writer accepted non-ASCII letters in a level name");
+
     if (!ok) {
         return 1;
     }
