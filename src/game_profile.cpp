@@ -12,6 +12,8 @@ const std::vector<GameProfile> kProfiles{
      GameFeature::VariableLevelSize | GameFeature::ParallaxBackground |
          GameFeature::Stars | GameFeature::Weather |
          GameFeature::Civilians},
+    {GameId::Auts, "auts", "AUTS", 320, 400, 320, 400, 320, 400,
+     GameFeature::None},
 };
 
 } // namespace

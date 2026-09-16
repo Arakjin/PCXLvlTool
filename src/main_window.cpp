@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include "auts_io.h"
 #include "default_palette.h"
 #include "game_profile.h"
 #include "lev_reader.h"
@@ -53,6 +54,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
@@ -67,7 +69,8 @@ public:
     {
         game_ = game;
         if (isReservedColorChartNumber(game_, value())) {
-            setValue(game_ == GameId::Wings ? 128 : 56);
+            setValue(game_ == GameId::Wings ? 128
+                                            : game_ == GameId::Auts ? 7 : 56);
         }
     }
 
@@ -132,6 +135,25 @@ QString materialDescription(const GameId game, const int paletteIndex)
     const int index = colorChartNumber(paletteIndex);
     if (isReservedPaletteIndex(game, paletteIndex)) {
         return QStringLiteral("Reserved (do not use)");
+    }
+    if (game == GameId::Auts) {
+        if (index >= 92 && index <= 95) {
+            return QStringLiteral("Docking plate");
+        }
+        switch (index) {
+        case 0: return QStringLiteral("Space");
+        case 7: return QStringLiteral("Indestructible");
+        case 39:
+            return QStringLiteral(
+                "Water (maximum 7 short surfaces per level)");
+        case 108:
+        case 109:
+        case 110:
+        case 111:
+            return QStringLiteral(
+                "Gray terrain (do not mix with docking plate colors 92-95)");
+        default: return QStringLiteral("Normal terrain / color");
+        }
     }
     if (game == GameId::Wings) {
         if (index >= 32 && index <= 37) {
@@ -278,6 +300,8 @@ enum class PaletteGroup {
     Bases,
     Soft,
     BurningWings,
+    Docking,
+    Other,
 };
 
 void appendRange(std::vector<std::uint8_t>& indices, const int first,
@@ -293,6 +317,36 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group,
 {
     std::vector<std::uint8_t> indices;
     indices.reserve(256);
+    if (game == GameId::Auts) {
+        switch (group) {
+        case PaletteGroup::AllUsable:
+            appendRange(indices, 0, 255);
+            break;
+        case PaletteGroup::Background:
+            indices.push_back(0);
+            break;
+        case PaletteGroup::Indestructible:
+            indices.push_back(7);
+            break;
+        case PaletteGroup::Water:
+            indices.push_back(39);
+            break;
+        case PaletteGroup::Docking:
+            appendRange(indices, 92, 95);
+            break;
+        case PaletteGroup::Other:
+            for (int index = 0; index < 256; ++index) {
+                if (index != 0 && index != 7 && index != 39 &&
+                    (index < 92 || index > 95)) {
+                    indices.push_back(static_cast<std::uint8_t>(index));
+                }
+            }
+            break;
+        default:
+            break;
+        }
+        return indices;
+    }
     if (game == GameId::Wings) {
         switch (group) {
         case PaletteGroup::AllUsable:
@@ -383,6 +437,8 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group,
     case PaletteGroup::Bases:
     case PaletteGroup::Soft:
     case PaletteGroup::BurningWings:
+    case PaletteGroup::Docking:
+    case PaletteGroup::Other:
         break;
     }
     return indices;
@@ -508,6 +564,11 @@ void MainWindow::createActions()
     QAction* openAction = fileMenu->addAction(tr("&Open..."));
     openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openLevel);
+
+    importAutsBmpAction_ = fileMenu->addAction(tr("Import AUTS &BMP..."));
+    importAutsBmpAction_->setEnabled(false);
+    connect(importAutsBmpAction_, &QAction::triggered, this,
+            &MainWindow::importAutsBmp);
 
     saveAction_ = fileMenu->addAction(tr("&Save project"));
     saveAction_->setShortcut(QKeySequence::Save);
@@ -1162,7 +1223,7 @@ void MainWindow::openLevel()
         this, tr("Open project or level"), QString(),
         tr("PCX Level Tool projects and levels (*.pxlp *.PXLP *.lev *.LEV);;"
            "PCX Level Tool projects (*.pxlp *.PXLP);;"
-           "V-Wing levels (*.lev *.LEV)"));
+           "Supported game levels (*.lev *.LEV)"));
     if (filename.isEmpty()) {
         return;
     }
@@ -1177,11 +1238,24 @@ void MainWindow::openLevel()
     const bool isProject = isPxlProject;
     std::unique_ptr<Level> loadedBackground;
     LevelCreationSettings loadedSettings;
-    const bool loadedSuccessfully =
-        isPxlProject
-            ? loadPxlProject(path, *loaded, loadedBackground, loadedSettings,
-                             error)
-            : loadLev(path, *loaded, error);
+    bool loadedSuccessfully = false;
+    if (isPxlProject) {
+        loadedSuccessfully = loadPxlProject(
+            path, *loaded, loadedBackground, loadedSettings, error);
+    } else {
+        std::string vwingError;
+        loadedSuccessfully = loadLev(path, *loaded, vwingError);
+        if (!loadedSuccessfully) {
+            std::string autsError;
+            loadedSuccessfully = loadAutsLev(path, *loaded, autsError);
+            if (loadedSuccessfully) {
+                loadedSettings.game = GameId::Auts;
+            } else {
+                error = "not a supported V-Wing or AUTS LEV file\nV-Wing: " +
+                        vwingError + "\nAUTS: " + autsError;
+            }
+        }
+    }
     if (!loadedSuccessfully) {
         QMessageBox::critical(this, tr("Open failed"),
                               QString::fromStdString(error));
@@ -1193,9 +1267,11 @@ void MainWindow::openLevel()
     canvas_->forgetLevel(level_.get());
     level_ = std::move(loaded);
     backgroundLevel_ = std::move(loadedBackground);
-    creationSettings_ = isPxlProject ? loadedSettings
-                                     : LevelCreationSettings{};
+    creationSettings_ = loadedSettings;
     if (!isPxlProject) {
+        if (creationSettings_.game != GameId::Auts) {
+            creationSettings_.game = GameId::VWing;
+        }
         creationSettings_.name = level_->name;
         creationSettings_.width = static_cast<int>(level_->width);
         creationSettings_.height = static_cast<int>(level_->height);
@@ -1224,6 +1300,64 @@ void MainWindow::openLevel()
     nonUndoModified_ = false;
     setModified(false);
     statusBar()->showMessage(tr("Opened %1").arg(filename), 3000);
+}
+
+void MainWindow::importAutsBmp()
+{
+    if (creationSettings_.game != GameId::Auts || !maybeSave()) {
+        return;
+    }
+    const QString filename = QFileDialog::getOpenFileName(
+        this, tr("Import AUTS bitmap"), QString(),
+        tr("AUTS 8-bit bitmaps (*.bmp *.BMP)"));
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    auto imported = std::make_unique<Level>();
+    bool paletteMatches = false;
+    std::string error;
+    if (!loadAutsBmp(toPath(filename), *imported, paletteMatches, error)) {
+        QMessageBox::critical(this, tr("BMP import failed"),
+                              QString::fromStdString(error));
+        return;
+    }
+
+    canvas_->forgetLevel(backgroundLevel_.get());
+    canvas_->forgetLevel(level_.get());
+    level_ = std::move(imported);
+    backgroundLevel_.reset();
+    creationSettings_ = LevelCreationSettings{};
+    creationSettings_.game = GameId::Auts;
+    creationSettings_.name = level_->name;
+    creationSettings_.width = 320;
+    creationSettings_.height = 400;
+    projectPath_.clear();
+    publishPath_.clear();
+    documentTabs_->setCurrentIndex(0);
+    documentTabs_->setVisible(false);
+    levelSettingsAction_->setEnabled(false);
+    configurePaletteForGame();
+    canvas_->setLevel(level_.get());
+    paletteWidget_->setLevel(level_.get());
+    {
+        const QSignalBlocker blocker(levelNameEdit_);
+        levelNameEdit_->setText(QString::fromStdString(level_->name));
+    }
+    refreshLayerList();
+    canvas_->undoStack()->setClean();
+    nonUndoModified_ = true;
+    setModified(true);
+    if (!paletteMatches) {
+        QMessageBox::information(
+            this, tr("AUTS palette applied"),
+            tr("The bitmap did not use the exact AUTS palette. Pixel indices "
+               "were preserved and the fixed AUTS palette was applied. Use "
+               "BLANK.BMP as the source template when material indices must "
+               "match the original converter."));
+    }
+    statusBar()->showMessage(tr("Imported AUTS bitmap %1").arg(filename),
+                             4000);
 }
 
 void MainWindow::newLevel()
@@ -1266,12 +1400,18 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
 
     auto fresh = std::make_unique<Level>();
     fresh->name = settings.name;
-    fresh->palette = settings.game == GameId::Wings ? defaultWingsPalette()
-                                                     : defaultVWingPalette();
+    if (settings.game == GameId::Wings) {
+        fresh->palette = defaultWingsPalette();
+    } else if (settings.game == GameId::Auts) {
+        initializeBlankAutsLevel(*fresh);
+        fresh->name = settings.name;
+    } else {
+        fresh->palette = defaultVWingPalette();
+    }
     if (settings.game == GameId::Wings) {
         fresh->resize(static_cast<std::size_t>(settings.width),
                       static_cast<std::size_t>(settings.height));
-    } else {
+    } else if (settings.game == GameId::VWing) {
         fresh->pixels.fill(0);
     }
 
@@ -1313,6 +1453,10 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
                       .arg(settings.width)
                       .arg(settings.height),
             5000);
+    } else if (settings.game == GameId::Auts) {
+        statusBar()->showMessage(
+            tr("Created a new AUTS level: 320 x 400 with a protected border"),
+            4000);
     } else {
         statusBar()->showMessage(tr("Created a new V-Wing level"), 3000);
     }
@@ -1526,6 +1670,9 @@ void MainWindow::configurePaletteForGame()
         return;
     }
     canvas_->setGame(creationSettings_.game);
+    if (importAutsBmpAction_ != nullptr) {
+        importAutsBmpAction_->setEnabled(creationSettings_.game == GameId::Auts);
+    }
     if (creationSettings_.game == GameId::Wings) {
         levelNameEdit_->setMaxLength(64);
         levelNameEdit_->setValidator(new QRegularExpressionValidator(
@@ -1534,6 +1681,14 @@ void MainWindow::configurePaletteForGame()
         levelNameEdit_->setToolTip(
             tr("Wings uses the level filename as its name. Printable DOS-safe "
                "ASCII characters are supported."));
+    } else if (creationSettings_.game == GameId::Auts) {
+        levelNameEdit_->setMaxLength(8);
+        levelNameEdit_->setValidator(new QRegularExpressionValidator(
+            QRegularExpression(QStringLiteral("[A-Za-z0-9_-]{0,8}")),
+            levelNameEdit_));
+        levelNameEdit_->setToolTip(
+            tr("AUTS stores no internal level name. This DOS-safe name is "
+               "used as the suggested LEV filename."));
     } else {
         levelNameEdit_->setMaxLength(20);
         levelNameEdit_->setValidator(new QRegularExpressionValidator(
@@ -1562,6 +1717,13 @@ void MainWindow::configurePaletteForGame()
         add("Soft terrain (96-111)", PaletteGroup::Soft);
         add("Burning terrain (112-127)", PaletteGroup::BurningWings);
         add("Normal terrain (128-255)", PaletteGroup::NormalTerrain);
+    } else if (creationSettings_.game == GameId::Auts) {
+        add("All palette indices (0-255)", PaletteGroup::AllUsable);
+        add("Space (0)", PaletteGroup::Background);
+        add("Indestructible (7)", PaletteGroup::Indestructible);
+        add("Water (39)", PaletteGroup::Water);
+        add("Docking plate (92-95)", PaletteGroup::Docking);
+        add("Other colors", PaletteGroup::Other);
     } else {
         add("All documented usable", PaletteGroup::AllUsable);
         add("Background (1)", PaletteGroup::Background);
@@ -1578,8 +1740,13 @@ void MainWindow::configurePaletteForGame()
     }
     paletteWidget_->setIndices(
         paletteIndices(PaletteGroup::AllUsable, creationSettings_.game));
-    const int defaultIndex = creationSettings_.game == GameId::Wings ? 128 : 56;
-    const int secondaryIndex = defaultIndex + 1;
+    const int defaultIndex = creationSettings_.game == GameId::Wings
+                                 ? 128
+                                 : creationSettings_.game == GameId::Auts ? 7
+                                                                          : 56;
+    const int secondaryIndex = creationSettings_.game == GameId::Auts
+                                   ? 39
+                                   : defaultIndex + 1;
     materialIndexSpinBox_->setValue(defaultIndex);
     secondaryIndexSpinBox_->setValue(secondaryIndex);
     updateMaterialDetails(defaultIndex);
@@ -1670,7 +1837,8 @@ bool MainWindow::writeProject(const std::filesystem::path& path)
     canvas_->commitSelection();
     std::string error;
     bool saved = false;
-    if (creationSettings_.game == GameId::VWing) {
+    if (creationSettings_.game == GameId::VWing ||
+        creationSettings_.game == GameId::Auts) {
         uppercaseLevelName();
     }
     flattenLayers(*level_);
@@ -1695,22 +1863,26 @@ bool MainWindow::writeProject(const std::filesystem::path& path)
 bool MainWindow::publishLevel()
 {
     std::filesystem::path suggested = publishPath_;
-    if (creationSettings_.game == GameId::Wings && suggested.empty()) {
+    if ((creationSettings_.game == GameId::Wings ||
+         creationSettings_.game == GameId::Auts) &&
+        suggested.empty()) {
         suggested = std::filesystem::path(creationSettings_.name + ".LEV");
     }
     if (suggested.empty() && !projectPath_.empty()) {
         suggested = projectPath_;
         suggested.replace_extension(".LEV");
     }
+    QString gameName;
+    if (creationSettings_.game == GameId::Wings) {
+        gameName = QStringLiteral("Wings");
+    } else if (creationSettings_.game == GameId::Auts) {
+        gameName = QStringLiteral("AUTS");
+    } else {
+        gameName = QStringLiteral("V-Wing");
+    }
     QString filename = QFileDialog::getSaveFileName(
-        this,
-        creationSettings_.game == GameId::Wings
-            ? tr("Publish game-compatible Wings level")
-            : tr("Publish game-compatible V-Wing level"),
-        toQString(suggested),
-        creationSettings_.game == GameId::Wings
-            ? tr("Wings levels (*.LEV)")
-            : tr("V-Wing levels (*.LEV)"));
+        this, tr("Publish game-compatible %1 level").arg(gameName),
+        toQString(suggested), tr("%1 levels (*.LEV)").arg(gameName));
     if (filename.isEmpty()) {
         return false;
     }
@@ -1740,6 +1912,20 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
                                  3000);
         return true;
     }
+    if (creationSettings_.game == GameId::Auts) {
+        uppercaseLevelName();
+        flattenLayers(*level_);
+        std::string error;
+        if (!saveAutsLev(path, *level_, error)) {
+            QMessageBox::critical(this, tr("Publish failed"),
+                                  QString::fromStdString(error));
+            return false;
+        }
+        publishPath_ = path;
+        statusBar()->showMessage(tr("Published %1").arg(toQString(path)),
+                                 3000);
+        return true;
+    }
     uppercaseLevelName();
     canvas_->refreshImage();
     std::string error;
@@ -1755,12 +1941,30 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
 
 void MainWindow::uppercaseLevelName()
 {
+    if (creationSettings_.game == GameId::Auts) {
+        level_->name.erase(
+            std::remove_if(level_->name.begin(), level_->name.end(),
+                           [](const char character) {
+                               const unsigned char value =
+                                   static_cast<unsigned char>(character);
+                               return !(std::isalnum(value) || character == '_' ||
+                                        character == '-');
+                           }),
+            level_->name.end());
+        if (level_->name.size() > 8) {
+            level_->name.resize(8);
+        }
+        if (level_->name.empty()) {
+            level_->name = "UNTITLED";
+        }
+    }
     std::transform(level_->name.begin(), level_->name.end(),
                    level_->name.begin(), [](const char character) {
                        return character >= 'a' && character <= 'z'
                                   ? static_cast<char>(character - 'a' + 'A')
                                   : character;
                    });
+    creationSettings_.name = level_->name;
     const QSignalBlocker blocker(levelNameEdit_);
     levelNameEdit_->setText(
         QString::fromLatin1(level_->name.data(),
@@ -1772,6 +1976,13 @@ void MainWindow::editSelectedPaletteColor()
 {
     const int index = paletteIndexFromColorChart(
         materialIndexSpinBox_->value());
+    if (creationSettings_.game == GameId::Auts) {
+        QMessageBox::information(
+            this, tr("Fixed AUTS palette"),
+            tr("AUTS uses a fixed 256-color game palette. Its RGB values "
+               "cannot be changed, but every palette index can be painted."));
+        return;
+    }
     if (creationSettings_.game == GameId::Wings &&
         (index < 48 || isReservedPaletteIndex(GameId::Wings, index))) {
         QMessageBox::information(
@@ -1798,6 +2009,13 @@ void MainWindow::editSelectedPaletteColor()
 
 void MainWindow::loadPalette()
 {
+    if (creationSettings_.game == GameId::Auts) {
+        QMessageBox::information(
+            this, tr("Fixed AUTS palette"),
+            tr("AUTS uses the fixed palette supplied with its original "
+               "converter. Custom palettes cannot be loaded for AUTS levels."));
+        return;
+    }
     const QString filename = QFileDialog::getOpenFileName(
         this, tr("Load palette"), QString(), tr("JASC palettes (*.pal)"));
     if (filename.isEmpty()) {

@@ -1,5 +1,6 @@
 #include "pcxl_project_io.h"
 
+#include "default_palette.h"
 #include "layer_model.h"
 
 #include <array>
@@ -196,6 +197,11 @@ bool savePxlProject(const std::filesystem::path& path, const Level& level,
             throw std::runtime_error(
                 "PXLP level dimensions do not match its settings");
         }
+        if (settings.game == GameId::Auts &&
+            level.palette != defaultAutsPalette()) {
+            throw std::runtime_error(
+                "AUTS PXLP project must use the fixed game palette");
+        }
         const bool parallax =
             settings.backgroundMode == BackgroundMode::Parallax;
         if (parallax) {
@@ -329,6 +335,11 @@ bool loadPxlProject(const std::filesystem::path& path, Level& level,
             color = {static_cast<std::uint8_t>(red),
                      static_cast<std::uint8_t>(green),
                      static_cast<std::uint8_t>(blue)};
+        }
+        if (loadedSettings.game == GameId::Auts &&
+            palette != defaultAutsPalette()) {
+            throw std::runtime_error(
+                "AUTS PXLP project does not use the fixed game palette");
         }
         const std::uint32_t documentCount = readU32(input);
         if (documentCount == 0 || documentCount > 8) {

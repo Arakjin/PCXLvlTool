@@ -45,6 +45,7 @@ private:
     void configureWingsDocuments();
     void configurePaletteForGame();
     void openLevel();
+    void importAutsBmp();
     bool saveProject();
     bool saveProjectAs();
     bool publishLevel();
@@ -73,6 +74,7 @@ private:
     QListWidget* layerListWidget_ = nullptr;
     QAction* saveAction_ = nullptr;
     QAction* levelSettingsAction_ = nullptr;
+    QAction* importAutsBmpAction_ = nullptr;
     QTabBar* documentTabs_ = nullptr;
     LevelCreationSettings creationSettings_;
     std::filesystem::path projectPath_;

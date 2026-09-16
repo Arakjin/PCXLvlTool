@@ -39,6 +39,7 @@ Copy-Item LICENSE, CHANGELOG.md, README.md, QT-LGPL-NOTICE.md, `
   THIRD_PARTY_NOTICES.md package\PCXLvlTool\
 Copy-Item docs\install-fi.md package\PCXLvlTool\
 Copy-Item docs\user-guide-fi.md package\PCXLvlTool\
+Copy-Item docs\auts-format.md package\PCXLvlTool\
 Copy-Item -Recurse third_party package\PCXLvlTool\third_party
 New-Item -ItemType Directory -Force `
   package\PCXLvlTool\VWingConverter | Out-Null

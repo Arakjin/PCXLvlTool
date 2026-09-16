@@ -132,3 +132,36 @@ std::array<RGB, 256> defaultWingsPalette()
     }
     return palette;
 }
+
+std::array<RGB, 256> defaultAutsPalette()
+{
+    // Exact RGB palette from the AUTSCONV BLANK.BMP reference bitmap.
+    constexpr std::string_view hex =
+        "0000000000540808080000fc0024000024540024a85c5c5c0048000048540048a80048fc006c00006c54006ca8006cfc0090000090540090a80090fc"
+        "00b40000b45400b4a800b4fc00d80000d85400d8a800d8fc00fc0000fc5400fca800fcfc2400002400542400a82400fc2424002424542424a82424fc"
+        "2448002448542448a82448fc246c00246c54246ca8246cfc2490002490542490a82490fc24b40024b45424b4a824b4fc24d80024d85424d8a824d8fc"
+        "24fc0024fc5424fca824fcfc4800004800544800a84800fc4824004824544824a84824fc4848004848544848a84848fc486c00486c54486ca8486cfc"
+        "4890004890544890a84890fc48b40048b45448b4a848b4fc48d80048d85448d8a848d8fc848484acacacd4d4d4fcfcfc6c00006c00546c00a86c00fc"
+        "6c24006c24546c24a86c24fc6c48006c48546c48a86c48fc5c5c5c848484acacacd4d4d46c90006c90546c90a86c90fc6cb4006cb4546cb4a86cb4fc"
+        "6cd8006cd8546cd8a86cd8fc6cfc006cfc546cfca86cfcfc9000009000549000a89000fc9024009024549024a89024fc9048009048549048a89048fc"
+        "906c00906c54906ca8906cfc9090009090549090a89090fc90b40090b45490b4a890b4fc90d80090d85490d8a890d8fc90fc0090fc5490fca890fcfc"
+        "b40000b40054b400a8b400fcb42400b42454b424a8b424fcb44800b44854b448a8b448fcb46c00b46c54b46ca8b46cfcb49000b49054b490a8b490fc"
+        "b4b400b4b454b4b4a8b4b4fcb4d800b4d854b4d8a8b4d8fcb4fc00b4fc54b4fca8b4fcfcd80000d80054d800a8d800fcd82400d82454d824a8d824fc"
+        "d84800d84854d848a8d848fcd86c00d86c54d86ca8d86cfcd89000d89054d890a8d890fcd8b400d8b454d8b4a8d8b4fcd8d800d8d854d8d8a8d8d8fc"
+        "d8fc00d8fc54d8fca8d8fcfcfc0000fc0054fc00a8fc00fcfc2400fc2454fc24a8fc24fcfc4800fc4854fc48a8fc48fcfc6c00fc6c54fc6ca8fc6cfc"
+        "fc9000fc9054fc90a8fc90fcfcb400fcb454fcb4a8fcb4fcfcd800fcd854fcd8a8fcd8fcfcfc00fcfc54fcfca8fcfcfc";
+    const auto nibble = [](const char value) -> std::uint8_t {
+        return static_cast<std::uint8_t>(value <= '9' ? value - '0'
+                                                     : value - 'a' + 10);
+    };
+    std::array<RGB, 256> palette{};
+    for (std::size_t index = 0; index < palette.size(); ++index) {
+        const auto channel = [&](const std::size_t component) {
+            const std::size_t offset = (index * 3 + component) * 2;
+            return static_cast<std::uint8_t>((nibble(hex[offset]) << 4) |
+                                             nibble(hex[offset + 1]));
+        };
+        palette[index] = {channel(0), channel(1), channel(2)};
+    }
+    return palette;
+}

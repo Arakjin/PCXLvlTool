@@ -7,6 +7,7 @@ include(GNUInstallDirs)
 find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
 add_library(vwing_level_format
+    src/auts_io.cpp
     src/default_palette.cpp
     src/game_profile.cpp
     src/layer_model.cpp
@@ -120,6 +121,7 @@ install(FILES
     docs/install-fi.md
     docs/user-guide-fi.md
     docs/pxlp-format.md
+    docs/auts-format.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool
 )
 install(FILES
@@ -140,6 +142,14 @@ install(DIRECTORY third_party/qt/LICENSES/
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(auts_io_tests
+        tests/auts_io_tests.cpp
+    )
+    target_link_libraries(auts_io_tests PRIVATE vwing_level_format)
+    target_compile_features(auts_io_tests PRIVATE cxx_std_17)
+    set_target_properties(auts_io_tests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME auts_io_tests COMMAND auts_io_tests)
+
     add_executable(pcxl_project_tests
         tests/pcxl_project_tests.cpp
     )

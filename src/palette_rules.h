@@ -10,6 +10,9 @@ constexpr bool isReservedPaletteIndex(const int index)
 
 constexpr bool isReservedPaletteIndex(const GameId game, const int index)
 {
+    if (game == GameId::Auts) {
+        return false;
+    }
     if (game == GameId::Wings) {
         return (index >= 1 && index <= 15) ||
                (index >= 17 && index <= 31) ||

@@ -391,10 +391,14 @@ void LevelCanvas::setGame(const GameId game)
 {
     game_ = game;
     if (isReservedPaletteIndex(game_, selectedIndex_)) {
-        setSelectedIndex(game_ == GameId::Wings ? 128 : 56);
+        setSelectedIndex(game_ == GameId::Wings
+                             ? 128
+                             : game_ == GameId::Auts ? 7 : 56);
     }
     if (isReservedPaletteIndex(game_, secondaryIndex_)) {
-        setSecondaryIndex(game_ == GameId::Wings ? 129 : 57);
+        setSecondaryIndex(game_ == GameId::Wings
+                              ? 129
+                              : game_ == GameId::Auts ? 39 : 57);
     }
 }
 

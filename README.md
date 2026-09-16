@@ -1,8 +1,8 @@
 # PCX Level Tool
 
-Portable C++17 and Qt 6 level editor. V-Wing and Wings are the first supported
-games. Layered work is stored as game-tagged `.pxlp` projects, with room for additional
-games and formats in the future.
+Portable C++17 and Qt 6 level editor. V-Wing, Wings, and AUTS are the first
+supported games. Layered work is stored as game-tagged `.pxlp` projects, with
+room for additional games and formats in the future.
 
 ## Build
 
@@ -32,6 +32,7 @@ License as the application.
 - [Käyttöohje (suomi)](docs/user-guide-fi.md)
 - [Windows- ja Linux-asennusohje (suomi)](docs/install-fi.md)
 - [Julkaisupakettien tekeminen (suomi)](docs/release-packaging-fi.md)
+- [AUTS LEV- ja BMP-formaatti](docs/auts-format.md)
 - [Muutoshistoria](CHANGELOG.md)
 
 ## Minimal editor
@@ -47,6 +48,10 @@ The current milestone supports:
 - opening `.LEV` levels and layered `.pxlp` projects
 - saving and reopening Wings work, including parallax layers and settings, as
   `.pxlp` projects
+- creating, opening, editing, and publishing fixed-size 320 x 400 AUTS levels
+  with the original AUTS palette and documented material indices
+- importing 320 x 400 uncompressed 8-bit indexed BMP images into AUTS projects;
+  source indices are preserved and the fixed game palette is applied
 - creating a fresh level with **File > New level** (`Ctrl+N`)
 - editing the in-game level-menu name directly in the top toolbar; LEV names
   are limited to 20 printable ASCII characters, so non-ASCII letters such as
@@ -93,7 +98,7 @@ The current milestone supports:
   `Shift+Ctrl` intersects with the existing selection
 - lossless indexed selection copy/paste with `Ctrl+C` and `Ctrl+V`; `Enter`
   commits a floating selection, `Esc` cancels it, and `Ctrl+A` selects the full
-  640x800 canvas
+  canvas
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
   documented V-Wing material information; left click selects the primary index

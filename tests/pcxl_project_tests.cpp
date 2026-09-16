@@ -121,6 +121,33 @@ int main()
                      !loadedBackground,
                  "V-Wing PXLP project should round-trip");
 
+    Level auts;
+    auts.resize(320, 400);
+    auts.name = "AUTSTEST";
+    auts.palette = defaultAutsPalette();
+    initializeBackgroundLayer(auts);
+    auts.layers[0].pixels[12345] = 39;
+    flattenLayers(auts);
+    LevelCreationSettings autsSettings;
+    autsSettings.game = GameId::Auts;
+    autsSettings.name = auts.name;
+    autsSettings.width = 320;
+    autsSettings.height = 400;
+    ok &= expect(savePxlProject(path, auts, nullptr, autsSettings, error),
+                 "AUTS PXLP project should save");
+    loadedBackground.reset();
+    ok &= expect(loadPxlProject(path, loaded, loadedBackground, loadedSettings,
+                                error) &&
+                     loadedSettings.game == GameId::Auts &&
+                     loadedSettings.name == "AUTSTEST" &&
+                     loaded.width == 320 && loaded.height == 400 &&
+                     loaded.layers[0].pixels[12345] == 39 &&
+                     !loadedBackground,
+                 "AUTS PXLP project should round-trip");
+    auts.palette[0] = RGB{1, 2, 3};
+    ok &= expect(!savePxlProject(path, auts, nullptr, autsSettings, error),
+                 "AUTS PXLP project should reject a non-game palette");
+
     std::filesystem::remove(path, ignored);
     return ok ? 0 : 1;
 }

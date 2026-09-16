@@ -19,6 +19,7 @@ int main()
     bool ok = true;
     const GameProfile& vwing = gameProfile(GameId::VWing);
     const GameProfile& wings = gameProfile(GameId::Wings);
+    const GameProfile& auts = gameProfile(GameId::Auts);
     ok &= expect(vwing.defaultWidth == 640 && vwing.defaultHeight == 800,
                  "V-Wing profile dimensions");
     ok &= expect(hasFeature(wings.features,
@@ -30,5 +31,9 @@ int main()
                  "documented Wings parallax example");
     ok &= expect(wingsParallaxSize(157, 90) == std::pair<int, int>{156, 90},
                  "integer division for odd dimensions");
+    ok &= expect(auts.minimumWidth == 320 && auts.maximumWidth == 320 &&
+                     auts.minimumHeight == 400 && auts.maximumHeight == 400 &&
+                     gameProfileByKey("auts") == &auts,
+                 "AUTS fixed-size profile");
     return ok ? 0 : 1;
 }

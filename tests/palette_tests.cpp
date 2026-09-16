@@ -76,6 +76,16 @@ int main()
                      isReservedPaletteIndex(GameId::Wings, 57) &&
                      !isReservedPaletteIndex(GameId::Wings, 64),
                  "Wings reserved palette index rules are incorrect");
+    const auto autsPalette = defaultAutsPalette();
+    ok &= expect(autsPalette[0] == RGB{0, 0, 0} &&
+                     autsPalette[7] == RGB{92, 92, 92} &&
+                     autsPalette[39] == RGB{36, 36, 252} &&
+                     autsPalette[92] == RGB{132, 132, 132} &&
+                     autsPalette[95] == RGB{252, 252, 252},
+                 "AUTS palette must match BLANK.BMP");
+    ok &= expect(!isReservedPaletteIndex(GameId::Auts, 0) &&
+                     !isReservedPaletteIndex(GameId::Auts, 255),
+                 "AUTS palette indices should remain paintable");
     const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
         {1, {0, 0, 171}},      {2, {0, 171, 0}},      {3, {0, 171, 171}},
         {4, {171, 0, 0}},      {5, {171, 0, 171}},    {6, {171, 87, 0}},

@@ -6,3 +6,4 @@
 
 std::array<RGB, 256> defaultVWingPalette();
 std::array<RGB, 256> defaultWingsPalette();
+std::array<RGB, 256> defaultAutsPalette();

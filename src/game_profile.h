@@ -9,6 +9,7 @@
 enum class GameId : std::uint8_t {
     VWing,
     Wings,
+    Auts,
 };
 
 enum class GameFeature : std::uint32_t {

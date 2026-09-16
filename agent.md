@@ -8,8 +8,9 @@ pidetään `README.md`- ja `docs/`-tiedostoissa.
 
 PCX Level Tool on C++17- ja Qt 6 -pohjainen pikselintarkka editori vanhojen
 indeksoituja PCX-kuvia käyttäville peleille. Ensimmäiset peliprofiilit ovat
-V-Wing ja Wings. Rakenteen pitää sallia uusien samankaltaisten pelien lisääminen
-ilman editorin yhteisten piirto-, taso- ja projektitoimintojen kopioimista.
+V-Wing, Wings ja AUTS. Rakenteen pitää sallia uusien samankaltaisten pelien
+lisääminen ilman editorin yhteisten piirto-, taso- ja projektitoimintojen
+kopioimista.
 
 Tuetut alustat ovat Windows x86_64 ja Linux x86_64. Julkaisut tuotetaan
 Windows ZIP- ja Linux AppImage -paketteina.
@@ -54,6 +55,21 @@ Windows ZIP- ja Linux AppImage -paketteina.
 - Wingsin paikallinen referenssiaineisto on `Wings/`-hakemistossa. Hakemisto on
   aina Gitin ja julkaisupakettien ulkopuolella eikä sen tiedostoja muokata.
 
+### AUTS
+
+- Kiinteä kenttäkoko 320 x 400 ja kiinteä 256 värin AUTS-paletti.
+- Dokumentoidut erikoisindeksit ovat avaruus 0, rikkoutumaton 7, vesi 39 ja
+  telakointilevy 92–95.
+- Uudessa ja julkaistussa kentässä on alkuperäisen BMP2LEV-converterin tavoin
+  kahden pikselin rikkoutumaton reunus indeksillä 7.
+- AUTS `.LEV` voidaan lukea ja kirjoittaa suoraan. Muoto on RLE-pakattu eikä
+  sisällä palettia tai erillistä kentän nimeä; nimi toimii DOS-tiedostonimenä.
+- Pelikohtainen BMP-tuonti hyväksyy vain 320 x 400, 8-bittisen pakkaamattoman
+  indeksoidun kuvan. Indeksit säilytetään ja kiinteä AUTS-paletti otetaan
+  käyttöön.
+- Paikallinen `AUTSCONV/`-aineisto on read-only-referenssiä ja aina Gitin sekä
+  julkaisupakettien ulkopuolella.
+
 ## Uuden pelin lisäämisen reitti
 
 1. Lisää vakaa `GameId`, profiili ja ominaisuusliput tiedostoihin
@@ -83,26 +99,29 @@ vain read-only-referenssinä.
 - Wingsin muuttuvankokoiset kentät ja tarkka oletuspaletti
 - Wingsin peliasetukset, parallax-taustan oma välilehti ja oikea kokolaskenta
 - Wings-yhteensopiva `.LEV`-julkaisu ilman alkuperäisen MAKELEV-ohjelman ajoa
+- AUTS-kenttien luonti, BMP-tuonti ja `.LEV`-julkaisu ilman alkuperäisen
+  BMP2LEV-ohjelman ajoa
 - V-Wingin nykyisten muokkaus- ja julkaisutoimintojen säilyminen
 
 ### Ennen 0.2.0-julkaisua
 
-- Päivitä käyttöohje kattamaan sekä V-Wing että Wings.
-- Tee manuaalinen smoke test alkuperäisissä V-Wing- ja Wings-peleissä:
-  tavallinen Wings-kenttä, parallax-kenttä ja V-Wing-regressiotesti.
+- Viimeistele käyttöohje kattamaan V-Wing, Wings ja AUTS.
+- Tee manuaalinen smoke test alkuperäisissä V-Wing-, Wings- ja AUTS-peleissä:
+  tavallinen Wings-kenttä, parallax-kenttä, AUTS-kenttä ja V-Wing-regressiotesti.
 - Varmista `.pxlp`-round-trip molemmilla peliprofiileilla ja enintään viidellä
   tasolla.
 - Aja GCC- ja Clang-buildit sekä kaikki CTest-testit Linuxissa.
 - Varmista GitHub Actionsin Windows- ja Linux-paketointi puhtaasta tagista.
-- Tarkista, ettei `Wings/`, build-hakemistoja tai muuta referenssiaineistoa ole
-  lähde- tai binääripaketeissa.
+- Tarkista, ettei `Wings/`, `AUTSCONV/`, build-hakemistoja tai muuta
+  referenssiaineistoa ole lähde- tai binääripaketeissa.
 - Päivitä `CMakeLists.txt` versionumeroon 0.2.0 vasta julkaisuvalmiina, viimeistele
   `CHANGELOG.md` ja luo sen jälkeen tagi `v0.2.0`.
 
 ## Kehityssäännöt
 
-- Muokkaa vain `LEVTOOLS`-repositorion tiedostoja. Ylemmän `VWing`-hakemiston ja
-  `Wings/`-hakemiston aineisto on read-only-referenssiä.
+- Muokkaa vain `LEVTOOLS`-repositorion tiedostoja. Ylemmän `VWing`-hakemiston,
+  `Wings/`-hakemiston ja `AUTSCONV/`-hakemiston aineisto on
+  read-only-referenssiä.
 - Pidä riippuvuudet vähäisinä: Qt 6 Widgets/SVG ja C++-standardikirjasto.
 - Säilytä Windows- ja Linux-yhteensopivuus; älä kovakoodaa paikallisia polkuja.
 - Yksi käyttäjän piirtoele on yksi undo-operaatio. Rasteroidun esikatselun ja
@@ -119,8 +138,8 @@ vain read-only-referenssinä.
 
 ## Myöhempi jatkokehitys
 
-- Lisää seuraavat PCX-pohjaiset pelit yksi profiili ja formaatti kerrallaan;
-  mahdollinen AUTS vaatii ensin formaatin ja palettirajoitusten tutkimisen.
+- Lisää seuraavat indeksoituja kuvia käyttävät pelit yksi profiili ja formaatti
+  kerrallaan.
 - Lisää pelikohtainen validointi yhteiseen raportointirajapintaan.
 - Lisää LEV-tuonti Wingsille vasta, kun reader voidaan toteuttaa ja testata
   deterministisesti oikealla aineistolla.

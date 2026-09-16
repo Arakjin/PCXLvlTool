@@ -1,7 +1,7 @@
 # PCX Level Tool – käyttöohje
 
-PCX Level Tool on pikselintarkka kenttäeditori. Ensimmäinen tuettu peli on
-V-Wing. Ohjelma avaa pelin `.LEV`-kenttiä ja tallentaa monitasoisen työn
+PCX Level Tool on pikselintarkka kenttäeditori V-Wingille, Wingsille ja
+AUTSille. Ohjelma avaa tuettuja `.LEV`-kenttiä ja tallentaa monitasoisen työn
 muokattavana `.pxlp`-projektina.
 
 > Säilytä alkuperäisestä `.LEV`-tiedostosta varmuuskopio. Testaa julkaistu
@@ -9,11 +9,13 @@ muokattavana `.pxlp`-projektina.
 
 ## Uuden työn aloittaminen
 
-- **File > New level** (`Ctrl+N`) luo tyhjän kentän ja oletuspaletin.
+- **File > New level** (`Ctrl+N`) kysyy pelin ja luo sille oikeankokoisen tyhjän
+  kentän sekä oletuspaletin.
 - **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän tai `.pxlp`-projektin.
-- Yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen. Nimen
-  enimmäispituus on 20 tulostettavaa ASCII-merkkiä. Ääkkösiä ei hyväksytä ja
-  nimi muutetaan tallennettaessa isoiksi kirjaimiksi.
+- V-Wingissä yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen.
+  Sen enimmäispituus on 20 tulostettavaa ASCII-merkkiä. Ääkkösiä ei hyväksytä
+  ja nimi muutetaan tallennettaessa isoiksi kirjaimiksi. Wingsissä ja AUTSissa
+  nimi toimii julkaistavan tiedostonimen ehdotuksena.
 
 `.LEV` ja `.pxlp` palvelevat eri tarkoituksia:
 
@@ -21,6 +23,34 @@ muokattavana `.pxlp`-projektina.
   tasojen järjestys, läpinäkyvyys ja muut editoritiedot säilyvät.
 - **Publish LEV** kirjoittaa pelissä käytettävän `.LEV`-tiedoston. Näkyvät
   tasot yhdistetään yhdeksi kuvaksi, joten jatka muokkausta `.pxlp`-projektista.
+
+AUTS ei tallenna kentän nimeä LEV-datan sisään. Yläpalkin enintään kahdeksan
+merkin DOS-turvallista nimeä käytetään ehdotuksena julkaistavan tiedoston
+nimeksi. Nimi muutetaan tallennettaessa isoiksi kirjaimiksi.
+
+## AUTS-kentät ja BMP-tuonti
+
+AUTS-kenttä on aina 320 x 400 pikseliä ja käyttää alkuperäisen `BLANK.BMP`-
+mallin kiinteää 256 värin palettia. Dokumentoidut erikoisindeksit ovat:
+
+- 0: avaruus
+- 7: rikkoutumaton materiaali
+- 39: vesi
+- 92–95: telakointilevy
+
+Uusi kenttä saa automaattisesti kahden pikselin paksuisen rikkoutumattoman
+reunan indeksillä 7. Julkaisu palauttaa tämän reunan, vaikka sitä olisi
+muokattu editorissa. Alkuperäisen converterin ohjeen mukaan yhdessä kentässä
+saa olla enintään seitsemän veden pintaa, veden pinnan tulee olla alle 100
+pikseliä pitkä ja aaltojen pitää pysyä yli viiden pikselin päässä katosta tai
+koskettaa kattoa.
+
+**File > Import AUTS BMP** tuo nykyiseksi AUTS-työksi pakkaamattoman 320 x 400,
+8-bittisen indeksoidun BMP-kuvan. Pikselien indeksit säilytetään ja kuva saa
+kiinteän AUTS-paletin. Jos lähteen paletti poikkeaa alkuperäisestä, ohjelma
+ilmoittaa siitä; käytä materiaalien varmaan vastaavuuteen alkuperäistä
+`BLANK.BMP`-palettia. Tallenna tuotu työ `.pxlp`-projektiksi ja tee peliin
+menevä tiedosto valinnalla **Publish LEV**.
 
 ## Piirtäminen ja värit
 
