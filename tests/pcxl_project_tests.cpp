@@ -101,6 +101,26 @@ int main()
                      loadedBackground->palette == loaded.palette,
                  "PXLP parallax document should round-trip");
 
+    Level vwing;
+    vwing.name = "V-WING TEST";
+    vwing.palette = defaultVWingPalette();
+    initializeBackgroundLayer(vwing);
+    vwing.layers[0].pixels[999] = 57;
+    flattenLayers(vwing);
+    LevelCreationSettings vwingSettings;
+    vwingSettings.game = GameId::VWing;
+    vwingSettings.name = vwing.name;
+    ok &= expect(savePxlProject(path, vwing, nullptr, vwingSettings, error),
+                 "V-Wing PXLP project should save");
+    loadedBackground.reset();
+    ok &= expect(loadPxlProject(path, loaded, loadedBackground, loadedSettings,
+                                error) &&
+                     loadedSettings.game == GameId::VWing &&
+                     loadedSettings.name == "V-WING TEST" &&
+                     loaded.layers[0].pixels[999] == 57 &&
+                     !loadedBackground,
+                 "V-Wing PXLP project should round-trip");
+
     std::filesystem::remove(path, ignored);
     return ok ? 0 : 1;
 }

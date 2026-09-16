@@ -10,7 +10,6 @@
 #include "palette_rules.h"
 #include "palette_widget.h"
 #include "pcxl_project_io.h"
-#include "project_io.h"
 #include "wings_lev_writer.h"
 
 #include <QAction>
@@ -1161,9 +1160,9 @@ void MainWindow::openLevel()
 
     const QString filename = QFileDialog::getOpenFileName(
         this, tr("Open project or level"), QString(),
-        tr("PCX Level Tool projects and levels (*.pxlp *.PXLP *.vwp *.VWP "
-           "*.lev *.LEV);;PCX Level Tool projects (*.pxlp *.PXLP);;"
-           "Legacy V-Wing projects (*.vwp *.VWP);;V-Wing levels (*.lev *.LEV)"));
+        tr("PCX Level Tool projects and levels (*.pxlp *.PXLP *.lev *.LEV);;"
+           "PCX Level Tool projects (*.pxlp *.PXLP);;"
+           "V-Wing levels (*.lev *.LEV)"));
     if (filename.isEmpty()) {
         return;
     }
@@ -1172,21 +1171,17 @@ void MainWindow::openLevel()
     std::string error;
     const std::filesystem::path path = toPath(filename);
     const QString suffix = QFileInfo(filename).suffix();
-    const bool isLegacyProject =
-        QString::compare(suffix, QStringLiteral("vwp"),
-                         Qt::CaseInsensitive) == 0;
     const bool isPxlProject =
         QString::compare(suffix, QStringLiteral("pxlp"),
                          Qt::CaseInsensitive) == 0;
-    const bool isProject = isLegacyProject || isPxlProject;
+    const bool isProject = isPxlProject;
     std::unique_ptr<Level> loadedBackground;
     LevelCreationSettings loadedSettings;
     const bool loadedSuccessfully =
         isPxlProject
             ? loadPxlProject(path, *loaded, loadedBackground, loadedSettings,
                              error)
-            : (isLegacyProject ? loadProject(path, *loaded, error)
-                               : loadLev(path, *loaded, error));
+            : loadLev(path, *loaded, error);
     if (!loadedSuccessfully) {
         QMessageBox::critical(this, tr("Open failed"),
                               QString::fromStdString(error));
@@ -1200,6 +1195,11 @@ void MainWindow::openLevel()
     backgroundLevel_ = std::move(loadedBackground);
     creationSettings_ = isPxlProject ? loadedSettings
                                      : LevelCreationSettings{};
+    if (!isPxlProject) {
+        creationSettings_.name = level_->name;
+        creationSettings_.width = static_cast<int>(level_->width);
+        creationSettings_.height = static_cast<int>(level_->height);
+    }
     levelSettingsAction_->setEnabled(creationSettings_.game == GameId::Wings);
     documentTabs_->setCurrentIndex(0);
     documentTabs_->setVisible(creationSettings_.game == GameId::Wings);
@@ -1637,28 +1637,14 @@ bool MainWindow::saveProject()
 
 bool MainWindow::saveProjectAs()
 {
-    if (creationSettings_.game == GameId::Wings) {
-        QString filename = QFileDialog::getSaveFileName(
-            this, tr("Save editable PCX Level Tool project"),
-            toQString(projectPath_),
-            tr("PCX Level Tool projects (*.pxlp)"));
-        if (filename.isEmpty()) {
-            return false;
-        }
-        if (!filename.endsWith(QStringLiteral(".pxlp"),
-                               Qt::CaseInsensitive)) {
-            filename += QStringLiteral(".pxlp");
-        }
-        return writeProject(toPath(filename));
-    }
     QString filename = QFileDialog::getSaveFileName(
-        this, tr("Save editable V-Wing project"), toQString(projectPath_),
-        tr("V-Wing projects (*.vwp)"));
+        this, tr("Save editable PCX Level Tool project"),
+        toQString(projectPath_), tr("PCX Level Tool projects (*.pxlp)"));
     if (filename.isEmpty()) {
         return false;
     }
-    if (!filename.endsWith(QStringLiteral(".vwp"), Qt::CaseInsensitive)) {
-        filename += QStringLiteral(".vwp");
+    if (!filename.endsWith(QStringLiteral(".pxlp"), Qt::CaseInsensitive)) {
+        filename += QStringLiteral(".pxlp");
     }
     return writeProject(toPath(filename));
 }
@@ -1684,21 +1670,15 @@ bool MainWindow::writeProject(const std::filesystem::path& path)
     canvas_->commitSelection();
     std::string error;
     bool saved = false;
-    const bool pxlp = creationSettings_.game == GameId::Wings ||
-                      QString::compare(toQString(path.extension()),
-                                       QStringLiteral(".pxlp"),
-                                       Qt::CaseInsensitive) == 0;
-    if (pxlp) {
-        flattenLayers(*level_);
-        if (backgroundLevel_) {
-            flattenLayers(*backgroundLevel_);
-        }
-        saved = savePxlProject(path, *level_, backgroundLevel_.get(),
-                               creationSettings_, error);
-    } else {
+    if (creationSettings_.game == GameId::VWing) {
         uppercaseLevelName();
-        saved = ::saveProject(path, *level_, error);
     }
+    flattenLayers(*level_);
+    if (backgroundLevel_) {
+        flattenLayers(*backgroundLevel_);
+    }
+    saved = savePxlProject(path, *level_, backgroundLevel_.get(),
+                           creationSettings_, error);
     if (!saved) {
         QMessageBox::critical(this, tr("Save failed"),
                               QString::fromStdString(error));

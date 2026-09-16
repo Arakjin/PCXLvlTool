@@ -13,6 +13,6 @@ Version 1 stores:
 - each document's dimensions and active layer
 - up to five layers with names, visibility, locks, indexed pixels, and masks
 
-Wings projects use `.pxlp` so the variable-size level, Wings gameplay settings,
-and optional parallax document survive editing. Legacy V-Wing `.vwp` projects
-remain supported separately.
+Both V-Wing and Wings projects use `.pxlp`. Wings' variable-size level,
+gameplay settings, and optional parallax document therefore survive editing in
+the same extensible container.

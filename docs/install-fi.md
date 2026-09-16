@@ -27,7 +27,7 @@ julkaisusivulta ja että tarkistussumma täsmää ennen kuin valitset varoitukse
 **Lisätietoja > Suorita joka tapauksessa**.
 
 Ohjelman voi poistaa sulkemalla sen ja poistamalla puretun ohjelmakansion.
-Muualla olevia `.LEV`-, `.vwp`- ja `.pal`-tiedostoja ei poisteta.
+Muualla olevia `.LEV`-, `.pxlp`- ja `.pal`-tiedostoja ei poisteta.
 
 Windows-paketin `VWingConverter`-alikansiossa on alkuperäinen DOS-ohjelma
 `CONV.EXE` sekä sen dokumentit. PCX Level Tool ei tarvitse converteria

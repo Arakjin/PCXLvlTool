@@ -2,8 +2,7 @@
 
 PCX Level Tool on pikselintarkka kenttäeditori. Ensimmäinen tuettu peli on
 V-Wing. Ohjelma avaa pelin `.LEV`-kenttiä ja tallentaa monitasoisen työn
-muokattavana projektina. V-Wing käyttää vanhaa `.vwp`-muotoa ja Wings yleistä
-`.pxlp`-muotoa.
+muokattavana `.pxlp`-projektina.
 
 > Säilytä alkuperäisestä `.LEV`-tiedostosta varmuuskopio. Testaa julkaistu
 > kenttä pelissä ennen sen jakamista muille.
@@ -11,18 +10,17 @@ muokattavana projektina. V-Wing käyttää vanhaa `.vwp`-muotoa ja Wings yleist�
 ## Uuden työn aloittaminen
 
 - **File > New level** (`Ctrl+N`) luo tyhjän kentän ja oletuspaletin.
-- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän, `.vwp`-projektin tai
-  `.pxlp`-projektin.
+- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän tai `.pxlp`-projektin.
 - Yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen. Nimen
   enimmäispituus on 20 tulostettavaa ASCII-merkkiä. Ääkkösiä ei hyväksytä ja
   nimi muutetaan tallennettaessa isoiksi kirjaimiksi.
 
-`.LEV` ja `.vwp` palvelevat eri tarkoituksia:
+`.LEV` ja `.pxlp` palvelevat eri tarkoituksia:
 
-- **Save project** (`Ctrl+S`) tallentaa työversion `.vwp`-muodossa. Tasot,
+- **Save project** (`Ctrl+S`) tallentaa työversion `.pxlp`-muodossa. Tasot,
   tasojen järjestys, läpinäkyvyys ja muut editoritiedot säilyvät.
 - **Publish LEV** kirjoittaa pelissä käytettävän `.LEV`-tiedoston. Näkyvät
-  tasot yhdistetään yhdeksi kuvaksi, joten jatka muokkausta `.vwp`-projektista.
+  tasot yhdistetään yhdeksi kuvaksi, joten jatka muokkausta `.pxlp`-projektista.
 
 ## Piirtäminen ja värit
 
@@ -105,7 +103,7 @@ Osoittimen koordinaatit ja sen alla oleva tiedostoindeksi näkyvät alapalkissa.
 
 ## Kentän vieminen V-Wingiin
 
-1. Tallenna ensin muokattava `.vwp`-projekti.
+1. Tallenna ensin muokattava `.pxlp`-projekti.
 2. Valitse **File > Publish LEV** ja anna julkaistavalle kentälle `.LEV`-nimi.
 3. Ota alkuperäisestä pelikentästä varmuuskopio.
 4. Kopioi julkaistu tiedosto V-Wingin kenttähakemistoon pelin käyttämällä

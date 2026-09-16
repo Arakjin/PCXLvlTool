@@ -1,8 +1,7 @@
 # PCX Level Tool
 
 Portable C++17 and Qt 6 level editor. V-Wing and Wings are the first supported
-games. Layered work is stored as legacy V-Wing `.vwp` projects or game-tagged
-`.pxlp` projects, with room for additional
+games. Layered work is stored as game-tagged `.pxlp` projects, with room for additional
 games and formats in the future.
 
 ## Build
@@ -45,14 +44,14 @@ Run:
 
 The current milestone supports:
 
-- opening `.LEV` levels and layered `.vwp` projects
+- opening `.LEV` levels and layered `.pxlp` projects
 - saving and reopening Wings work, including parallax layers and settings, as
   `.pxlp` projects
 - creating a fresh level with **File > New level** (`Ctrl+N`)
 - editing the in-game level-menu name directly in the top toolbar; LEV names
   are limited to 20 printable ASCII characters, so non-ASCII letters such as
   `ä`, `ö`, and `å` are blocked, and the name is forced to uppercase when saved
-- saving editable work as `.vwp`, plus a separate **Publish LEV** action that
+- saving editable work as `.pxlp`, plus a separate **Publish LEV** action that
   flattens the visible layers into a game-compatible `.LEV` file
 - up to five reorderable, binary visible/hidden layers; transparent pixels in
   upper layers reveal the layers below
@@ -108,7 +107,7 @@ The current milestone supports:
 - prompts before discarding unsaved edits
 
 Published LEV files always use the converter 1.91-compatible classic header.
-The `.vwp` format retains layer pixels, transparency, order, visibility, locks,
+The `.pxlp` format retains layer pixels, transparency, order, visibility, locks,
 names, palette, and the active layer. Keep a backup of levels used for testing.
 The original reference files in the parent V-Wing directory are read-only
 research material and must not be modified.
@@ -134,8 +133,7 @@ Base is selected and stored as index 50, while Clay is index 49.
 Format evidence and research status are documented in
 [`docs/lev-format.md`](docs/lev-format.md) and
 [`docs/reverse-engineering.md`](docs/reverse-engineering.md). The editable
-project container is documented in [`docs/vwp-format.md`](docs/vwp-format.md),
-and the extensible multi-game container in
+extensible multi-game project container is documented in
 [`docs/pxlp-format.md`](docs/pxlp-format.md).
 
 ## Third-party artwork
