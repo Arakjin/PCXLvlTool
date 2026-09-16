@@ -29,7 +29,8 @@ constexpr auto kSelectionMimeType = "application/x-vwing-level-selection";
 
 template <typename Plot>
 void rasterBrush(const int centerX, const int centerY, const int thickness,
-                 const BrushShape shape, Plot plot)
+                 const BrushShape shape, const int canvasWidth,
+                 const int canvasHeight, Plot plot)
 {
     const int lower = (thickness - 1) / 2;
     const int upper = thickness / 2;
@@ -38,8 +39,7 @@ void rasterBrush(const int centerX, const int centerY, const int thickness,
                                               : (thickness - 1) / 2.0;
     for (int y = centerY - lower; y <= centerY + upper; ++y) {
         for (int x = centerX - lower; x <= centerX + upper; ++x) {
-            if (x < 0 || y < 0 || x >= static_cast<int>(Level::Width) ||
-                y >= static_cast<int>(Level::Height)) {
+            if (x < 0 || y < 0 || x >= canvasWidth || y >= canvasHeight) {
                 continue;
             }
             if (shape == BrushShape::Circle) {
@@ -56,7 +56,8 @@ void rasterBrush(const int centerX, const int centerY, const int thickness,
 
 template <typename Plot>
 void rasterLine(QPoint from, const QPoint& to, const int thickness,
-                const BrushShape brushShape, Plot plot)
+                const BrushShape brushShape, const int canvasWidth,
+                const int canvasHeight, Plot plot)
 {
     const int dx = std::abs(to.x() - from.x());
     const int sx = from.x() < to.x() ? 1 : -1;
@@ -64,7 +65,8 @@ void rasterLine(QPoint from, const QPoint& to, const int thickness,
     const int sy = from.y() < to.y() ? 1 : -1;
     int error = dx + dy;
     while (true) {
-        rasterBrush(from.x(), from.y(), thickness, brushShape, plot);
+        rasterBrush(from.x(), from.y(), thickness, brushShape, canvasWidth,
+                    canvasHeight, plot);
         if (from == to) {
             break;
         }
@@ -83,7 +85,8 @@ void rasterLine(QPoint from, const QPoint& to, const int thickness,
 template <typename Plot>
 void rasterBezier(const QPoint& start, const QPoint& control1,
                   const QPoint& control2, const QPoint& end,
-                  const int thickness, Plot plot)
+                  const int thickness, const int canvasWidth,
+                  const int canvasHeight, Plot plot)
 {
     const auto distance = [](const QPoint& first, const QPoint& second) {
         const double x = second.x() - first.x();
@@ -112,12 +115,14 @@ void rasterBezier(const QPoint& start, const QPoint& control1,
                 control2Weight * control2.y() + endWeight * end.y())),
         };
         if (current != previous) {
-            rasterLine(previous, current, thickness, BrushShape::Square, plot);
+            rasterLine(previous, current, thickness, BrushShape::Square,
+                       canvasWidth, canvasHeight, plot);
             previous = current;
         }
     }
     if (previous != end) {
-        rasterLine(previous, end, thickness, BrushShape::Square, plot);
+        rasterLine(previous, end, thickness, BrushShape::Square, canvasWidth,
+                   canvasHeight, plot);
     }
 }
 
@@ -186,7 +191,8 @@ template <typename Plot>
 void rasterEllipse(const QPoint& from, const QPoint& to,
                    const std::uint8_t outlineIndex,
                    const std::uint8_t fillIndex, const int thickness,
-                   const ShapeMode mode, Plot plot)
+                   const ShapeMode mode, const int canvasWidth,
+                   const int canvasHeight, Plot plot)
 {
     const int left = std::min(from.x(), to.x());
     const int right = std::max(from.x(), to.x());
@@ -196,6 +202,7 @@ void rasterEllipse(const QPoint& from, const QPoint& to,
     const int height = bottom - top + 1;
     if (width == 1 || height == 1) {
         rasterLine({left, top}, {right, bottom}, thickness, BrushShape::Square,
+                   canvasWidth, canvasHeight,
                    [&](const int x, const int y) {
                        plot(x, y, mode == ShapeMode::FillOnly ? fillIndex
                                                               : outlineIndex);
@@ -321,6 +328,9 @@ LevelCanvas::LevelCanvas(QWidget* parent) : QAbstractScrollArea(parent)
 
 void LevelCanvas::setLevel(Level* level)
 {
+    if (level == nullptr && level_ != nullptr) {
+        undoStack_->clear();
+    }
     clearSelection();
     curveStage_ = CurveStage::None;
     polygonActive_ = false;
@@ -330,11 +340,24 @@ void LevelCanvas::setLevel(Level* level)
     textDraft_.clear();
     level_ = level;
     if (level_ != nullptr) {
+        auto [entry, inserted] = undoStacks_.try_emplace(level_);
+        if (inserted) {
+            entry->second = std::make_unique<QUndoStack>();
+            QUndoStack* stack = entry->second.get();
+            connect(stack, &QUndoStack::cleanChanged, this,
+                    [this, level, stack](const bool clean) {
+                        if (level_ == level && undoStack_ == stack) {
+                            emit undoCleanChanged(clean);
+                        }
+                    });
+        }
+        undoStack_ = entry->second.get();
         initializeBackgroundLayer(*level_);
         flattenLayers(*level_);
+    } else {
+        undoStack_ = &fallbackUndoStack_;
     }
     drawing_ = false;
-    undoStack_.clear();
     strokeChanges_.clear();
     strokeChangeIndices_.clear();
     updateScrollBars();
@@ -364,9 +387,20 @@ void LevelCanvas::setZoom(const double zoom)
 
 double LevelCanvas::zoom() const { return zoom_; }
 
+void LevelCanvas::setGame(const GameId game)
+{
+    game_ = game;
+    if (isReservedPaletteIndex(game_, selectedIndex_)) {
+        setSelectedIndex(game_ == GameId::Wings ? 128 : 56);
+    }
+    if (isReservedPaletteIndex(game_, secondaryIndex_)) {
+        setSecondaryIndex(game_ == GameId::Wings ? 129 : 57);
+    }
+}
+
 void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 {
-    if (selectedIndex_ == index || isReservedPaletteIndex(index)) {
+    if (selectedIndex_ == index || isReservedPaletteIndex(game_, index)) {
         return;
     }
     selectedIndex_ = index;
@@ -376,7 +410,7 @@ void LevelCanvas::setSelectedIndex(const std::uint8_t index)
 
 void LevelCanvas::setSecondaryIndex(const std::uint8_t index)
 {
-    if (secondaryIndex_ == index || isReservedPaletteIndex(index)) {
+    if (secondaryIndex_ == index || isReservedPaletteIndex(game_, index)) {
         return;
     }
     secondaryIndex_ = index;
@@ -505,7 +539,7 @@ void LevelCanvas::setPaletteColor(const std::uint8_t index, const RGB color)
     if (level_ == nullptr || level_->palette[index] == color) {
         return;
     }
-    undoStack_.push(
+    undoStack_->push(
         new PaletteEditCommand(this, index, level_->palette[index], color));
 }
 
@@ -524,7 +558,7 @@ void LevelCanvas::setPalette(const std::array<RGB, 256>& palette)
     if (level_ == nullptr || level_->palette == palette) {
         return;
     }
-    undoStack_.push(new PaletteReplaceCommand(this, level_->palette, palette));
+    undoStack_->push(new PaletteReplaceCommand(this, level_->palette, palette));
 }
 
 void LevelCanvas::applyPalette(const std::array<RGB, 256>& palette)
@@ -567,7 +601,7 @@ void LevelCanvas::commitSelection()
             if (selectionHasSource_) {
                 const QPoint source = selectionSourcePosition_ + QPoint(x, y);
                 const std::size_t sourceOffset =
-                    static_cast<std::size_t>(source.y()) * Level::Width +
+                    static_cast<std::size_t>(source.y()) * level_->width +
                     source.x();
                 finalValues[sourceOffset] =
                     level_->activeLayer == 0
@@ -577,7 +611,7 @@ void LevelCanvas::commitSelection()
             if (selectionOpacity_[localOffset] != 0) {
                 const QPoint destination = selectionPosition_ + QPoint(x, y);
                 finalValues[static_cast<std::size_t>(destination.y()) *
-                                Level::Width +
+                                level_->width +
                             destination.x()] =
                     {selectionPixels_[localOffset], 1};
             }
@@ -599,7 +633,7 @@ void LevelCanvas::commitSelection()
               });
     clearSelection();
     if (!changes.empty()) {
-        undoStack_.push(new PixelEditCommand(
+        undoStack_->push(new PixelEditCommand(
             level_, std::move(changes), level_->activeLayer, this,
             tr("Commit selection")));
     }
@@ -626,7 +660,7 @@ void LevelCanvas::deleteSelection()
                 }
                 const QPoint source = selectionSourcePosition_ + QPoint(x, y);
                 const std::size_t offset =
-                    static_cast<std::size_t>(source.y()) * Level::Width +
+                    static_cast<std::size_t>(source.y()) * level_->width +
                     source.x();
                 const std::uint8_t newValue =
                     level_->activeLayer == 0 ? 0 : layer.pixels[offset];
@@ -642,7 +676,7 @@ void LevelCanvas::deleteSelection()
     }
     clearSelection();
     if (!changes.empty()) {
-        undoStack_.push(new PixelEditCommand(
+        undoStack_->push(new PixelEditCommand(
             level_, std::move(changes), level_->activeLayer, this,
             tr("Delete selection")));
     }
@@ -689,8 +723,9 @@ void LevelCanvas::pasteSelection()
     qint32 sourceY = 0;
     stream >> width >> height >> sourceX >> sourceY;
     if (stream.status() != QDataStream::Ok || width == 0 || height == 0 ||
-        width > Level::Width || height > Level::Height ||
-        static_cast<std::size_t>(width) * height > Level::PixelCount) {
+        width > static_cast<qint64>(level_->width) ||
+        height > static_cast<qint64>(level_->height) ||
+        static_cast<std::size_t>(width) * height > level_->pixelCount()) {
         return;
     }
     const std::size_t size = static_cast<std::size_t>(width) * height;
@@ -722,8 +757,8 @@ void LevelCanvas::pasteSelection()
     selectionActive_ = true;
     selectionEditPending_ = true;
     emit pendingSelectionEditChanged(true);
-    const qint64 maximumX = static_cast<qint64>(Level::Width) - width;
-    const qint64 maximumY = static_cast<qint64>(Level::Height) - height;
+    const qint64 maximumX = static_cast<qint64>(level_->width) - width;
+    const qint64 maximumY = static_cast<qint64>(level_->height) - height;
     selectionPosition_ = {
         static_cast<int>(
             std::clamp(static_cast<qint64>(sourceX) + 1, qint64{0}, maximumX)),
@@ -739,11 +774,11 @@ void LevelCanvas::selectAll()
         return;
     }
     commitSelection();
-    selectionBounds_ = QRect(0, 0, static_cast<int>(Level::Width),
-                             static_cast<int>(Level::Height));
+    selectionBounds_ = QRect(0, 0, static_cast<int>(level_->width),
+                             static_cast<int>(level_->height));
     selectionSourcePosition_ = {0, 0};
     selectionPosition_ = {0, 0};
-    selectionMask_.assign(Level::PixelCount, 1);
+    selectionMask_.assign(level_->pixelCount(), 1);
     const Level::Layer& layer = level_->layers[level_->activeLayer];
     selectionPixels_.assign(layer.pixels.begin(), layer.pixels.end());
     selectionOpacity_.assign(layer.mask.begin(), layer.mask.end());
@@ -777,10 +812,12 @@ bool LevelCanvas::addLayer()
     }
     commitSelection();
     level_->layers.emplace_back();
+    level_->layers.back().pixels.resize(level_->pixelCount());
+    level_->layers.back().mask.resize(level_->pixelCount());
     level_->layers.back().name =
         "Layer " + std::to_string(level_->layers.size() - 1);
     level_->activeLayer = level_->layers.size() - 1;
-    undoStack_.clear();
+    undoStack_->clear();
     emit layersChanged();
     return true;
 }
@@ -795,7 +832,7 @@ bool LevelCanvas::deleteActiveLayer()
                          static_cast<std::ptrdiff_t>(level_->activeLayer));
     level_->activeLayer = std::min(level_->activeLayer,
                                    level_->layers.size() - 1);
-    undoStack_.clear();
+    undoStack_->clear();
     flattenLayers(*level_);
     emit layersChanged();
     viewport()->update();
@@ -819,7 +856,7 @@ bool LevelCanvas::duplicateActiveLayer()
     inserted->pixels = source.pixels;
     inserted->mask = source.mask;
     ++level_->activeLayer;
-    undoStack_.clear();
+    undoStack_->clear();
     flattenLayers(*level_);
     emit layersChanged();
     viewport()->update();
@@ -839,7 +876,7 @@ bool LevelCanvas::moveActiveLayer(const int direction)
     std::swap(level_->layers[level_->activeLayer],
               level_->layers[static_cast<std::size_t>(target)]);
     level_->activeLayer = static_cast<std::size_t>(target);
-    undoStack_.clear();
+    undoStack_->clear();
     flattenLayers(*level_);
     emit layersChanged();
     viewport()->update();
@@ -895,7 +932,35 @@ void LevelCanvas::renameLayer(const int index, const QString& name)
     emit layersChanged();
 }
 
-QUndoStack* LevelCanvas::undoStack() { return &undoStack_; }
+QUndoStack* LevelCanvas::undoStack() { return undoStack_; }
+
+void LevelCanvas::forgetLevel(Level* level)
+{
+    if (level == nullptr) {
+        return;
+    }
+    if (level_ == level) {
+        setLevel(nullptr);
+    }
+    undoStacks_.erase(level);
+}
+
+bool LevelCanvas::hasDirtyUndoStack() const
+{
+    for (const auto& entry : undoStacks_) {
+        if (!entry.second->isClean()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void LevelCanvas::markAllUndoStacksClean()
+{
+    for (const auto& entry : undoStacks_) {
+        entry.second->setClean();
+    }
+}
 
 void LevelCanvas::refreshImage()
 {
@@ -934,7 +999,7 @@ void LevelCanvas::paintEvent(QPaintEvent*)
                     const QPoint source =
                         selectionSourcePosition_ + QPoint(x, y);
                     const std::size_t sourceOffset =
-                        static_cast<std::size_t>(source.y()) * Level::Width +
+                        static_cast<std::size_t>(source.y()) * level_->width +
                         source.x();
                     composedPixels[sourceOffset] = compositeLayerPixel(
                         *level_, sourceOffset, level_->activeLayer);
@@ -944,7 +1009,7 @@ void LevelCanvas::paintEvent(QPaintEvent*)
                 }
                 const QPoint destination = selectionPosition_ + QPoint(x, y);
                 const std::size_t destinationOffset =
-                    static_cast<std::size_t>(destination.y()) * Level::Width +
+                    static_cast<std::size_t>(destination.y()) * level_->width +
                     destination.x();
                 composedPixels[destinationOffset] =
                     selectionPixels_[localOffset];
@@ -953,9 +1018,9 @@ void LevelCanvas::paintEvent(QPaintEvent*)
         imagePixels = composedPixels.data();
     }
 
-    QImage image(imagePixels, static_cast<int>(Level::Width),
-                 static_cast<int>(Level::Height),
-                 static_cast<int>(Level::Width), QImage::Format_Indexed8);
+    QImage image(imagePixels, static_cast<int>(level_->width),
+                 static_cast<int>(level_->height),
+                 static_cast<int>(level_->width), QImage::Format_Indexed8);
     QList<QRgb> colors;
     colors.reserve(static_cast<qsizetype>(level_->palette.size()));
     for (const RGB& color : level_->palette) {
@@ -966,7 +1031,8 @@ void LevelCanvas::paintEvent(QPaintEvent*)
     painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
     painter.translate(-horizontalScrollBar()->value(),
                       -verticalScrollBar()->value());
-    painter.drawImage(QRectF(0, 0, Level::Width * zoom_, Level::Height * zoom_),
+    painter.drawImage(QRectF(0, 0, level_->width * zoom_,
+                             level_->height * zoom_),
                       image);
     paintShapePreview(painter);
     paintSelection(painter);
@@ -1306,9 +1372,9 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
                     bounds.setSize({defaultWidth, defaultHeight});
                 }
                 bounds.setRight(std::min(bounds.right(),
-                                         static_cast<int>(Level::Width) - 1));
+                                         static_cast<int>(level_->width) - 1));
                 bounds.setBottom(std::min(bounds.bottom(),
-                                          static_cast<int>(Level::Height) - 1));
+                                          static_cast<int>(level_->height) - 1));
                 textBoxBounds_ = bounds;
                 textDraftActive_ = true;
                 emit pendingSelectionEditChanged(true);
@@ -1477,8 +1543,8 @@ QPoint LevelCanvas::imagePoint(const QPointF& viewportPoint) const
         (viewportPoint.x() + horizontalScrollBar()->value()) / zoom_);
     const int y = static_cast<int>(
         (viewportPoint.y() + verticalScrollBar()->value()) / zoom_);
-    if (x < 0 || y < 0 || x >= static_cast<int>(Level::Width) ||
-        y >= static_cast<int>(Level::Height)) {
+    if (x < 0 || y < 0 || x >= static_cast<int>(level_->width) ||
+        y >= static_cast<int>(level_->height)) {
         return {-1, -1};
     }
     return {x, y};
@@ -1514,7 +1580,7 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
         return true;
     }
 
-    const std::size_t offset = static_cast<std::size_t>(y) * Level::Width +
+    const std::size_t offset = static_cast<std::size_t>(y) * level_->width +
                                static_cast<std::size_t>(x);
     Level::Layer& layer = level_->layers[level_->activeLayer];
     const bool eraseToTransparency =
@@ -1555,6 +1621,8 @@ bool LevelCanvas::setBrushPixel(const int x, const int y,
 {
     bool changed = false;
     rasterBrush(x, y, thickness, brushShape(strokeTool_),
+                static_cast<int>(level_->width),
+                static_cast<int>(level_->height),
                 [&](const int brushX, const int brushY) {
                     changed |= setPixel(brushX, brushY, index);
                 });
@@ -1582,11 +1650,11 @@ std::uint8_t LevelCanvas::pixelAt(const int x, const int y) const
                                selectionBounds_.width() +
                            localX] != 0) {
             const std::size_t offset =
-                static_cast<std::size_t>(y) * Level::Width + x;
+                static_cast<std::size_t>(y) * level_->width + x;
             return compositeLayerPixel(*level_, offset, level_->activeLayer);
         }
     }
-    return level_->pixels[static_cast<std::size_t>(y) * Level::Width + x];
+    return level_->pixels[static_cast<std::size_t>(y) * level_->width + x];
 }
 
 bool LevelCanvas::selectionContains(const int x, const int y) const
@@ -1644,8 +1712,8 @@ void LevelCanvas::sprayAt(const QPoint& point, const std::uint8_t index,
         const int deltaX = x - point.x();
         const int deltaY = y - point.y();
         if (deltaX * deltaX + deltaY * deltaY <= lower * lower && x >= 0 &&
-            y >= 0 && x < static_cast<int>(Level::Width) &&
-            y < static_cast<int>(Level::Height)) {
+            y >= 0 && x < static_cast<int>(level_->width) &&
+            y < static_cast<int>(level_->height)) {
             setPixel(x, y, index);
         }
     }
@@ -1656,6 +1724,8 @@ void LevelCanvas::drawLine(const QPoint& from, const QPoint& to,
 {
     bool changed = false;
     rasterLine(from, to, thickness, brushShape(strokeTool_),
+               static_cast<int>(level_->width),
+               static_cast<int>(level_->height),
                [&](const int x, const int y) {
                    changed |= setPixel(x, y, index);
                });
@@ -1670,6 +1740,8 @@ void LevelCanvas::drawBezier(const QPoint& start, const QPoint& control1,
 {
     bool changed = false;
     rasterBezier(start, control1, control2, end, thickness,
+                 static_cast<int>(level_->width),
+                 static_cast<int>(level_->height),
                  [&](const int x, const int y) {
                      changed |= setPixel(x, y, index);
                  });
@@ -1702,6 +1774,8 @@ void LevelCanvas::drawEllipse(const QPoint& from, const QPoint& to,
 {
     bool changed = false;
     rasterEllipse(from, to, outlineIndex, fillIndex, thickness, mode,
+                  static_cast<int>(level_->width),
+                  static_cast<int>(level_->height),
                   [&](const int x, const int y,
                       const std::uint8_t index) {
                       changed |= setPixel(x, y, index);
@@ -1727,8 +1801,8 @@ void LevelCanvas::drawPolygon(const std::vector<QPoint>& points,
             polygon.append(point);
         }
         const QRect bounds = polygon.boundingRect().intersected(
-            QRect(0, 0, static_cast<int>(Level::Width),
-                  static_cast<int>(Level::Height)));
+            QRect(0, 0, static_cast<int>(level_->width),
+                  static_cast<int>(level_->height)));
         if (!bounds.isEmpty()) {
             QImage mask(bounds.size(), QImage::Format_Grayscale8);
             mask.fill(0);
@@ -1780,8 +1854,8 @@ void LevelCanvas::drawText(const QRect& bounds, const QString& text,
                      Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, text);
     painter.end();
 
-    const int levelWidth = static_cast<int>(Level::Width);
-    const int levelHeight = static_cast<int>(Level::Height);
+    const int levelWidth = static_cast<int>(level_->width);
+    const int levelHeight = static_cast<int>(level_->height);
     for (int y = 0; y < height && bounds.top() + y < levelHeight; ++y) {
         for (int x = 0; x < width && bounds.left() + x < levelWidth; ++x) {
             if (mask.constScanLine(y)[x] != 0) {
@@ -1799,11 +1873,11 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     }
     const auto paintRasterPreview =
         [this, &painter](const auto& rasterize) {
-            QImage preview(static_cast<int>(Level::Width),
-                           static_cast<int>(Level::Height),
+            QImage preview(static_cast<int>(level_->width),
+                           static_cast<int>(level_->height),
                            QImage::Format_ARGB32_Premultiplied);
             preview.fill(Qt::transparent);
-            std::vector<std::uint8_t> mask(Level::Width * Level::Height, 0);
+            std::vector<std::uint8_t> mask(level_->pixelCount(), 0);
             std::vector<QPoint> pixels;
             rasterize([this, &preview, &mask, &pixels](
                           const int x, const int y,
@@ -1815,7 +1889,7 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
                 preview.setPixelColor(x, y,
                                       QColor(rgb.r, rgb.g, rgb.b, 180));
                 const std::size_t offset =
-                    static_cast<std::size_t>(y) * Level::Width + x;
+                    static_cast<std::size_t>(y) * level_->width + x;
                 if (mask[offset] == 0) {
                     mask[offset] = 1;
                     pixels.emplace_back(x, y);
@@ -1824,13 +1898,13 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
             painter.save();
             painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
             painter.drawImage(
-                QRectF(0, 0, Level::Width * zoom_, Level::Height * zoom_),
+                QRectF(0, 0, level_->width * zoom_, level_->height * zoom_),
                 preview);
-            const auto occupied = [&mask](const int x, const int y) {
+            const auto occupied = [&mask, this](const int x, const int y) {
                 return x >= 0 && y >= 0 &&
-                       x < static_cast<int>(Level::Width) &&
-                       y < static_cast<int>(Level::Height) &&
-                       mask[static_cast<std::size_t>(y) * Level::Width + x] !=
+                       x < static_cast<int>(level_->width) &&
+                       y < static_cast<int>(level_->height) &&
+                       mask[static_cast<std::size_t>(y) * level_->width + x] !=
                            0;
             };
             QPainterPath edge;
@@ -1869,6 +1943,8 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         paintRasterPreview([this](const auto& plot) {
             rasterBezier(curveStartPoint_, curveControl1_, curveControl2_,
                          curveEndPoint_, strokeThickness_,
+                         static_cast<int>(level_->width),
+                         static_cast<int>(level_->height),
                          [&](const int x, const int y) {
                              plot(x, y, strokePaintIndex_);
                          });
@@ -2005,7 +2081,8 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
     if (strokeTool_ == DrawTool::Line) {
         paintRasterPreview([this](const auto& plot) {
             rasterLine(strokeStartPoint_, lastImagePoint_, strokeThickness_,
-                       BrushShape::Square,
+                       BrushShape::Square, static_cast<int>(level_->width),
+                       static_cast<int>(level_->height),
                        [&](const int x, const int y) {
                            plot(x, y, strokePaintIndex_);
                        });
@@ -2021,7 +2098,9 @@ void LevelCanvas::paintShapePreview(QPainter& painter) const
         paintRasterPreview([this](const auto& plot) {
             rasterEllipse(strokeStartPoint_, lastImagePoint_,
                           strokePaintIndex_, strokeFillIndex_,
-                          strokeThickness_, strokeShapeMode_, plot);
+                          strokeThickness_, strokeShapeMode_,
+                          static_cast<int>(level_->width),
+                          static_cast<int>(level_->height), plot);
         });
     }
 }
@@ -2053,6 +2132,8 @@ void LevelCanvas::paintBrushPreview(QPainter& painter) const
     painter.setPen(pixelPen);
     painter.setBrush(fillColor);
     rasterBrush(hoverImagePoint_.x(), hoverImagePoint_.y(), thickness, shape,
+                static_cast<int>(level_->width),
+                static_cast<int>(level_->height),
                 [this, &painter](const int x, const int y) {
                     painter.drawRect(QRectF(x * zoom_, y * zoom_, zoom_,
                                             zoom_));
@@ -2131,7 +2212,7 @@ void LevelCanvas::createSelection()
 
     const int width = bounds.width();
     const int height = bounds.height();
-    std::vector<std::uint8_t> candidate(Level::PixelCount, 0);
+    std::vector<std::uint8_t> candidate(level_->pixelCount(), 0);
 
     QPainterPath freehandPath;
     if (strokeTool_ == DrawTool::SelectFreehand) {
@@ -2164,14 +2245,14 @@ void LevelCanvas::createSelection()
                 continue;
             }
             const std::size_t levelOffset =
-                static_cast<std::size_t>(bounds.top() + y) * Level::Width +
+                static_cast<std::size_t>(bounds.top() + y) * level_->width +
                 bounds.left() + x;
             candidate[levelOffset] = 1;
         }
     }
 
     if (strokeSelectionCombineMode_ != SelectionCombineMode::Replace) {
-        std::vector<std::uint8_t> previous(Level::PixelCount, 0);
+        std::vector<std::uint8_t> previous(level_->pixelCount(), 0);
         if (selectionActive_) {
             const int previousWidth = selectionBounds_.width();
             const int previousHeight = selectionBounds_.height();
@@ -2183,13 +2264,13 @@ void LevelCanvas::createSelection()
                         const QPoint global =
                             selectionPosition_ + QPoint(x, y);
                         previous[static_cast<std::size_t>(global.y()) *
-                                     Level::Width +
+                                     level_->width +
                                  global.x()] = 1;
                     }
                 }
             }
         }
-        for (std::size_t offset = 0; offset < Level::PixelCount; ++offset) {
+        for (std::size_t offset = 0; offset < level_->pixelCount(); ++offset) {
             switch (strokeSelectionCombineMode_) {
             case SelectionCombineMode::Add:
                 candidate[offset] = previous[offset] || candidate[offset];
@@ -2206,13 +2287,13 @@ void LevelCanvas::createSelection()
         }
     }
 
-    int left = static_cast<int>(Level::Width);
+    int left = static_cast<int>(level_->width);
     int right = -1;
-    int top = static_cast<int>(Level::Height);
+    int top = static_cast<int>(level_->height);
     int bottom = -1;
-    for (int y = 0; y < static_cast<int>(Level::Height); ++y) {
-        for (int x = 0; x < static_cast<int>(Level::Width); ++x) {
-            if (candidate[static_cast<std::size_t>(y) * Level::Width + x] !=
+    for (int y = 0; y < static_cast<int>(level_->height); ++y) {
+        for (int x = 0; x < static_cast<int>(level_->width); ++x) {
+            if (candidate[static_cast<std::size_t>(y) * level_->width + x] !=
                 0) {
                 left = std::min(left, x);
                 right = std::max(right, x);
@@ -2243,7 +2324,7 @@ void LevelCanvas::createSelection()
     for (int y = 0; y < combinedHeight; ++y) {
         for (int x = 0; x < combinedWidth; ++x) {
             const std::size_t levelOffset =
-                static_cast<std::size_t>(top + y) * Level::Width + left + x;
+                static_cast<std::size_t>(top + y) * level_->width + left + x;
             if (candidate[levelOffset] == 0) {
                 continue;
             }
@@ -2282,9 +2363,9 @@ void LevelCanvas::clearSelection()
 void LevelCanvas::setSelectionPosition(const QPoint& position)
 {
     const int maximumX =
-        static_cast<int>(Level::Width) - selectionBounds_.width();
+        static_cast<int>(level_->width) - selectionBounds_.width();
     const int maximumY =
-        static_cast<int>(Level::Height) - selectionBounds_.height();
+        static_cast<int>(level_->height) - selectionBounds_.height();
     const QPoint constrained{std::clamp(position.x(), 0, maximumX),
                              std::clamp(position.y(), 0, maximumY)};
     if (constrained != selectionPosition_) {
@@ -2421,9 +2502,9 @@ void LevelCanvas::beginTextBox(const QPoint& point,
 void LevelCanvas::setTextBoxPosition(const QPoint& position)
 {
     const int maximumX =
-        static_cast<int>(Level::Width) - textBoxBounds_.width();
+        static_cast<int>(level_->width) - textBoxBounds_.width();
     const int maximumY =
-        static_cast<int>(Level::Height) - textBoxBounds_.height();
+        static_cast<int>(level_->height) - textBoxBounds_.height();
     textBoxBounds_.moveTopLeft(
         {std::clamp(position.x(), 0, maximumX),
          std::clamp(position.y(), 0, maximumY)});
@@ -2440,9 +2521,9 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
         return;
     }
 
-    std::vector<std::uint8_t> visited(Level::PixelCount, 0);
+    std::vector<std::uint8_t> visited(level_->pixelCount(), 0);
     std::vector<QPoint> pending{point};
-    visited[static_cast<std::size_t>(point.y()) * Level::Width + point.x()] = 1;
+    visited[static_cast<std::size_t>(point.y()) * level_->width + point.x()] = 1;
     setPixel(point.x(), point.y(), index);
     while (!pending.empty()) {
         const QPoint current = pending.back();
@@ -2455,14 +2536,14 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
         };
         for (const QPoint& neighbour : neighbours) {
             if (neighbour.x() < 0 || neighbour.y() < 0 ||
-                neighbour.x() >= static_cast<int>(Level::Width) ||
-                neighbour.y() >= static_cast<int>(Level::Height) ||
+                neighbour.x() >= static_cast<int>(level_->width) ||
+                neighbour.y() >= static_cast<int>(level_->height) ||
                 (selectionActive_ &&
                  !selectionContains(neighbour.x(), neighbour.y()))) {
                 continue;
             }
             const std::size_t neighbourOffset =
-                static_cast<std::size_t>(neighbour.y()) * Level::Width +
+                static_cast<std::size_t>(neighbour.y()) * level_->width +
                 neighbour.x();
             if (visited[neighbourOffset] == 0 &&
                 pixelAt(neighbour.x(), neighbour.y()) == target) {
@@ -2486,7 +2567,7 @@ void LevelCanvas::beginStroke(const QString& commandText)
 void LevelCanvas::commitStroke()
 {
     if (!strokeChanges_.empty()) {
-        undoStack_.push(new PixelEditCommand(level_, std::move(strokeChanges_),
+        undoStack_->push(new PixelEditCommand(level_, std::move(strokeChanges_),
                                              strokeLayerIndex_, this,
                                              strokeCommandText_));
     }
@@ -2521,10 +2602,10 @@ QPoint LevelCanvas::constrainedShapePoint(const QPoint& point) const
     const int directionX = deltaX < 0 ? -1 : 1;
     const int directionY = deltaY < 0 ? -1 : 1;
     const int availableX = directionX < 0 ? strokeStartPoint_.x()
-                                          : static_cast<int>(Level::Width) - 1 -
+                                          : static_cast<int>(level_->width) - 1 -
                                                 strokeStartPoint_.x();
     const int availableY = directionY < 0 ? strokeStartPoint_.y()
-                                          : static_cast<int>(Level::Height) -
+                                          : static_cast<int>(level_->height) -
                                                 1 - strokeStartPoint_.y();
     const int side = std::min(
         {std::max(std::abs(deltaX), std::abs(deltaY)), availableX, availableY});
@@ -2602,10 +2683,10 @@ void LevelCanvas::updateScrollBars()
 {
     const int contentWidth =
         level_ == nullptr ? 0
-                          : static_cast<int>(std::ceil(Level::Width * zoom_));
+                          : static_cast<int>(std::ceil(level_->width * zoom_));
     const int contentHeight =
         level_ == nullptr ? 0
-                          : static_cast<int>(std::ceil(Level::Height * zoom_));
+                          : static_cast<int>(std::ceil(level_->height * zoom_));
     horizontalScrollBar()->setPageStep(viewport()->width());
     verticalScrollBar()->setPageStep(viewport()->height());
     horizontalScrollBar()->setRange(

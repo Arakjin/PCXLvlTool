@@ -45,3 +45,6 @@ Thumbs.db
 
 # Local original-level corpus
 /testdata/original/
+
+# Local Wings executables, game data, and reverse-engineering references
+/Wings/

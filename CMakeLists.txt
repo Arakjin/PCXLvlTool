@@ -8,12 +8,15 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
 add_library(vwing_level_format
     src/default_palette.cpp
+    src/game_profile.cpp
     src/layer_model.cpp
     src/lev_reader.cpp
     src/lev_writer.cpp
     src/palette_io.cpp
+    src/pcxl_project_io.cpp
     src/pcx_writer.cpp
     src/project_io.cpp
+    src/wings_lev_writer.cpp
 )
 target_include_directories(vwing_level_format PUBLIC src)
 
@@ -117,6 +120,7 @@ install(FILES
     THIRD_PARTY_NOTICES.md
     docs/install-fi.md
     docs/user-guide-fi.md
+    docs/pxlp-format.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool
 )
 install(FILES
@@ -137,6 +141,30 @@ install(DIRECTORY third_party/qt/LICENSES/
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(pcxl_project_tests
+        tests/pcxl_project_tests.cpp
+    )
+    target_link_libraries(pcxl_project_tests PRIVATE vwing_level_format)
+    target_compile_features(pcxl_project_tests PRIVATE cxx_std_17)
+    set_target_properties(pcxl_project_tests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME pcxl_project_tests COMMAND pcxl_project_tests)
+
+    add_executable(wings_lev_writer_tests
+        tests/wings_lev_writer_tests.cpp
+    )
+    target_link_libraries(wings_lev_writer_tests PRIVATE vwing_level_format)
+    target_compile_features(wings_lev_writer_tests PRIVATE cxx_std_17)
+    set_target_properties(wings_lev_writer_tests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME wings_lev_writer_tests COMMAND wings_lev_writer_tests)
+
+    add_executable(game_profile_tests
+        tests/game_profile_tests.cpp
+    )
+    target_link_libraries(game_profile_tests PRIVATE vwing_level_format)
+    target_compile_features(game_profile_tests PRIVATE cxx_std_17)
+    set_target_properties(game_profile_tests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME game_profile_tests COMMAND game_profile_tests)
+
     add_executable(lev_tests
         tests/lev_tests.cpp
     )

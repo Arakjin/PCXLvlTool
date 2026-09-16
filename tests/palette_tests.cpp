@@ -61,6 +61,21 @@ int main()
                      colorChartNumber(255) == 255 &&
                      paletteIndexFromColorChart(57) == 57,
                  "material index conversion is incorrect");
+    const auto wingsPalette = defaultWingsPalette();
+    ok &= expect(wingsPalette[0] == RGB{0, 0, 0} &&
+                     wingsPalette[16] == RGB{112, 112, 168} &&
+                     wingsPalette[32] == RGB{236, 236, 236} &&
+                     wingsPalette[48] == RGB{0, 0, 252} &&
+                     wingsPalette[128] == RGB{0, 248, 0} &&
+                     wingsPalette[255] == RGB{252, 252, 252},
+                 "Wings palette must match COLORS.PCX");
+    ok &= expect(isReservedPaletteIndex(GameId::Wings, 1) &&
+                     !isReservedPaletteIndex(GameId::Wings, 16) &&
+                     isReservedPaletteIndex(GameId::Wings, 17) &&
+                     !isReservedPaletteIndex(GameId::Wings, 56) &&
+                     isReservedPaletteIndex(GameId::Wings, 57) &&
+                     !isReservedPaletteIndex(GameId::Wings, 64),
+                 "Wings reserved palette index rules are incorrect");
     const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
         {1, {0, 0, 171}},      {2, {0, 171, 0}},      {3, {0, 171, 171}},
         {4, {171, 0, 0}},      {5, {171, 0, 171}},    {6, {171, 87, 0}},

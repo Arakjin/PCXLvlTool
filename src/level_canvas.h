@@ -1,6 +1,7 @@
 #pragma once
 
 #include "level.h"
+#include "game_profile.h"
 
 #include <QAbstractScrollArea>
 #include <QPoint>
@@ -10,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -64,6 +66,7 @@ public:
     explicit LevelCanvas(QWidget* parent = nullptr);
 
     void setLevel(Level* level);
+    void setGame(GameId game);
     void setZoom(double zoom);
     double zoom() const;
     void setSelectedIndex(std::uint8_t index);
@@ -101,6 +104,9 @@ public:
     void setLayerLocked(int index, bool locked);
     void renameLayer(int index, const QString& name);
     QUndoStack* undoStack();
+    void forgetLevel(Level* level);
+    bool hasDirtyUndoStack() const;
+    void markAllUndoStacksClean();
     void refreshImage();
 
 signals:
@@ -112,6 +118,7 @@ signals:
     void paletteColorChanged(int index);
     void pendingSelectionEditChanged(bool pending);
     void layersChanged();
+    void undoCleanChanged(bool clean);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -191,6 +198,7 @@ private:
     void reportPosition(const QPoint& point);
 
     Level* level_ = nullptr;
+    GameId game_ = GameId::VWing;
     double zoom_ = 1.0;
     std::uint8_t selectedIndex_ = 56;
     std::uint8_t secondaryIndex_ = 57;
@@ -252,7 +260,9 @@ private:
     std::vector<std::uint8_t> selectionPixels_;
     std::vector<std::uint8_t> selectionOpacity_;
     std::vector<QPoint> freehandSelectionPoints_;
-    QUndoStack undoStack_;
+    QUndoStack fallbackUndoStack_;
+    QUndoStack* undoStack_ = &fallbackUndoStack_;
+    std::unordered_map<Level*, std::unique_ptr<QUndoStack>> undoStacks_;
     std::vector<PixelChange> strokeChanges_;
     std::size_t strokeLayerIndex_ = 0;
     std::unordered_map<std::size_t, std::size_t> strokeChangeIndices_;

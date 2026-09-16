@@ -15,10 +15,14 @@ int main(int argc, char* argv[])
     QApplication::setWindowIcon(
         QIcon(QStringLiteral(":/icons/app/pcxlvltool.svg")));
 
+    const bool smokeTest =
+        application.arguments().contains(QStringLiteral("--smoke-test"));
     MainWindow window;
     window.show();
-    if (application.arguments().contains(QStringLiteral("--smoke-test"))) {
+    if (smokeTest) {
         QTimer::singleShot(0, &application, &QCoreApplication::quit);
+    } else {
+        QTimer::singleShot(0, &window, &MainWindow::promptForInitialLevel);
     }
     return application.exec();
 }

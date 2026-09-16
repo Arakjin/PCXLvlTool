@@ -11,6 +11,8 @@ void initializeBackgroundLayer(Level& level)
     }
     level.layers.emplace_back();
     Level::Layer& background = level.layers.back();
+    background.pixels.resize(level.pixelCount());
+    background.mask.resize(level.pixelCount());
     background.name = "Background";
     background.pixels = level.pixels;
     background.mask.fill(1);
@@ -32,7 +34,7 @@ std::uint8_t compositeLayerPixel(const Level& level, const std::size_t offset,
 void flattenLayers(Level& level)
 {
     initializeBackgroundLayer(level);
-    for (std::size_t offset = 0; offset < Level::PixelCount; ++offset) {
+    for (std::size_t offset = 0; offset < level.pixelCount(); ++offset) {
         level.pixels[offset] = compositeLayerPixel(level, offset);
     }
 }

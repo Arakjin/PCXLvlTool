@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace {
 
@@ -101,5 +102,33 @@ std::array<RGB, 256> defaultVWingPalette()
     palette[245] = RGB{220, 210, 125};
     palette[246] = RGB{70, 80, 90};
     fillGradient(palette, 247, 255, RGB{65, 65, 70}, RGB{210, 210, 215});
+    return palette;
+}
+
+std::array<RGB, 256> defaultWingsPalette()
+{
+    // Exact 256-color palette from the Wings 1.40 COLORS.PCX reference file.
+    constexpr std::string_view hex =
+        "000000000044f0000000d000fcfc00fc9020cc0000dc4010e86c04e89c00ecb400f0c800f4e000fcfc00c0e8e80404fc7070a8cc8448e09c48ecbc7cfce4bc8080fcb000008c0000000000000000000000000000680000a4d0dcd4f4fcfcfcfc"
+        "ecececd4d4d4bcbcbca4a4a48c8c8c7474745c5c5c484848dc0000ac000000c40000ac00e8e800d0d000e88414d470000000fc0000fc0000fc0000fcc0e8e8e8e8fcf4e000dc3c10ec580c000000000000000000000000000000000000000000"
+        "e8e8fcd4d4f0c4c4e8b8b8dca8a8d09898c88c8cbc7c7cb47070a86464a05c5c9450508c4444803c3c7834346c2c2c649c9c9c9090908888888080807878787070706464645c5c5c5454544c4c4c444444383838303030282828202020181818"
+        "d4fcd4a0fca068fc6800fc0000f00000e00000d00000bc0000a800009400008000007000005c00004c00003800002800fcd8b0f0c89ce4b888d8ac78d09c68c49058b8844cac783ca46c309864288c581c844c1478440c6c3c04603400582c00"
+        "00f80000d80000bc00009c000080000060000040000024000000f80000dc0000bc00009c000080000060000040000024e4dcfcccbcf8bc9cf4b080f0a068e49450d88c38cc8428c07818b0740ca06c04906400845000683c004c240030100014"
+        "c8fcfc80f8f83cf4f400f0f000e0e000d0d000c0c000b4b400a0a0008c8c007878006464005050003c3c002828001414fcfcf0fcfcbcfcfc8cfcfc00f0ec0ce4e020dcd408d0c000bca400a88c009478008464007050005c3c00482c00382000"
+        "fcc8c8fcb0b0fc9898fc8484fc6c6cfc5454fc4040fc0000e00000c40000ac00009000007400005c0000400000280000fce8e0fcdcccfcd0b8fcc4a8fcb894f4ac84eca474e89c68e0945cdc8c50cc844cbc7c44b07040a0683c906038845834"
+        "744c2c644428543820482c1838241428180c1810080c04040000000808081010101c1c1c2828283434344040404848485454546060606c6c6c7474748080808c8c8c989898a0a0a0acacacb8b8b8c4c4c4d0d0d0d8d8d8e4e4e4f0f0f0fcfcfc";
+    const auto nibble = [](const char value) -> std::uint8_t {
+        return static_cast<std::uint8_t>(value <= '9' ? value - '0'
+                                                     : value - 'a' + 10);
+    };
+    std::array<RGB, 256> palette{};
+    for (std::size_t index = 0; index < palette.size(); ++index) {
+        const auto channel = [&](const std::size_t component) {
+            const std::size_t offset = (index * 3 + component) * 2;
+            return static_cast<std::uint8_t>((nibble(hex[offset]) << 4) |
+                                             nibble(hex[offset + 1]));
+        };
+        palette[index] = {channel(0), channel(1), channel(2)};
+    }
     return palette;
 }

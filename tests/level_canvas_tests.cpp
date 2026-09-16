@@ -915,6 +915,19 @@ int main(int argc, char *argv[])
     ok &= expect(editRequestedIndex == 19,
                  "palette double-click should edit the exact filtered index");
 
+    Level dynamicLevel;
+    dynamicLevel.resize(800, 900);
+    LevelCanvas dynamicCanvas;
+    dynamicCanvas.resize(320, 240);
+    dynamicCanvas.setLevel(&dynamicLevel);
+    dynamicCanvas.setZoom(0.25);
+    dynamicCanvas.setSelectedIndex(77);
+    dynamicCanvas.show();
+    application.processEvents();
+    click(dynamicCanvas.viewport(), {175.125, 212.625});
+    ok &= expect(dynamicLevel.pixels[850 * dynamicLevel.width + 700] == 77,
+                 "variable-size canvas should draw beyond V-Wing's 640-pixel width");
+
     ok &=
         expect(!QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_pen.png")).isNull() &&
                    !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_flood_fill.png"))

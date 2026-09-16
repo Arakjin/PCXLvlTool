@@ -2,7 +2,8 @@
 
 PCX Level Tool on pikselintarkka kenttäeditori. Ensimmäinen tuettu peli on
 V-Wing. Ohjelma avaa pelin `.LEV`-kenttiä ja tallentaa monitasoisen työn
-muokattavana `.vwp`-projektina.
+muokattavana projektina. V-Wing käyttää vanhaa `.vwp`-muotoa ja Wings yleistä
+`.pxlp`-muotoa.
 
 > Säilytä alkuperäisestä `.LEV`-tiedostosta varmuuskopio. Testaa julkaistu
 > kenttä pelissä ennen sen jakamista muille.
@@ -10,7 +11,8 @@ muokattavana `.vwp`-projektina.
 ## Uuden työn aloittaminen
 
 - **File > New level** (`Ctrl+N`) luo tyhjän kentän ja oletuspaletin.
-- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän tai `.vwp`-projektin.
+- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän, `.vwp`-projektin tai
+  `.pxlp`-projektin.
 - Yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen. Nimen
   enimmäispituus on 20 tulostettavaa ASCII-merkkiä. Ääkkösiä ei hyväksytä ja
   nimi muutetaan tallennettaessa isoiksi kirjaimiksi.

@@ -1,13 +1,17 @@
 #include "main_window.h"
 
 #include "default_palette.h"
+#include "game_profile.h"
 #include "lev_reader.h"
 #include "lev_writer.h"
+#include "layer_model.h"
 #include "level_canvas.h"
 #include "palette_io.h"
 #include "palette_rules.h"
 #include "palette_widget.h"
+#include "pcxl_project_io.h"
 #include "project_io.h"
+#include "wings_lev_writer.h"
 
 #include <QAction>
 #include <QAbstractItemView>
@@ -15,10 +19,15 @@
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontComboBox>
+#include <QFormLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeySequence>
@@ -36,6 +45,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTabBar>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -50,11 +60,17 @@
 #include <utility>
 #include <vector>
 
-namespace {
-
 class PaletteIndexSpinBox final : public QSpinBox {
 public:
     using QSpinBox::QSpinBox;
+
+    void setGame(const GameId game)
+    {
+        game_ = game;
+        if (isReservedColorChartNumber(game_, value())) {
+            setValue(game_ == GameId::Wings ? 128 : 56);
+        }
+    }
 
 protected:
     void stepBy(const int steps) override
@@ -65,7 +81,7 @@ protected:
             do {
                 candidate += direction;
             } while (candidate >= minimum() && candidate <= maximum() &&
-                     isReservedColorChartNumber(candidate));
+                     isReservedColorChartNumber(game_, candidate));
             candidate = std::clamp(candidate, minimum(), maximum());
         }
         setValue(candidate);
@@ -75,7 +91,7 @@ protected:
     {
         const QValidator::State state = QSpinBox::validate(input, position);
         if (state == QValidator::Acceptable &&
-            isReservedColorChartNumber(input.toInt())) {
+            isReservedColorChartNumber(game_, input.toInt())) {
             return QValidator::Intermediate;
         }
         return state;
@@ -85,9 +101,9 @@ protected:
     {
         bool valid = false;
         int value = input.toInt(&valid);
-        if (valid && isReservedColorChartNumber(value)) {
+        if (valid && isReservedColorChartNumber(game_, value)) {
             while (value <= maximum() &&
-                   isReservedColorChartNumber(value)) {
+                   isReservedColorChartNumber(game_, value)) {
                 ++value;
             }
             input = QString::number(std::min(value, maximum()));
@@ -95,7 +111,12 @@ protected:
         }
         QSpinBox::fixup(input);
     }
+
+private:
+    GameId game_ = GameId::VWing;
 };
+
+namespace {
 
 std::filesystem::path toPath(const QString& path)
 {
@@ -107,11 +128,51 @@ QString toQString(const std::filesystem::path& path)
     return QString::fromStdU16String(path.u16string());
 }
 
-QString materialDescription(const int paletteIndex)
+QString materialDescription(const GameId game, const int paletteIndex)
 {
     const int index = colorChartNumber(paletteIndex);
-    if (isReservedPaletteIndex(paletteIndex)) {
+    if (isReservedPaletteIndex(game, paletteIndex)) {
         return QStringLiteral("Reserved (do not use)");
+    }
+    if (game == GameId::Wings) {
+        if (index >= 32 && index <= 37) {
+            return QStringLiteral("Base");
+        }
+        if (index >= 38 && index <= 39) {
+            return QStringLiteral("Indestructible base");
+        }
+        if (index >= 40 && index <= 47) {
+            return QStringLiteral("Team base");
+        }
+        if (index >= 64 && index <= 79) {
+            return QStringLiteral("Fly-through background");
+        }
+        if (index >= 80 && index <= 95) {
+            return QStringLiteral("Indestructible terrain");
+        }
+        if (index >= 96 && index <= 111) {
+            return QStringLiteral("Soft terrain");
+        }
+        if (index >= 112 && index <= 127) {
+            return QStringLiteral("Burning terrain");
+        }
+        if (index >= 128) {
+            return QStringLiteral("Normal terrain");
+        }
+        switch (index) {
+        case 0: return QStringLiteral("Background");
+        case 16: return QStringLiteral("Water source");
+        case 48: return QStringLiteral("Water");
+        case 49: return QStringLiteral("Water flow down");
+        case 50: return QStringLiteral("Water flow left");
+        case 51: return QStringLiteral("Water flow right");
+        case 52: return QStringLiteral("Bubbles");
+        case 53: return QStringLiteral("Snow");
+        case 54: return QStringLiteral("Damaging fire background");
+        case 55:
+        case 56: return QStringLiteral("Explosive terrain");
+        default: return QStringLiteral("Unknown / undocumented");
+        }
     }
     if (index >= 20 && index <= 30) {
         return QStringLiteral("Fly through");
@@ -215,6 +276,9 @@ enum class PaletteGroup {
     Underwater,
     Indestructible,
     Turrets,
+    Bases,
+    Soft,
+    BurningWings,
 };
 
 void appendRange(std::vector<std::uint8_t>& indices, const int first,
@@ -225,10 +289,52 @@ void appendRange(std::vector<std::uint8_t>& indices, const int first,
     }
 }
 
-std::vector<std::uint8_t> paletteIndices(const PaletteGroup group)
+std::vector<std::uint8_t> paletteIndices(const PaletteGroup group,
+                                         const GameId game)
 {
     std::vector<std::uint8_t> indices;
     indices.reserve(256);
+    if (game == GameId::Wings) {
+        switch (group) {
+        case PaletteGroup::AllUsable:
+            indices.push_back(0);
+            indices.push_back(16);
+            appendRange(indices, 32, 56);
+            appendRange(indices, 64, 255);
+            break;
+        case PaletteGroup::Background:
+            indices.push_back(0);
+            break;
+        case PaletteGroup::Water:
+            indices.push_back(16);
+            appendRange(indices, 48, 53);
+            break;
+        case PaletteGroup::Bases:
+            appendRange(indices, 32, 47);
+            break;
+        case PaletteGroup::Special:
+            appendRange(indices, 54, 56);
+            break;
+        case PaletteGroup::FlyThrough:
+            appendRange(indices, 64, 79);
+            break;
+        case PaletteGroup::Indestructible:
+            appendRange(indices, 80, 95);
+            break;
+        case PaletteGroup::Soft:
+            appendRange(indices, 96, 111);
+            break;
+        case PaletteGroup::BurningWings:
+            appendRange(indices, 112, 127);
+            break;
+        case PaletteGroup::NormalTerrain:
+            appendRange(indices, 128, 255);
+            break;
+        default:
+            break;
+        }
+        return indices;
+    }
     switch (group) {
     case PaletteGroup::AllUsable:
         indices.push_back(0);
@@ -274,6 +380,10 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group)
         break;
     case PaletteGroup::Turrets:
         appendRange(indices, 244, 247);
+        break;
+    case PaletteGroup::Bases:
+    case PaletteGroup::Soft:
+    case PaletteGroup::BurningWings:
         break;
     }
     return indices;
@@ -325,9 +435,20 @@ MainWindow::MainWindow(QWidget* parent)
     level_->palette = defaultVWingPalette();
     level_->pixels.fill(0);
 
-    canvas_ = new LevelCanvas(this);
+    auto* central = new QWidget(this);
+    auto* centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    documentTabs_ = new QTabBar(central);
+    documentTabs_->addTab(tr("Level"));
+    documentTabs_->addTab(tr("Background"));
+    documentTabs_->setExpanding(false);
+    documentTabs_->setVisible(false);
+    centralLayout->addWidget(documentTabs_);
+    canvas_ = new LevelCanvas(central);
     canvas_->setLevel(level_.get());
-    setCentralWidget(canvas_);
+    centralLayout->addWidget(canvas_, 1);
+    setCentralWidget(central);
 
     createActions();
     createToolBars();
@@ -344,9 +465,10 @@ MainWindow::MainWindow(QWidget* parent)
             });
     connect(canvas_, &LevelCanvas::cursorLeftCanvas, this,
             [this] { positionLabel_->setText(tr("Ready")); });
-    connect(canvas_->undoStack(), &QUndoStack::cleanChanged, this,
+    connect(canvas_, &LevelCanvas::undoCleanChanged, this,
             [this](const bool clean) {
-                setModified(nonUndoModified_ || !clean ||
+                Q_UNUSED(clean);
+                setModified(nonUndoModified_ || canvas_->hasDirtyUndoStack() ||
                             canvas_->hasPendingSelectionEdit());
             });
     connect(canvas_, &LevelCanvas::pendingSelectionEditChanged, this,
@@ -356,6 +478,8 @@ MainWindow::MainWindow(QWidget* parent)
             });
     connect(canvas_, &LevelCanvas::layersChanged, this,
             &MainWindow::refreshLayerList);
+    connect(documentTabs_, &QTabBar::currentChanged, this,
+            &MainWindow::switchWingsDocument);
 
     resize(1000, 800);
     updateWindowTitle();
@@ -368,6 +492,11 @@ void MainWindow::closeEvent(QCloseEvent* event)
     } else {
         event->ignore();
     }
+}
+
+void MainWindow::promptForInitialLevel()
+{
+    createNewLevel(false);
 }
 
 void MainWindow::createActions()
@@ -430,6 +559,13 @@ void MainWindow::createActions()
     deleteAction->setShortcut(QKeySequence::Delete);
     connect(deleteAction, &QAction::triggered, canvas_,
             &LevelCanvas::deleteSelection);
+
+    QMenu* levelMenu = menuBar()->addMenu(tr("&Level"));
+    levelSettingsAction_ =
+        levelMenu->addAction(tr("Wings level &settings..."));
+    levelSettingsAction_->setEnabled(false);
+    connect(levelSettingsAction_, &QAction::triggered, this,
+            &MainWindow::editLevelSettings);
 }
 
 void MainWindow::createToolBars()
@@ -645,7 +781,7 @@ void MainWindow::createMaterialDock()
     auto* contents = new QWidget(dock);
     auto* layout = new QVBoxLayout(contents);
     layout->addWidget(new QLabel(tr("Palette"), contents));
-    auto* paletteGroupCombo = new QComboBox(contents);
+    paletteGroupCombo_ = new QComboBox(contents);
     const std::array<std::pair<const char*, PaletteGroup>, 11> paletteGroups{{
         {"All documented usable", PaletteGroup::AllUsable},
         {"Background (1)", PaletteGroup::Background},
@@ -660,12 +796,13 @@ void MainWindow::createMaterialDock()
         {"Turrets (244-247)", PaletteGroup::Turrets},
     }};
     for (const auto& [label, group] : paletteGroups) {
-        paletteGroupCombo->addItem(tr(label), static_cast<int>(group));
+        paletteGroupCombo_->addItem(tr(label), static_cast<int>(group));
     }
-    layout->addWidget(paletteGroupCombo);
+    layout->addWidget(paletteGroupCombo_);
     paletteWidget_ = new PaletteWidget(contents);
     paletteWidget_->setLevel(level_.get());
-    paletteWidget_->setIndices(paletteIndices(PaletteGroup::AllUsable));
+    paletteWidget_->setIndices(
+        paletteIndices(PaletteGroup::AllUsable, GameId::VWing));
     layout->addWidget(paletteWidget_);
 
     auto* indexLayout = new QHBoxLayout();
@@ -699,10 +836,11 @@ void MainWindow::createMaterialDock()
     paletteFileLayout->addWidget(savePaletteButton);
     layout->addLayout(paletteFileLayout);
     layout->addStretch();
-    connect(paletteGroupCombo, &QComboBox::currentIndexChanged, this,
-            [this, paletteGroupCombo](const int index) {
+    connect(paletteGroupCombo_, &QComboBox::currentIndexChanged, this,
+            [this](const int index) {
                 auto indices = paletteIndices(static_cast<PaletteGroup>(
-                    paletteGroupCombo->itemData(index).toInt()));
+                    paletteGroupCombo_->itemData(index).toInt()),
+                    creationSettings_.game);
                 const auto selected = static_cast<std::uint8_t>(
                     paletteIndexFromColorChart(materialIndexSpinBox_->value()));
                 const auto secondary = static_cast<std::uint8_t>(
@@ -768,6 +906,19 @@ void MainWindow::createMaterialDock()
             &MainWindow::savePalette);
     connect(canvas_, &LevelCanvas::paletteColorChanged, this,
             [this](const int index) {
+                if (creationSettings_.game == GameId::Wings &&
+                    backgroundLevel_) {
+                    Level* source = activeLevel();
+                    Level* target = source == level_.get()
+                                        ? backgroundLevel_.get()
+                                        : level_.get();
+                    if (index < 0) {
+                        target->palette = source->palette;
+                    } else {
+                        target->palette[static_cast<std::size_t>(index)] =
+                            source->palette[static_cast<std::size_t>(index)];
+                    }
+                }
                 paletteWidget_->update();
                 const int selectedIndex = paletteIndexFromColorChart(
                     materialIndexSpinBox_->value());
@@ -809,6 +960,7 @@ void MainWindow::createZoomToolBar()
                     return;
                 }
                 level_->name = name;
+                creationSettings_.name = name;
                 nonUndoModified_ = true;
                 setModified(true);
             });
@@ -893,8 +1045,9 @@ void MainWindow::createLayerDock()
             [this](QListWidgetItem* item) {
                 const int index = item->data(Qt::UserRole).toInt();
                 const bool visible = item->checkState() == Qt::Checked;
+                Level* document = activeLevel();
                 if (index > 0 &&
-                    level_->layers[static_cast<std::size_t>(index)].visible !=
+                    document->layers[static_cast<std::size_t>(index)].visible !=
                         visible) {
                     canvas_->setLayerVisible(index, visible);
                     nonUndoModified_ = true;
@@ -947,7 +1100,7 @@ void MainWindow::createLayerDock()
         }
         bool accepted = false;
         const QString current = QString::fromStdString(
-            level_->layers[static_cast<std::size_t>(index)].name);
+            activeLevel()->layers[static_cast<std::size_t>(index)].name);
         const QString name = QInputDialog::getText(
             this, tr("Rename layer"), tr("Layer name:"), QLineEdit::Normal,
             current, &accepted);
@@ -962,8 +1115,9 @@ void MainWindow::createLayerDock()
         if (index < 0) {
             return;
         }
-        const bool locked =
-            level_->layers[static_cast<std::size_t>(index)].locked;
+        const bool locked = activeLevel()
+                                ->layers[static_cast<std::size_t>(index)]
+                                .locked;
         canvas_->setLayerLocked(index, !locked);
         nonUndoModified_ = true;
         setModified(true);
@@ -973,13 +1127,14 @@ void MainWindow::createLayerDock()
 
 void MainWindow::refreshLayerList()
 {
-    if (layerListWidget_ == nullptr || level_ == nullptr) {
+    Level* document = activeLevel();
+    if (layerListWidget_ == nullptr || document == nullptr) {
         return;
     }
     const QSignalBlocker blocker(layerListWidget_);
     layerListWidget_->clear();
-    for (std::size_t index = level_->layers.size(); index-- > 0;) {
-        const Level::Layer& layer = level_->layers[index];
+    for (std::size_t index = document->layers.size(); index-- > 0;) {
+        const Level::Layer& layer = document->layers[index];
         QString label = QString::fromStdString(layer.name);
         if (layer.locked) {
             label += tr("  [locked]");
@@ -992,7 +1147,7 @@ void MainWindow::refreshLayerList()
             item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
             item->setToolTip(tr("Background is always visible and always bottom"));
         }
-        if (index == level_->activeLayer) {
+        if (index == document->activeLayer) {
             layerListWidget_->setCurrentItem(item);
         }
     }
@@ -1005,9 +1160,10 @@ void MainWindow::openLevel()
     }
 
     const QString filename = QFileDialog::getOpenFileName(
-        this, tr("Open project or V-Wing level"), QString(),
-        tr("V-Wing projects and levels (*.vwp *.VWP *.lev *.LEV);;"
-           "V-Wing projects (*.vwp *.VWP);;V-Wing levels (*.lev *.LEV)"));
+        this, tr("Open project or level"), QString(),
+        tr("PCX Level Tool projects and levels (*.pxlp *.PXLP *.vwp *.VWP "
+           "*.lev *.LEV);;PCX Level Tool projects (*.pxlp *.PXLP);;"
+           "Legacy V-Wing projects (*.vwp *.VWP);;V-Wing levels (*.lev *.LEV)"));
     if (filename.isEmpty()) {
         return;
     }
@@ -1015,11 +1171,22 @@ void MainWindow::openLevel()
     auto loaded = std::make_unique<Level>();
     std::string error;
     const std::filesystem::path path = toPath(filename);
-    const bool isProject =
-        QString::compare(QFileInfo(filename).suffix(), QStringLiteral("vwp"),
+    const QString suffix = QFileInfo(filename).suffix();
+    const bool isLegacyProject =
+        QString::compare(suffix, QStringLiteral("vwp"),
                          Qt::CaseInsensitive) == 0;
-    const bool loadedSuccessfully = isProject ? loadProject(path, *loaded, error)
-                                              : loadLev(path, *loaded, error);
+    const bool isPxlProject =
+        QString::compare(suffix, QStringLiteral("pxlp"),
+                         Qt::CaseInsensitive) == 0;
+    const bool isProject = isLegacyProject || isPxlProject;
+    std::unique_ptr<Level> loadedBackground;
+    LevelCreationSettings loadedSettings;
+    const bool loadedSuccessfully =
+        isPxlProject
+            ? loadPxlProject(path, *loaded, loadedBackground, loadedSettings,
+                             error)
+            : (isLegacyProject ? loadProject(path, *loaded, error)
+                               : loadLev(path, *loaded, error));
     if (!loadedSuccessfully) {
         QMessageBox::critical(this, tr("Open failed"),
                               QString::fromStdString(error));
@@ -1027,8 +1194,19 @@ void MainWindow::openLevel()
     }
 
     // Drop commands while their old Level target is still alive.
-    canvas_->undoStack()->clear();
+    canvas_->forgetLevel(backgroundLevel_.get());
+    canvas_->forgetLevel(level_.get());
     level_ = std::move(loaded);
+    backgroundLevel_ = std::move(loadedBackground);
+    creationSettings_ = isPxlProject ? loadedSettings
+                                     : LevelCreationSettings{};
+    levelSettingsAction_->setEnabled(creationSettings_.game == GameId::Wings);
+    documentTabs_->setCurrentIndex(0);
+    documentTabs_->setVisible(creationSettings_.game == GameId::Wings);
+    configurePaletteForGame();
+    if (creationSettings_.game == GameId::Wings) {
+        configureWingsDocuments();
+    }
     projectPath_ = isProject ? path : std::filesystem::path{};
     publishPath_ = isProject ? std::filesystem::path{} : path;
     canvas_->setLevel(level_.get());
@@ -1050,25 +1228,70 @@ void MainWindow::openLevel()
 
 void MainWindow::newLevel()
 {
-    if (!maybeSave()) {
-        return;
+    createNewLevel(true);
+}
+
+bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
+{
+    if (checkUnsavedChanges && !maybeSave()) {
+        return false;
+    }
+
+    QStringList gameNames;
+    for (const GameProfile& profile : availableGameProfiles()) {
+        gameNames.push_back(QString::fromUtf8(profile.displayName.data(),
+                                              profile.displayName.size()));
+    }
+    bool selected = false;
+    const QString gameName = QInputDialog::getItem(
+        this, tr("New level"), tr("Game:"), gameNames, 0, false, &selected);
+    if (!selected) {
+        return false;
+    }
+    const int selectedIndex = gameNames.indexOf(gameName);
+    if (selectedIndex < 0 ||
+        selectedIndex >= static_cast<int>(availableGameProfiles().size())) {
+        return false;
+    }
+
+    LevelCreationSettings settings;
+    const GameProfile& profile =
+        availableGameProfiles()[static_cast<std::size_t>(selectedIndex)];
+    settings.game = profile.id;
+    settings.width = profile.defaultWidth;
+    settings.height = profile.defaultHeight;
+    if (profile.id == GameId::Wings && !promptForWingsSettings(settings)) {
+        return false;
     }
 
     auto fresh = std::make_unique<Level>();
-    fresh->name = "UNTITLED";
-    fresh->palette = defaultVWingPalette();
-    fresh->pixels.fill(0);
+    fresh->name = settings.name;
+    fresh->palette = settings.game == GameId::Wings ? defaultWingsPalette()
+                                                     : defaultVWingPalette();
+    if (settings.game == GameId::Wings) {
+        fresh->resize(static_cast<std::size_t>(settings.width),
+                      static_cast<std::size_t>(settings.height));
+    } else {
+        fresh->pixels.fill(0);
+    }
 
     // Drop commands while their old Level target is still alive.
-    canvas_->undoStack()->clear();
+    canvas_->forgetLevel(backgroundLevel_.get());
+    canvas_->forgetLevel(level_.get());
     level_ = std::move(fresh);
+    creationSettings_ = settings;
+    documentTabs_->setCurrentIndex(0);
+    configurePaletteForGame();
+    configureWingsDocuments();
+    levelSettingsAction_->setEnabled(settings.game == GameId::Wings);
     projectPath_.clear();
     publishPath_.clear();
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
     {
         const QSignalBlocker blocker(levelNameEdit_);
-        levelNameEdit_->setText(QStringLiteral("UNTITLED"));
+        levelNameEdit_->setText(QString::fromLatin1(
+            level_->name.data(), static_cast<int>(level_->name.size())));
     }
     updateMaterialDetails(
         paletteIndexFromColorChart(materialIndexSpinBox_->value()));
@@ -1076,7 +1299,314 @@ void MainWindow::newLevel()
     canvas_->undoStack()->setClean();
     nonUndoModified_ = false;
     setModified(false);
-    statusBar()->showMessage(tr("Created a new level"), 3000);
+    if (settings.game == GameId::Wings) {
+        const auto [backgroundWidth, backgroundHeight] =
+            wingsParallaxSize(settings.width, settings.height);
+        statusBar()->showMessage(
+            settings.backgroundMode == BackgroundMode::Parallax
+                ? tr("Created Wings level settings: %1 x %2, parallax %3 x %4")
+                      .arg(settings.width)
+                      .arg(settings.height)
+                      .arg(backgroundWidth)
+                      .arg(backgroundHeight)
+                : tr("Created Wings level settings: %1 x %2")
+                      .arg(settings.width)
+                      .arg(settings.height),
+            5000);
+    } else {
+        statusBar()->showMessage(tr("Created a new V-Wing level"), 3000);
+    }
+    updateWindowTitle();
+    return true;
+}
+
+bool MainWindow::promptForWingsSettings(LevelCreationSettings& settings)
+{
+    const GameProfile& profile = gameProfile(GameId::Wings);
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("New Wings level"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+
+    auto* nameEdit = new QLineEdit(QString::fromStdString(settings.name),
+                                   &dialog);
+    nameEdit->setMaxLength(64);
+    nameEdit->setValidator(new QRegularExpressionValidator(
+        QRegularExpression(QStringLiteral("[A-Za-z0-9 _.-]{0,64}")),
+        nameEdit));
+    form->addRow(tr("Level / file name:"), nameEdit);
+
+    auto* width = new QSpinBox(&dialog);
+    width->setRange(profile.minimumWidth, profile.maximumWidth);
+    width->setValue(settings.width);
+    width->setSuffix(tr(" px"));
+    form->addRow(tr("Width:"), width);
+
+    auto* height = new QSpinBox(&dialog);
+    height->setRange(profile.minimumHeight, profile.maximumHeight);
+    height->setValue(settings.height);
+    height->setSuffix(tr(" px"));
+    form->addRow(tr("Height:"), height);
+
+    auto* parallax = new QCheckBox(tr("Use parallax background"), &dialog);
+    parallax->setChecked(settings.backgroundMode == BackgroundMode::Parallax);
+    form->addRow(QString(), parallax);
+    auto* parallaxSize = new QLabel(&dialog);
+    parallaxSize->setWordWrap(true);
+    form->addRow(tr("Required background size:"), parallaxSize);
+
+    auto* stars = new QCheckBox(tr("Show stars"), &dialog);
+    stars->setChecked(settings.stars);
+    form->addRow(QString(), stars);
+
+    auto percentageSpin = [&dialog]() {
+        auto* spin = new QSpinBox(&dialog);
+        spin->setRange(0, 100);
+        spin->setSuffix(QStringLiteral(" %"));
+        return spin;
+    };
+    auto* rain = percentageSpin();
+    rain->setValue(settings.rainProbability);
+    form->addRow(tr("Rain probability:"), rain);
+    auto* snow = percentageSpin();
+    snow->setValue(settings.snowProbability);
+    form->addRow(tr("Snow probability:"), snow);
+    auto* bombing = percentageSpin();
+    bombing->setValue(settings.bombingProbability);
+    form->addRow(tr("Bombing probability:"), bombing);
+
+    auto* civilians = new QSpinBox(&dialog);
+    civilians->setRange(0, 1000);
+    civilians->setValue(settings.civilians);
+    form->addRow(tr("Civilians:"), civilians);
+    auto* armed = percentageSpin();
+    armed->setValue(settings.armedCiviliansProbability);
+    form->addRow(tr("Armed civilians:"), armed);
+    layout->addLayout(form);
+
+    auto updateParallaxSize = [=] {
+        const auto [requiredWidth, requiredHeight] =
+            wingsParallaxSize(width->value(), height->value());
+        if (parallax->isChecked()) {
+            parallaxSize->setText(
+                tr("%1 x %2 px (exact size used by Wings)")
+                    .arg(requiredWidth)
+                    .arg(requiredHeight));
+        } else {
+            parallaxSize->setText(tr("Not used"));
+        }
+        parallaxSize->setEnabled(parallax->isChecked());
+    };
+    connect(width, &QSpinBox::valueChanged, &dialog,
+            [=](int) { updateParallaxSize(); });
+    connect(height, &QSpinBox::valueChanged, &dialog,
+            [=](int) { updateParallaxSize(); });
+    connect(parallax, &QCheckBox::toggled, &dialog,
+            [=](bool) { updateParallaxSize(); });
+    updateParallaxSize();
+
+    auto* note = new QLabel(
+        tr("Wings requires at least 157 x 90 pixels. The 1000 x 1000 "
+           "editor limit is provisional because MAKELEV does not document "
+           "a maximum size."),
+        &dialog);
+    note->setWordWrap(true);
+    layout->addWidget(note);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+    settings.name = nameEdit->text().trimmed().toStdString();
+    if (settings.name.empty()) {
+        settings.name = "UNTITLED";
+    }
+    settings.width = width->value();
+    settings.height = height->value();
+    settings.backgroundMode = parallax->isChecked()
+                                  ? BackgroundMode::Parallax
+                                  : BackgroundMode::None;
+    settings.stars = stars->isChecked();
+    settings.rainProbability = rain->value();
+    settings.snowProbability = snow->value();
+    settings.bombingProbability = bombing->value();
+    settings.civilians = civilians->value();
+    settings.armedCiviliansProbability = armed->value();
+    return true;
+}
+
+void MainWindow::editLevelSettings()
+{
+    if (creationSettings_.game != GameId::Wings) {
+        return;
+    }
+    LevelCreationSettings edited = creationSettings_;
+    edited.name = level_->name;
+    if (!promptForWingsSettings(edited)) {
+        return;
+    }
+    creationSettings_ = edited;
+    level_->name = edited.name;
+    configureWingsDocuments();
+    {
+        const QSignalBlocker blocker(levelNameEdit_);
+        levelNameEdit_->setText(QString::fromStdString(level_->name));
+    }
+    nonUndoModified_ = true;
+    setModified(true);
+    updateWindowTitle();
+}
+
+Level* MainWindow::activeLevel() const
+{
+    if (creationSettings_.game == GameId::Wings && backgroundLevel_ &&
+        documentTabs_ != nullptr && documentTabs_->currentIndex() == 1) {
+        return backgroundLevel_.get();
+    }
+    return level_.get();
+}
+
+void MainWindow::configureWingsDocuments()
+{
+    const bool wings = creationSettings_.game == GameId::Wings;
+    documentTabs_->setVisible(wings);
+    if (!wings) {
+        backgroundLevel_.reset();
+        return;
+    }
+
+    if (level_->width != static_cast<std::size_t>(creationSettings_.width) ||
+        level_->height != static_cast<std::size_t>(creationSettings_.height)) {
+        canvas_->forgetLevel(level_.get());
+        level_->resizePreservingContent(
+            static_cast<std::size_t>(creationSettings_.width),
+            static_cast<std::size_t>(creationSettings_.height));
+    }
+
+    const bool hasBackground =
+        creationSettings_.backgroundMode != BackgroundMode::None;
+    documentTabs_->setTabEnabled(1, hasBackground);
+    if (!hasBackground) {
+        canvas_->forgetLevel(backgroundLevel_.get());
+        backgroundLevel_.reset();
+        documentTabs_->setCurrentIndex(0);
+    } else {
+        int width = creationSettings_.width;
+        int height = creationSettings_.height;
+        if (creationSettings_.backgroundMode == BackgroundMode::Parallax) {
+            const auto size = wingsParallaxSize(width, height);
+            width = size.first;
+            height = size.second;
+        }
+        if (!backgroundLevel_) {
+            backgroundLevel_ = std::make_unique<Level>();
+            backgroundLevel_->name = "Background";
+        }
+        backgroundLevel_->palette = level_->palette;
+        if (backgroundLevel_->width != static_cast<std::size_t>(width) ||
+            backgroundLevel_->height != static_cast<std::size_t>(height)) {
+            canvas_->forgetLevel(backgroundLevel_.get());
+            backgroundLevel_->resizePreservingContent(
+                static_cast<std::size_t>(width),
+                static_cast<std::size_t>(height));
+        }
+    }
+    switchWingsDocument(documentTabs_->currentIndex());
+}
+
+void MainWindow::configurePaletteForGame()
+{
+    if (paletteGroupCombo_ == nullptr || materialIndexSpinBox_ == nullptr ||
+        secondaryIndexSpinBox_ == nullptr) {
+        return;
+    }
+    canvas_->setGame(creationSettings_.game);
+    if (creationSettings_.game == GameId::Wings) {
+        levelNameEdit_->setMaxLength(64);
+        levelNameEdit_->setValidator(new QRegularExpressionValidator(
+            QRegularExpression(QStringLiteral("[A-Za-z0-9 _.-]{0,64}")),
+            levelNameEdit_));
+        levelNameEdit_->setToolTip(
+            tr("Wings uses the level filename as its name. Printable DOS-safe "
+               "ASCII characters are supported."));
+    } else {
+        levelNameEdit_->setMaxLength(20);
+        levelNameEdit_->setValidator(new QRegularExpressionValidator(
+            QRegularExpression(QStringLiteral("[\\x20-\\x7E]{0,20}")),
+            levelNameEdit_));
+        levelNameEdit_->setToolTip(
+            tr("Maximum 20 printable ASCII characters. Ä, Ö, Å and other "
+               "non-ASCII characters are not supported by LEV files."));
+    }
+    materialIndexSpinBox_->setGame(creationSettings_.game);
+    secondaryIndexSpinBox_->setGame(creationSettings_.game);
+
+    const QSignalBlocker blocker(paletteGroupCombo_);
+    paletteGroupCombo_->clear();
+    const auto add = [this](const char* label, const PaletteGroup group) {
+        paletteGroupCombo_->addItem(tr(label), static_cast<int>(group));
+    };
+    if (creationSettings_.game == GameId::Wings) {
+        add("All documented usable", PaletteGroup::AllUsable);
+        add("Background (0)", PaletteGroup::Background);
+        add("Water and snow (16, 48-53)", PaletteGroup::Water);
+        add("Bases (32-47)", PaletteGroup::Bases);
+        add("Fire and explosives (54-56)", PaletteGroup::Special);
+        add("Fly-through background (64-79)", PaletteGroup::FlyThrough);
+        add("Indestructible (80-95)", PaletteGroup::Indestructible);
+        add("Soft terrain (96-111)", PaletteGroup::Soft);
+        add("Burning terrain (112-127)", PaletteGroup::BurningWings);
+        add("Normal terrain (128-255)", PaletteGroup::NormalTerrain);
+    } else {
+        add("All documented usable", PaletteGroup::AllUsable);
+        add("Background (1)", PaletteGroup::Background);
+        add("Water (16-19)", PaletteGroup::Water);
+        add("Fly through (20-30)", PaletteGroup::FlyThrough);
+        add("Font (32-37)", PaletteGroup::Font);
+        add("Special materials (39-56)", PaletteGroup::Special);
+        add("Normal terrain (57-149)", PaletteGroup::NormalTerrain);
+        add("Burnable (150-199)", PaletteGroup::Burnable);
+        add("Underwater (201-219)", PaletteGroup::Underwater);
+        add("Indestructible (221-243, 248-256)",
+            PaletteGroup::Indestructible);
+        add("Turrets (244-247)", PaletteGroup::Turrets);
+    }
+    paletteWidget_->setIndices(
+        paletteIndices(PaletteGroup::AllUsable, creationSettings_.game));
+    const int defaultIndex = creationSettings_.game == GameId::Wings ? 128 : 56;
+    const int secondaryIndex = defaultIndex + 1;
+    materialIndexSpinBox_->setValue(defaultIndex);
+    secondaryIndexSpinBox_->setValue(secondaryIndex);
+    updateMaterialDetails(defaultIndex);
+}
+
+void MainWindow::switchWingsDocument(const int index)
+{
+    if (creationSettings_.game != GameId::Wings || level_ == nullptr) {
+        return;
+    }
+    canvas_->commitSelection();
+    Level* document = index == 1 && backgroundLevel_ ? backgroundLevel_.get()
+                                                     : level_.get();
+    canvas_->setLevel(document);
+    paletteWidget_->setLevel(document);
+    configurePaletteForGame();
+    refreshLayerList();
+    setModified(nonUndoModified_ || canvas_->hasDirtyUndoStack());
+    statusBar()->showMessage(
+        index == 1
+            ? tr("Editing Wings background: %1 x %2")
+                  .arg(document->width)
+                  .arg(document->height)
+            : tr("Editing Wings level: %1 x %2")
+                  .arg(document->width)
+                  .arg(document->height),
+        3000);
 }
 
 void MainWindow::updateMaterialDetails(const int index)
@@ -1096,7 +1626,8 @@ void MainWindow::updateMaterialDetails(const int index)
                                        .arg(static_cast<int>(color.g))
                                        .arg(static_cast<int>(color.b))
                                        .arg(hex)
-                                       .arg(materialDescription(index)));
+                                       .arg(materialDescription(
+                                           creationSettings_.game, index)));
 }
 
 bool MainWindow::saveProject()
@@ -1106,6 +1637,20 @@ bool MainWindow::saveProject()
 
 bool MainWindow::saveProjectAs()
 {
+    if (creationSettings_.game == GameId::Wings) {
+        QString filename = QFileDialog::getSaveFileName(
+            this, tr("Save editable PCX Level Tool project"),
+            toQString(projectPath_),
+            tr("PCX Level Tool projects (*.pxlp)"));
+        if (filename.isEmpty()) {
+            return false;
+        }
+        if (!filename.endsWith(QStringLiteral(".pxlp"),
+                               Qt::CaseInsensitive)) {
+            filename += QStringLiteral(".pxlp");
+        }
+        return writeProject(toPath(filename));
+    }
     QString filename = QFileDialog::getSaveFileName(
         this, tr("Save editable V-Wing project"), toQString(projectPath_),
         tr("V-Wing projects (*.vwp)"));
@@ -1137,15 +1682,30 @@ bool MainWindow::maybeSave()
 bool MainWindow::writeProject(const std::filesystem::path& path)
 {
     canvas_->commitSelection();
-    uppercaseLevelName();
     std::string error;
-    if (!::saveProject(path, *level_, error)) {
+    bool saved = false;
+    const bool pxlp = creationSettings_.game == GameId::Wings ||
+                      QString::compare(toQString(path.extension()),
+                                       QStringLiteral(".pxlp"),
+                                       Qt::CaseInsensitive) == 0;
+    if (pxlp) {
+        flattenLayers(*level_);
+        if (backgroundLevel_) {
+            flattenLayers(*backgroundLevel_);
+        }
+        saved = savePxlProject(path, *level_, backgroundLevel_.get(),
+                               creationSettings_, error);
+    } else {
+        uppercaseLevelName();
+        saved = ::saveProject(path, *level_, error);
+    }
+    if (!saved) {
         QMessageBox::critical(this, tr("Save failed"),
                               QString::fromStdString(error));
         return false;
     }
     projectPath_ = path;
-    canvas_->undoStack()->setClean();
+    canvas_->markAllUndoStacksClean();
     nonUndoModified_ = false;
     setModified(false);
     statusBar()->showMessage(tr("Saved %1").arg(toQString(path)), 3000);
@@ -1155,13 +1715,22 @@ bool MainWindow::writeProject(const std::filesystem::path& path)
 bool MainWindow::publishLevel()
 {
     std::filesystem::path suggested = publishPath_;
+    if (creationSettings_.game == GameId::Wings && suggested.empty()) {
+        suggested = std::filesystem::path(creationSettings_.name + ".LEV");
+    }
     if (suggested.empty() && !projectPath_.empty()) {
         suggested = projectPath_;
         suggested.replace_extension(".LEV");
     }
     QString filename = QFileDialog::getSaveFileName(
-        this, tr("Publish game-compatible V-Wing level"), toQString(suggested),
-        tr("V-Wing levels (*.LEV)"));
+        this,
+        creationSettings_.game == GameId::Wings
+            ? tr("Publish game-compatible Wings level")
+            : tr("Publish game-compatible V-Wing level"),
+        toQString(suggested),
+        creationSettings_.game == GameId::Wings
+            ? tr("Wings levels (*.LEV)")
+            : tr("V-Wing levels (*.LEV)"));
     if (filename.isEmpty()) {
         return false;
     }
@@ -1174,6 +1743,23 @@ bool MainWindow::publishLevel()
 bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
 {
     canvas_->commitSelection();
+    if (creationSettings_.game == GameId::Wings) {
+        flattenLayers(*level_);
+        if (backgroundLevel_) {
+            flattenLayers(*backgroundLevel_);
+        }
+        std::string error;
+        if (!saveWingsLev(path, *level_, backgroundLevel_.get(),
+                          creationSettings_, error)) {
+            QMessageBox::critical(this, tr("Publish failed"),
+                                  QString::fromStdString(error));
+            return false;
+        }
+        publishPath_ = path;
+        statusBar()->showMessage(tr("Published %1").arg(toQString(path)),
+                                 3000);
+        return true;
+    }
     uppercaseLevelName();
     canvas_->refreshImage();
     std::string error;
@@ -1206,6 +1792,15 @@ void MainWindow::editSelectedPaletteColor()
 {
     const int index = paletteIndexFromColorChart(
         materialIndexSpinBox_->value());
+    if (creationSettings_.game == GameId::Wings &&
+        (index < 48 || isReservedPaletteIndex(GameId::Wings, index))) {
+        QMessageBox::information(
+            this, tr("Locked Wings palette color"),
+            tr("This Wings palette index is fixed or reserved. It may appear "
+               "in an original parallax image, but its RGB value cannot be "
+               "changed in the editor."));
+        return;
+    }
     const RGB& current = level_->palette[static_cast<std::size_t>(index)];
     const QColor selected =
         QColorDialog::getColor(QColor(current.r, current.g, current.b), this,
@@ -1235,6 +1830,17 @@ void MainWindow::loadPalette()
         QMessageBox::critical(this, tr("Palette load failed"),
                               QString::fromStdString(error));
         return;
+    }
+    if (creationSettings_.game == GameId::Wings) {
+        const auto fixed = defaultWingsPalette();
+        std::copy_n(fixed.begin(), 48, palette.begin());
+        const auto& current = activeLevel()->palette;
+        for (int index = 48; index < 256; ++index) {
+            if (isReservedPaletteIndex(GameId::Wings, index)) {
+                palette[static_cast<std::size_t>(index)] =
+                    current[static_cast<std::size_t>(index)];
+            }
+        }
     }
     canvas_->setPalette(palette);
     statusBar()->showMessage(tr("Loaded palette %1").arg(filename), 3000);
@@ -1276,7 +1882,10 @@ void MainWindow::updateWindowTitle()
     const QString document = levelName.isEmpty()
                                  ? filename
                                  : tr("%1 [%2]").arg(filename, levelName);
-    setWindowTitle(tr("%1%2 — PCX Level Tool")
+    const GameProfile& profile = gameProfile(creationSettings_.game);
+    const QString game = QString::fromUtf8(profile.displayName.data(),
+                                           profile.displayName.size());
+    setWindowTitle(tr("%1%2 — %3 — PCX Level Tool")
                        .arg(modified_ ? QStringLiteral("*") : QString(),
-                            document));
+                            document, game));
 }
