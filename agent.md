@@ -1,1114 +1,132 @@
-# PCX Level Tool – toteutussuunnitelma (V-Wing-tuki)
-
-## Tavoite
-
-Rakennetaan erillinen V-Wing-kenttäeditori, joka toimii helposti sekä:
-
-* Windows 10/11
-* Linux / KDE / Wayland / X11
-
-Editorin pitää pystyä:
-
-1. avaamaan olemassa olevia V-Wing `.LEV`-kenttiä
-2. näyttämään kenttä visuaalisesti
-3. muokkaamaan niitä pikselitasolla
-4. luomaan uusia kenttiä
-5. tallentamaan suoraan V-Wingin `.LEV`-muotoon
-6. mahdollisuuksien mukaan tuomaan/vientiä alkuperäiseen PCX-muotoon
-7. säilyttämään yhteensopivuus alkuperäisen pelin kanssa
-
-Käytettävissä on:
-
-* alkuperäinen V-Wing level converter
-* converteriin liittyvä dokumentaatio
-* alkuperäisiä `.LEV`-tiedostoja
-* freeware V-Wing -julkaisun kenttiä
-* freeware-version ilmoitettu versio on 1.95, mutta executable/data vaikuttaa tätä uudemmalta
-
-Alkuperäisiä `.LEV`-tiedostoja pitää käyttää formaatin reverse engineering -referenssinä.
-
----
-
-# 1. Teknologiavalinta
-
-Käytä:
-
-**C++17 + Qt 6**
-
-Älä tee alustakohtaista käyttöliittymää.
-
-Qt:n pitää hoitaa:
-
-* ikkunointi
-* hiiri/näppäimistö
-* tiedostodialogit
-* valikot
-* canvas-widget
-* Windows
-* Linux
-* Wayland
-* X11
-
-Projektin pitää kääntyä vähintään:
-
-```text
-Windows:
-- MSVC
-- mahdollisuuksien mukaan MinGW
-
-Linux:
-- GCC
-- Clang
-```
-
-Build system:
-
-```text
-CMake
-```
-
-Älä käytä raskaita lisäkirjastoja ilman selvää tarvetta.
-
-Ensimmäisen version riippuvuudet:
-
-```text
-Qt 6
-C++ standard library
-```
-
-Pidä formaattikoodi täysin erillään Qt-käyttöliittymästä.
-
----
-
-# 2. Projektin rakenne
-
-Pidä rakenne yksinkertaisena.
-
-Esimerkiksi:
-
-```text
-vwing-editor/
-    CMakeLists.txt
-
-    src/
-        main.cpp
-
-        level.h
-        level.cpp
-
-        lev_reader.h
-        lev_reader.cpp
-
-        lev_writer.h
-        lev_writer.cpp
-
-        pcx_reader.h
-        pcx_reader.cpp
-
-        pcx_writer.h
-        pcx_writer.cpp
-
-        main_window.h
-        main_window.cpp
-
-        level_canvas.h
-        level_canvas.cpp
-
-        palette_widget.h
-        palette_widget.cpp
-
-    tools/
-        levdump/
-        levcompare/
-
-    tests/
-        lev_tests.cpp
-
-    samples/
-        README.md
-
-    docs/
-        lev-format.md
-        reverse-engineering.md
-```
-
-Älä rakenna erillisiä service-, manager-, controller-, repository- tai dependency injection -kerroksia.
-
----
-
-# 3. Sisäinen kenttämalli
-
-Editorin sisäinen kenttä ei saa riippua `.LEV`-formaatista.
-
-Lähtökohtainen malli:
-
-```cpp
-struct RGB {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-};
-
-struct Level {
-    std::string name;
-
-    static constexpr int Width = 640;
-    static constexpr int Height = 800;
-
-    std::array<uint8_t, Width * Height> pixels;
-    std::array<RGB, 256> palette;
-};
-```
-
-Jokainen kentän pikseli on paletti-indeksi:
-
-```text
-0...255
-```
-
-Älä tallenna canvas-dataa RGB-kuvana.
-
-Paletti-indeksi on pelillisesti merkityksellinen.
-
-Esimerkiksi tietyt indeksit tarkoittavat:
-
-* vettä
-* jäätä
-* räjähdettä
-* basea
-* palavaa materiaalia
-* tuhoutumatonta materiaalia
-* turret-komponentteja
-
-Editorin pitää säilyttää indeksit täsmälleen.
-
----
-
-# 4. Ensimmäinen työvaihe: `.LEV`-formaatin selvitys
-
-Älä aloita varsinaista GUI-editoria ennen kuin `.LEV`-formaatti on riittävän hyvin tunnettu.
-
-Ensimmäinen milestone on:
-
-> Pysty lukemaan alkuperäiset `.LEV`-tiedostot deterministisesti.
-
-Tee ensin komentorivityökalut.
-
-## `levdump`
-
-Esimerkki:
-
-```text
-levdump LEVEL01.LEV
-```
-
-Sen pitää aluksi näyttää ainakin:
-
-```text
-file size
-hex header
-ASCII strings
-entropy / repeating regions
-suspected dimensions
-suspected palette
-suspected compressed blocks
-```
-
-Formaattia ei saa arvailla hiljaisesti.
-
-Dokumentoi kaikki havainnot.
-
----
-
-# 5. Alkuperäisten tiedostojen analyysi
-
-Käytä useita alkuperäisiä `.LEV`-tiedostoja.
-
-Vertaa:
-
-```text
-file size
-header
-footer
-toistuvat rakenteet
-kenttien nimet
-paletit
-mahdolliset offset-taulut
-pakkaus
-```
-
-Tee `levcompare`:
-
-```text
-levcompare LEVEL1.LEV LEVEL2.LEV
-```
-
-Tulosta esimerkiksi:
-
-```text
-same byte ranges
-different byte ranges
-first difference
-block boundaries
-```
-
-Lisäksi tee tarvittaessa hexdumpit.
-
-Älä rakenna formaattiparseria ennen kuin rakenne voidaan osoittaa useammalla tiedostolla.
-
----
-
-# 6. Converterin käyttäminen formaatin selvittämiseen
-
-Alkuperäinen converter on tärkeä oracle/reference implementation.
-
-Jos converter voidaan suorittaa DOSBoxissa tai vastaavassa ympäristössä, tee hallittuja testikenttiä.
-
-Esimerkiksi PCX:
-
-```text
-test_00.pcx
-kaikki pikselit = index 0
-
-test_01.pcx
-kaikki pikselit = index 1
-
-test_57.pcx
-kaikki pikselit = index 57
-```
-
-Sen jälkeen:
-
-```text
-test_single.pcx
-kaikki = 0
-pixel (0,0) = 1
-```
-
-Seuraavat:
-
-```text
-pixel (1,0)
-pixel (639,0)
-pixel (0,1)
-pixel (0,799)
-pixel (639,799)
-```
-
-Näillä selvitetään:
-
-* row-major vs column-major
-* y-suunnan järjestys
-* kentän koko
-* offsetit
-* pakkaus
-
-Tee lisäksi kuviot:
-
-```text
-vertical stripes
-horizontal stripes
-checkerboard
-long runs
-random pixels
-```
-
-Näillä voidaan tunnistaa mahdollinen:
-
-```text
-RLE
-PackBits-tyylinen koodaus
-scanline compression
-block compression
-raw bitmap
-```
-
----
-
-# 7. Freeware 1.95 -version kentät
-
-Analysoi freeware-jakelun `.LEV`-tiedostot erillisenä aineistona.
-
-Älä oleta, että formaatti on identtinen vanhimman converterin tuottaman formaatin kanssa.
-
-Vertaa:
-
-```text
-vanha converter output
-alkuperäiset vanhat kentät
-freeware-version kentät
-```
-
-Selvitä:
-
-```text
-onko header sama
-onko versiotunnistetta
-onko tiedostokoko muuttunut
-onko palettiformaatti muuttunut
-onko kenttädata muuttunut
-onko uusia metadata-kenttiä
-```
-
-Jos formaatteja on useampi:
-
-```cpp
-enum class LevVersion {
-    Unknown,
-    Classic,
-    Freeware
-};
-```
-
-Älä kuitenkaan lisää tätä ennen kuin formaattiero on todistettu.
-
-Jos tiedostot ovat identtistä formaattia, käytä vain yhtä parseria.
-
----
-
-# 8. `.LEV` parseri
-
-Kun formaatti tunnetaan, toteuta:
-
-```cpp
-bool loadLev(const std::filesystem::path&, Level&, std::string& error);
-```
-
-Parserin pitää:
-
-* tarkistaa tiedoston koko
-* tarkistaa tunnettu header/signature jos sellainen löytyy
-* estää buffer overflow
-* validoida offsetit
-* validoida pakattu data
-* tuottaa täsmälleen 640×800 indeksikartta
-* lukea paletti jos paletti sisältyy formaattiin
-
-Älä tee aggressiivista "korjaavaa" parseria.
-
-Jos tiedosto on rikki:
-
-```text
-return error
-```
-
-älä arvaa.
-
----
-
-# 9. `.LEV` writer
-
-Kun reader toimii luotettavasti, toteuta writer.
-
-```cpp
-bool saveLev(const std::filesystem::path&, const Level&, std::string& error);
-```
-
-Writerin ensimmäinen vaatimus:
-
-> Sen tuottaman kentän pitää latautua alkuperäisessä V-Wingissä.
-
-Toinen vaatimus:
-
-> Mahdollisuuksien mukaan sen pitää tuottaa alkuperäisen converterin kanssa binäärisesti identtinen tiedosto samasta inputista.
-
-Jos binäärinen identtisyys ei ole mahdollista mutta pelillinen tiedosto on identtinen, dokumentoi ero.
-
----
-
-# 10. Round-trip testit
-
-Testaa:
-
-```text
-original.lev
-    ↓ load
-Level
-    ↓ save
-roundtrip.lev
-```
-
-Vertaa:
-
-```text
-original.lev
-roundtrip.lev
-```
-
-Jos formaatti sisältää epäolennaisia kenttiä tai pakkaus voi muodostua eri tavalla, vertaa myös dekoodattua sisältöä.
-
-Pakollinen testi:
-
-```text
-load(original)
-save(temp)
-load(temp)
-
-level1.pixels == level2.pixels
-level1.palette == level2.palette
-```
-
----
-
-# 11. PCX-tuki
-
-Toteuta PCX vain siltä osin kuin V-Wing sitä tarvitsee.
-
-Tuettava muoto:
-
-```text
-640×800
-8-bit indexed
-256 colors
-```
-
-Ei tarvitse tehdä yleistä PCX-kirjastoa.
-
-Tarvitaan:
-
-```cpp
-bool loadPcx(...);
-bool savePcx(...);
-```
-
-Paletti-indeksien pitää säilyä.
-
-Älä konvertoi kuvaa automaattisesti truecolor → indexed ilman käyttäjän erillistä toimintoa.
-
----
-
-# 12. GUI-editori
-
-Kun formaattikerros toimii, tee editori.
-
-Pääikkuna:
-
-```text
-+--------------------------------------------------+
-| File Edit View Tools Help                       |
-+-------------+------------------------------------+
-| Materials   |                                    |
-|             |                                    |
-| Water       |                                    |
-| Ice         |             LEVEL                  |
-| Explosive   |             CANVAS                 |
-| Terrain     |                                    |
-| ...         |                                    |
-|             |                                    |
-+-------------+------------------------------------+
-| status: x=123 y=456 index=57                    |
-+--------------------------------------------------+
-```
-
----
-
-# 13. Canvas
-
-Canvas näyttää 640×800 pikselin kentän.
-
-Pakolliset:
-
-```text
-zoom
-pan
-pixel-perfect rendering
-nearest-neighbour scaling
-```
-
-Zoom esimerkiksi:
-
-```text
-25 %
-50 %
-100 %
-200 %
-400 %
-800 %
-```
-
-Älä käytä bilinear filteringia.
-
-Yksi kenttäpikseli pitää aina näkyä terävänä ruutuna suurennettaessa.
-
----
-
-# 14. Piirtotyökalut
-
-Ensimmäiseen versioon:
-
-```text
-Pencil
-Eraser
-Line
-Rectangle
-Filled rectangle
-Flood fill
-Eyedropper
-```
-
-Ei brush-antialiasingia.
-
-Ei alpha blendingia.
-
-Kaikki kirjoittavat vain:
-
-```cpp
-pixels[y * Width + x] = selectedIndex;
-```
-
----
-
-# 15. Materiaalipaletti
-
-Älä esittele käyttäjälle vain RGB-värivalitsinta.
-
-Pääasiallinen työkalu on V-Wingin materiaalipaletti.
-
-Esimerkiksi:
-
-```text
-WATER
-16 Water
-17 Waterfall
-18 ...
-19 ...
-
-ICE
-39 Ice
-
-EXPLOSIVE
-45 Plastic explosive
-
-BASE
-50 Base
-
-NORMAL TERRAIN
-57
-58
-59
-...
-149
-
-BURNABLE
-151
-...
-174
-
-INDESTRUCTIBLE
-221
-...
-243
-```
-
-Käytä converterin dokumentaation oikeita merkityksiä.
-
-Jos jonkin indeksin tarkoituksesta ei ole varmuutta:
-
-```text
-Unknown / undocumented
-```
-
-Älä keksi nimeä.
-
----
-
-# 16. Palette editor
-
-RGB-palettia pitää voida tarkastella.
-
-Näytä jokaiselle:
-
-```text
-index
-RGB
-terrain meaning
-```
-
-Esimerkiksi:
-
-```text
-57    #705020    Normal terrain
-58    #806030    Normal terrain
-```
-
-Paletin värin muuttaminen ei saa muuttaa indeksiä.
-
----
-
-# 17. Undo / redo
-
-Tee yksinkertainen undo/redo.
-
-Älä kopioi koko 512 kt kenttää jokaisesta pikselistä, jos piirretään hiirellä jatkuvasti.
-
-Yksi hiiren veto = yksi undo-operaatio.
-
-Tallenna muuttuneet:
-
-```text
-offset
-oldValue
-newValue
-```
-
-tai vaihtoehtoisesti muuttuneen alueen before/after-data.
-
-Pidä ratkaisu yksinkertaisena.
-
----
-
-# 18. Tiedostotoiminnot
-
-Pakolliset:
-
-```text
-New
-Open .LEV
-Save
-Save As
-Import PCX
-Export PCX
-Exit
-```
-
-Windowsissa ja Linuxissa käytetään Qt:n tiedostodialogeja.
-
----
-
-# 19. Projektiformaattia ei välttämättä tarvita
-
-Älä keksi omaa `.vwl`-projektiformaattia ensimmäisessä versiossa.
-
-Jos `.LEV` sisältää kaiken tarvittavan, editorin pitää työskennellä suoraan `.LEV`:llä.
-
-Oma projektiformaatti lisätään vain jos myöhemmin tarvitaan editorikohtaista dataa kuten:
-
-```text
-layers
-notes
-selection sets
-custom palette labels
-```
-
----
-
-# 20. V-Wing validator
-
-Kun formaatti tunnetaan paremmin, lisää:
-
-```text
-Tools -> Validate Level
-```
-
-Tarkista converterin dokumentaation rajoitukset.
-
-Esimerkiksi:
-
-```text
-reserved palette indices
-virheelliset material combinations
-erityisobjektien väärä rakenne
-turret-rakenne
-base-rakenne
-mahdolliset spawn/goal-rajoitukset
-```
-
-Validatori ei saa muuttaa kenttää.
-
-Se raportoi vain:
-
-```text
-Error
-Warning
-Info
-```
-
----
-
-# 21. Cross-platform-vaatimukset
-
-Kaikki paths:
-
-```cpp
-std::filesystem::path
-```
-
-Älä käytä kovakoodattuja:
-
-```text
-C:\
-/home/user
-/
-```
-
-Älä käytä WinAPI:a ellei se ole ehdottomasti tarpeen.
-
-Älä käytä POSIX-spesifisiä API-kutsuja ellei niitä eristetä.
-
-Qt:n pitää hoitaa alustariippuvaiset GUI-asiat.
-
----
-
-# 22. Windows-jakelu
-
-Tavoite:
-
-```text
-PCXLvlTool.exe
-```
-
-Käyttäjän ei pidä asentaa:
-
-```text
-Visual Studio
-Qt SDK
-CMake
-Python
-DOSBox
-```
-
-julkaisuversion käyttämiseksi.
-
-Tee Release-paketti esimerkiksi:
-
-```text
-PCXLvlTool-Windows-x64.zip
-```
-
-jossa ovat:
-
-```text
-PCXLvlTool.exe
-tarvittavat Qt DLL:t
-platforms/qwindows.dll
-LICENSE / README
-```
-
-Tarvittaessa käytä:
-
-```text
-windeployqt
-```
-
----
-
-# 23. Linux-jakelu
-
-Ensisijainen kehitysversio saa olla tavallinen executable.
-
-Julkaisua varten suosi:
-
-```text
-AppImage
-```
-
-tai vaihtoehtoisesti:
-
-```text
-tar.gz + executable + Qt dependencies
-```
-
-Flatpak voidaan tehdä myöhemmin.
-
-Ensimmäisessä vaiheessa ei tarvitse tehdä distrokohtaisia:
-
-```text
-.deb
-.rpm
-Arch package
-```
-
----
-
-# 24. CI
-
-Kun perusprojekti toimii, lisää GitHub Actions.
-
-Buildaa vähintään:
-
-```text
-Windows x64
-Ubuntu x64
-```
-
-Jokaisessa:
-
-```text
-configure
-build
-tests
-```
-
-Älä aloita projektia CI-konfiguraatiosta.
-
-Lisää se vasta kun paikallinen build toimii.
-
----
-
-# 25. Ensimmäiset milestone-tavoitteet
-
-## Milestone 1 – Format research
-
-Valmis kun:
-
-```text
-- pystytään analysoimaan alkuperäisiä LEV-tiedostoja
-- formaatin rakenne on dokumentoitu
-- compression tunnistettu
-- palette/data/header tunnistettu
-```
-
-Ei GUI:ta.
-
----
-
-## Milestone 2 – LEV reader
-
-Valmis kun:
-
-```text
-levdump level.lev
-```
-
-pystyy purkamaan kentän:
-
-```text
-640×800 indeksidataksi
-+
-paletiksi
-```
-
----
-
-## Milestone 3 – PCX export
-
-Valmis kun:
-
-```text
-LEV -> Level -> PCX
-```
-
-tuottaa visuaalisesti oikean kentän.
-
-Tätä verrataan alkuperäiseen peliin/converteriin.
-
----
-
-## Milestone 4 – LEV writer
-
-Valmis kun:
-
-```text
-LEV -> load -> save -> LEV
-```
-
-toimii ja tiedosto latautuu alkuperäisessä V-Wingissä.
-
----
-
-## Milestone 5 – Minimal GUI
-
-Sisältää:
-
-```text
-Open
-Save
-canvas
-zoom
-pan
-pencil
-material selection
-```
-
----
-
-## Milestone 6 – Usable editor
-
-Lisää:
-
-```text
-fill
-line
-rectangle
-eyedropper
-undo/redo
-palette viewer
-PCX import/export
-validator
-```
-
----
-
-## Milestone 7 – Releases
-
-Tuota:
-
-```text
-Windows x64 ZIP
-Linux x64 AppImage
-```
-
----
-
-# 26. Reverse engineering -periaate
-
-Kaikki `.LEV`-formaatista päätellyt asiat dokumentoidaan:
-
-```text
-docs/lev-format.md
-```
-
-Käytä taulukkoa:
-
-```text
-Offset      Size     Meaning
-0x0000      ?        ...
-0x0014      ?        ...
-```
-
-Erottele:
-
-```text
-Confirmed
-Strongly suspected
-Unknown
-```
-
-Älä esittele arvausta faktana.
-
-Kirjaa myös kuinka asia vahvistettiin.
-
-Esimerkiksi:
-
-```text
-Confirmed:
-Changing PCX pixel (0,0) changes decompressed LEV byte 0.
-
-Confirmed:
-Pixels are stored row-major.
-
-Suspected:
-Bytes 0x20–0x2F may contain level metadata.
-```
-
----
-
-# 27. Tärkeä testiaineisto
-
-Kun alkuperäiset freeware-version kentät toimitetaan projektiin analysoitavaksi, älä muokkaa niitä.
-
-Pidä ne read-only testiaineistona.
-
-Jos niitä ei haluta versionhallintaan tekijänoikeussyistä, rakenna testit niin, että käyttäjä voi sijoittaa ne esimerkiksi:
-
-```text
-testdata/original/
-```
-
-ja `.gitignore` jättää ne pois.
-
-Testiohjelma voi tällöin ajaa corpus-testin kaikille `.LEV`-tiedostoille:
-
-```text
-for every LEV:
-    load
-    validate
-    save temporary
-    reload
-    compare decoded level
-```
-
-Tämä on erittäin tärkeä testi parserille.
-
----
-
-# 28. Älä tee vielä
-
-Älä toteuta ensimmäisessä versiossa:
-
-```text
-layers
-scripting
-plugins
-3D view
-game engine
-level simulation
-multiplayer
-online sharing
-asset database
-custom renderer framework
-OpenGL/Vulkan renderer
-tilemap abstraction
-ECS
-```
-
-Qt:n tavallinen 2D-renderöinti riittää 640×800 indeksikuvaan helposti.
-
----
-
-# 29. Ensimmäinen Codex-tehtävä
-
-Aloita vain formaatin tutkimiseen tarvittavasta rungosta.
-
-Ensimmäinen toteutustehtävä:
-
-```text
-Create a C++17/CMake project containing a command-line utility named
-levdump.
-
-levdump must:
-- accept one .LEV filename
-- read the complete file as bytes
-- print file size
-- print the first 256 bytes as a formatted hex/ASCII dump
-- detect printable ASCII strings of length >= 4
-- print repeated byte runs longer than 16 bytes
-- perform no format assumptions yet
-
-Also create docs/reverse-engineering.md where observations about the
-format can be recorded.
-
-Do not create the Qt GUI yet.
-Do not implement speculative LEV parsing.
-Keep the implementation small and portable between Windows and Linux.
-```
-
-Kun ensimmäiset oikeat `.LEV`-tiedostot ovat käytettävissä, jatka niiden vertaamiseen eikä GUI:n rakentamiseen.
-
----
-
-# Lopullinen tavoite
-
-Käyttäjän näkökulmasta ohjelman pitää lopulta toimia näin:
-
-```text
-PCXLvlTool.exe
-```
-
-tai Linuxissa:
-
-```text
-PCXLvlTool
-```
-
-Sitten:
-
-```text
-Open LEVEL.LEV
-       ↓
-edit visually
-       ↓
-Save
-       ↓
-LEVEL.LEV
-       ↓
-copy to V-Wing
-       ↓
-play
-```
-
-Alkuperäistä converteria tai DOSBoxia ei tarvita lopullisessa editorissa.
-
-Converteria käytetään kehityksen aikana vain `.LEV`-formaatin reverse engineeringiin ja oman writerin oikeellisuuden varmistamiseen.
-
-Alkuperäistä convertteria ei saa poistaa
+# PCX Level Tool – kehittäjän muistilista
+
+Tämä tiedosto kuvaa projektin nykyiset rajat, tärkeimmät tekniset ratkaisut ja
+seuraavan julkaisun tavoitteen. Yksityiskohtaiset käyttäjä- ja formaattiohjeet
+pidetään `README.md`- ja `docs/`-tiedostoissa.
+
+## Projektin tavoite
+
+PCX Level Tool on C++17- ja Qt 6 -pohjainen pikselintarkka editori vanhojen
+indeksoituja PCX-kuvia käyttäville peleille. Ensimmäiset peliprofiilit ovat
+V-Wing ja Wings. Rakenteen pitää sallia uusien samankaltaisten pelien lisääminen
+ilman editorin yhteisten piirto-, taso- ja projektitoimintojen kopioimista.
+
+Tuetut alustat ovat Windows x86_64 ja Linux x86_64. Julkaisut tuotetaan
+Windows ZIP- ja Linux AppImage -paketteina.
+
+## Nykyinen arkkitehtuuri
+
+- `Level` on muuttuvankokoinen 8-bittinen indeksoitu kuva, jossa on 256 värin
+  paletti ja enintään viisi tasoa.
+- `.pxlp` on kaikkien pelien yhteinen, versioitu ja pelitunnisteella varustettu
+  muokattava projektimuoto. Pelin käyttämä `.LEV` on erillinen julkaisuformaatti.
+- `GameProfile` kuvaa pelin tunnisteen, kokorajat ja valinnaiset ominaisuudet.
+  Uusi peli lisätään ensisijaisesti profiilina ja omana formaattikirjoittajana.
+- Formaatti- ja projektikoodi kuuluu Qt-käyttöliittymästä riippumattomaan
+  `vwing_level_format`-kirjastoon.
+- Käyttöliittymä saa kysyä vain valitun peliprofiilin tukemia asetuksia.
+- Paletti-indeksit ovat pelillistä dataa. Niitä ei saa muuttaa RGB-väreiksi tai
+  numeroida käyttöliittymässä eri tavalla kuin tiedostossa.
+- Pelille julkaistaessa vain näkyvät tasot tasoitetaan yhdeksi indeksoiduksi
+  kuvaksi. Muokattavat tasot säilyvät `.pxlp`-projektissa.
+
+## Peliprofiilit
+
+### V-Wing
+
+- Kiinteä kenttäkoko 640 x 800.
+- Klassisen converter 1.91 -yhteensopivan `.LEV`-muodon luku ja kirjoitus.
+- Pelissä näkyvä nimi tallennetaan LEV-tiedostoon, enintään 20 tulostettavaa
+  ASCII-merkkiä ja tallennettaessa isot kirjaimet.
+- Materiaaliryhmät ja varatut paletti-indeksit perustuvat `CONVERT.TXT`:hen.
+
+### Wings
+
+- Kenttäkoko 157 x 90 ... 1000 x 1000, oletuksena 400 x 400.
+- Oma Wings `.LEV` -kirjoittaja vastaa MAKELEV-formaatin rakennetta.
+- Valinnaisen parallax-taustan koko on `width / 2 + 78` x
+  `height / 2 + 45`, käyttäen kokonaislukujakoa.
+- Kenttä ja parallax-tausta ovat käyttöliittymässä erilliset välilehdet, mutta
+  saman projektin dokumentteja ja käyttävät samaa palettia.
+- Wings-asetuksiin kuuluvat tähdet, sade, lumi, pommitus, siviilit ja
+  aseistettujen siviilien todennäköisyys.
+- Kiinteitä ja varattuja Wings-indeksejä ei saa tarjota muokattaviksi.
+- Wingsin paikallinen referenssiaineisto on `Wings/`-hakemistossa. Hakemisto on
+  aina Gitin ja julkaisupakettien ulkopuolella eikä sen tiedostoja muokata.
+
+## Uuden pelin lisäämisen reitti
+
+1. Lisää vakaa `GameId`, profiili ja ominaisuusliput tiedostoihin
+   `src/game_profile.h` ja `src/game_profile.cpp`.
+2. Lisää pelin tarkka oletuspaletti ja paletti-indeksien säännöt erillään muiden
+   pelien säännöistä.
+3. Toteuta pelikohtainen reader/writer Qt-riippumattomana. Älä lisää formaatin
+   haaroja yleisiin piirto- tai tasoluokkiin.
+4. Laajenna `.pxlp`-asetusten tageja taaksepäin luettavasti. Tuntemattomat pelit
+   ja virheelliset asetukset hylätään selkeällä virheellä.
+5. Näytä uuden pelin asetukset uuden kentän dialogissa vain ominaisuuslippujen
+   perusteella.
+6. Lisää formaatti-, projekti-, paletti- ja profiilitestit sekä dokumentoi
+   alkuperäislähteistä vahvistetut rajoitukset.
+
+Arvauksia ei kirjoiteta tiedostoformaatin säännöiksi. Havainnot erotellaan
+vahvistettuihin ja vielä epävarmoihin, ja alkuperäisiä tiedostoja käsitellään
+vain read-only-referenssinä.
+
+## Version 0.2.0 tavoite
+
+0.2.0 on ensimmäinen monen pelin kehitysversio. Sen pääsisältö on:
+
+- yhteinen `.pxlp`-projektimuoto V-Wingille, Wingsille ja myöhemmille peleille
+- peliprofiileihin perustuva laajennettava backend
+- uuden kentän pelivalinta sekä pelikohtaiset koko- ja ominaisuusasetukset
+- Wingsin muuttuvankokoiset kentät ja tarkka oletuspaletti
+- Wingsin peliasetukset, parallax-taustan oma välilehti ja oikea kokolaskenta
+- Wings-yhteensopiva `.LEV`-julkaisu ilman alkuperäisen MAKELEV-ohjelman ajoa
+- V-Wingin nykyisten muokkaus- ja julkaisutoimintojen säilyminen
+
+### Ennen 0.2.0-julkaisua
+
+- Päivitä käyttöohje kattamaan sekä V-Wing että Wings.
+- Tee manuaalinen smoke test alkuperäisissä V-Wing- ja Wings-peleissä:
+  tavallinen Wings-kenttä, parallax-kenttä ja V-Wing-regressiotesti.
+- Varmista `.pxlp`-round-trip molemmilla peliprofiileilla ja enintään viidellä
+  tasolla.
+- Aja GCC- ja Clang-buildit sekä kaikki CTest-testit Linuxissa.
+- Varmista GitHub Actionsin Windows- ja Linux-paketointi puhtaasta tagista.
+- Tarkista, ettei `Wings/`, build-hakemistoja tai muuta referenssiaineistoa ole
+  lähde- tai binääripaketeissa.
+- Päivitä `CMakeLists.txt` versionumeroon 0.2.0 vasta julkaisuvalmiina, viimeistele
+  `CHANGELOG.md` ja luo sen jälkeen tagi `v0.2.0`.
+
+## Kehityssäännöt
+
+- Muokkaa vain `LEVTOOLS`-repositorion tiedostoja. Ylemmän `VWing`-hakemiston ja
+  `Wings/`-hakemiston aineisto on read-only-referenssiä.
+- Pidä riippuvuudet vähäisinä: Qt 6 Widgets/SVG ja C++-standardikirjasto.
+- Säilytä Windows- ja Linux-yhteensopivuus; älä kovakoodaa paikallisia polkuja.
+- Yksi käyttäjän piirtoele on yksi undo-operaatio. Rasteroidun esikatselun ja
+  lopullisen piirron pitää käyttää samaa geometriaa.
+- Älä muuta alkuperäisiä `CONV.EXE`, `CONVERT.TXT` tai `FILE_ID.DIZ` -tiedostoja.
+  Niiden tarkistussummat ja erilliset jakeluehdot tarkistetaan CI:ssä.
+- Lisää regressiotesti jokaiselle korjatulle formaatti- tai kaatumisvirheelle.
+- Aja ennen committia:
+
+  ```sh
+  cmake --build build --parallel
+  ctest --test-dir build --output-on-failure
+  ```
+
+## Myöhempi jatkokehitys
+
+- Lisää seuraavat PCX-pohjaiset pelit yksi profiili ja formaatti kerrallaan;
+  mahdollinen AUTS vaatii ensin formaatin ja palettirajoitusten tutkimisen.
+- Lisää pelikohtainen validointi yhteiseen raportointirajapintaan.
+- Lisää LEV-tuonti Wingsille vasta, kun reader voidaan toteuttaa ja testata
+  deterministisesti oikealla aineistolla.
+- Arvioi englanninkieliset käyttöohjeet ja käyttöliittymän lokalisointi erillisinä
+  julkaisutavoitteina.
+
+Vältä tarpeettomia service/controller/plugin-kerroksia. Laajennettavuus tässä
+projektissa tarkoittaa selkeitä peliprofiileja ja formaattirajoja, ei dynaamista
+plugin-järjestelmää.
