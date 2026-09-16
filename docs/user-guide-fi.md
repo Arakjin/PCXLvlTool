@@ -45,10 +45,16 @@ saa olla enintään seitsemän veden pintaa, veden pinnan tulee olla alle 100
 pikseliä pitkä ja aaltojen pitää pysyä yli viiden pikselin päässä katosta tai
 koskettaa kattoa.
 
-**File > Import AUTS BMP** tuo nykyiseksi AUTS-työksi pakkaamattoman 320 x 400,
-8-bittisen indeksoidun BMP-kuvan. Pikselien indeksit säilytetään ja kuva saa
-kiinteän AUTS-paletin. Jos lähteen paletti poikkeaa alkuperäisestä, ohjelma
-ilmoittaa siitä; käytä materiaalien varmaan vastaavuuteen alkuperäistä
+**File > Import** kysyy ensin kohdepelin. V-Wing ja Wings hyväksyvät 8-bittisen
+indeksoidun PCX-kuvan. AUTS hyväksyy sellaisen PCX-kuvan tai pakkaamattoman
+320 x 400, 8-bittisen indeksoidun BMP-kuvan. Valinta tehdään aina itse; ohjelma
+ei arvaa peliä kuvan koon perusteella.
+
+Tuonnissa pikselien indeksit säilytetään ja tiedosto validoidaan valitun pelin
+kokorajoja vasten. AUTS-kuva saa kiinteän AUTS-paletin ja suojareunan. Wings
+palauttaa paletin kiinteät ja varatut kohdat pelin arvoihin sekä kysyy kentän
+muut asetukset ennen tuontia. Jos AUTS-lähteen paletti poikkeaa alkuperäisestä,
+ohjelma ilmoittaa siitä; käytä materiaalien varmaan vastaavuuteen alkuperäistä
 `BLANK.BMP`-palettia. Tallenna tuotu työ `.pxlp`-projektiksi ja tee peliin
 menevä tiedosto valinnalla **Publish LEV**.
 

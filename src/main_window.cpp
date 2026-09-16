@@ -10,6 +10,7 @@
 #include "palette_io.h"
 #include "palette_rules.h"
 #include "palette_widget.h"
+#include "pcx_reader.h"
 #include "pcxl_project_io.h"
 #include "wings_lev_writer.h"
 
@@ -565,10 +566,9 @@ void MainWindow::createActions()
     openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openLevel);
 
-    importAutsBmpAction_ = fileMenu->addAction(tr("Import AUTS &BMP..."));
-    importAutsBmpAction_->setEnabled(false);
-    connect(importAutsBmpAction_, &QAction::triggered, this,
-            &MainWindow::importAutsBmp);
+    QAction* importAction = fileMenu->addAction(tr("&Import..."));
+    connect(importAction, &QAction::triggered, this,
+            &MainWindow::importImage);
 
     saveAction_ = fileMenu->addAction(tr("&Save project"));
     saveAction_->setShortcut(QKeySequence::Save);
@@ -1302,62 +1302,148 @@ void MainWindow::openLevel()
     statusBar()->showMessage(tr("Opened %1").arg(filename), 3000);
 }
 
-void MainWindow::importAutsBmp()
+void MainWindow::importImage()
 {
-    if (creationSettings_.game != GameId::Auts || !maybeSave()) {
+    QStringList gameNames;
+    for (const GameProfile& profile : availableGameProfiles()) {
+        gameNames.push_back(QString::fromUtf8(profile.displayName.data(),
+                                              profile.displayName.size()));
+    }
+    bool selected = false;
+    const QString gameName = QInputDialog::getItem(
+        this, tr("Import image"), tr("Target game:"), gameNames, 0, false,
+        &selected);
+    if (!selected) {
         return;
     }
+    const int selectedIndex = gameNames.indexOf(gameName);
+    if (selectedIndex < 0 ||
+        selectedIndex >= static_cast<int>(availableGameProfiles().size())) {
+        return;
+    }
+    const GameProfile& profile =
+        availableGameProfiles()[static_cast<std::size_t>(selectedIndex)];
+
+    const bool auts = profile.id == GameId::Auts;
     const QString filename = QFileDialog::getOpenFileName(
-        this, tr("Import AUTS bitmap"), QString(),
-        tr("AUTS 8-bit bitmaps (*.bmp *.BMP)"));
+        this, tr("Import image for %1").arg(gameName), QString(),
+        auts ? tr("Indexed images (*.pcx *.PCX *.bmp *.BMP)")
+             : tr("8-bit indexed PCX images (*.pcx *.PCX)"));
     if (filename.isEmpty()) {
         return;
     }
 
     auto imported = std::make_unique<Level>();
-    bool paletteMatches = false;
+    bool paletteMatches = true;
     std::string error;
-    if (!loadAutsBmp(toPath(filename), *imported, paletteMatches, error)) {
-        QMessageBox::critical(this, tr("BMP import failed"),
+    const bool bmp = QFileInfo(filename).suffix().compare(
+                         QStringLiteral("bmp"), Qt::CaseInsensitive) == 0;
+    const bool loaded =
+        bmp ? auts && loadAutsBmp(toPath(filename), *imported, paletteMatches,
+                                  error)
+            : loadPcx(toPath(filename), *imported, error);
+    if (!loaded) {
+        if (bmp && !auts) {
+            error = "BMP import is currently supported only for AUTS";
+        }
+        QMessageBox::critical(this, tr("Image import failed"),
                               QString::fromStdString(error));
         return;
     }
 
+    if (imported->width < static_cast<std::size_t>(profile.minimumWidth) ||
+        imported->width > static_cast<std::size_t>(profile.maximumWidth) ||
+        imported->height < static_cast<std::size_t>(profile.minimumHeight) ||
+        imported->height > static_cast<std::size_t>(profile.maximumHeight)) {
+        QMessageBox::critical(
+            this, tr("Wrong image dimensions"),
+            tr("%1 requires an image between %2 x %3 and %4 x %5 pixels. "
+               "The selected image is %6 x %7.")
+                .arg(gameName)
+                .arg(profile.minimumWidth)
+                .arg(profile.minimumHeight)
+                .arg(profile.maximumWidth)
+                .arg(profile.maximumHeight)
+                .arg(imported->width)
+                .arg(imported->height));
+        return;
+    }
+
+    LevelCreationSettings settings;
+    settings.game = profile.id;
+    settings.name = imported->name;
+    settings.width = static_cast<int>(imported->width);
+    settings.height = static_cast<int>(imported->height);
+    bool paletteAdjusted = false;
+    if (profile.id == GameId::Auts) {
+        paletteAdjusted = !paletteMatches ||
+                          imported->palette != defaultAutsPalette();
+        applyAutsGameRules(*imported);
+    } else if (profile.id == GameId::Wings) {
+        const auto fixed = defaultWingsPalette();
+        for (std::size_t index = 0; index < imported->palette.size(); ++index) {
+            if (index < 48 ||
+                isReservedPaletteIndex(GameId::Wings,
+                                       static_cast<int>(index))) {
+                paletteAdjusted = paletteAdjusted ||
+                                  !(imported->palette[index] == fixed[index]);
+                imported->palette[index] = fixed[index];
+            }
+        }
+        if (!promptForWingsSettings(settings, false)) {
+            return;
+        }
+        imported->name = settings.name;
+    }
+    if (!maybeSave()) {
+        return;
+    }
+
+    installImportedLevel(
+        std::move(imported), settings,
+        tr("Imported %1 for %2").arg(filename, gameName));
+    if (profile.id == GameId::Auts || profile.id == GameId::VWing) {
+        uppercaseLevelName();
+    }
+    if (paletteAdjusted) {
+        QMessageBox::information(
+            this, tr("Game palette rules applied"),
+            profile.id == GameId::Auts
+                ? tr("Pixel indices were preserved and the fixed AUTS palette "
+                     "and boundary were applied.")
+                : tr("Pixel indices were preserved. Wings' fixed and reserved "
+                     "palette entries were restored to their game values."));
+    }
+}
+
+void MainWindow::installImportedLevel(
+    std::unique_ptr<Level> imported, const LevelCreationSettings& settings,
+    const QString& statusMessage)
+{
     canvas_->forgetLevel(backgroundLevel_.get());
     canvas_->forgetLevel(level_.get());
     level_ = std::move(imported);
     backgroundLevel_.reset();
-    creationSettings_ = LevelCreationSettings{};
-    creationSettings_.game = GameId::Auts;
-    creationSettings_.name = level_->name;
-    creationSettings_.width = 320;
-    creationSettings_.height = 400;
+    creationSettings_ = settings;
     projectPath_.clear();
     publishPath_.clear();
     documentTabs_->setCurrentIndex(0);
-    documentTabs_->setVisible(false);
-    levelSettingsAction_->setEnabled(false);
     configurePaletteForGame();
+    configureWingsDocuments();
+    levelSettingsAction_->setEnabled(settings.game == GameId::Wings);
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
     {
         const QSignalBlocker blocker(levelNameEdit_);
         levelNameEdit_->setText(QString::fromStdString(level_->name));
     }
+    updateMaterialDetails(
+        paletteIndexFromColorChart(materialIndexSpinBox_->value()));
     refreshLayerList();
     canvas_->undoStack()->setClean();
     nonUndoModified_ = true;
     setModified(true);
-    if (!paletteMatches) {
-        QMessageBox::information(
-            this, tr("AUTS palette applied"),
-            tr("The bitmap did not use the exact AUTS palette. Pixel indices "
-               "were preserved and the fixed AUTS palette was applied. Use "
-               "BLANK.BMP as the source template when material indices must "
-               "match the original converter."));
-    }
-    statusBar()->showMessage(tr("Imported AUTS bitmap %1").arg(filename),
-                             4000);
+    statusBar()->showMessage(statusMessage, 4000);
 }
 
 void MainWindow::newLevel()
@@ -1464,7 +1550,8 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
     return true;
 }
 
-bool MainWindow::promptForWingsSettings(LevelCreationSettings& settings)
+bool MainWindow::promptForWingsSettings(LevelCreationSettings& settings,
+                                        const bool allowDimensionEditing)
 {
     const GameProfile& profile = gameProfile(GameId::Wings);
     QDialog dialog(this);
@@ -1484,12 +1571,14 @@ bool MainWindow::promptForWingsSettings(LevelCreationSettings& settings)
     width->setRange(profile.minimumWidth, profile.maximumWidth);
     width->setValue(settings.width);
     width->setSuffix(tr(" px"));
+    width->setEnabled(allowDimensionEditing);
     form->addRow(tr("Width:"), width);
 
     auto* height = new QSpinBox(&dialog);
     height->setRange(profile.minimumHeight, profile.maximumHeight);
     height->setValue(settings.height);
     height->setSuffix(tr(" px"));
+    height->setEnabled(allowDimensionEditing);
     form->addRow(tr("Height:"), height);
 
     auto* parallax = new QCheckBox(tr("Use parallax background"), &dialog);
@@ -1670,9 +1759,6 @@ void MainWindow::configurePaletteForGame()
         return;
     }
     canvas_->setGame(creationSettings_.game);
-    if (importAutsBmpAction_ != nullptr) {
-        importAutsBmpAction_->setEnabled(creationSettings_.game == GameId::Auts);
-    }
     if (creationSettings_.game == GameId::Wings) {
         levelNameEdit_->setMaxLength(64);
         levelNameEdit_->setValidator(new QRegularExpressionValidator(
@@ -1957,6 +2043,9 @@ void MainWindow::uppercaseLevelName()
         if (level_->name.empty()) {
             level_->name = "UNTITLED";
         }
+    } else if (creationSettings_.game == GameId::VWing &&
+               level_->name.size() > 20) {
+        level_->name.resize(20);
     }
     std::transform(level_->name.begin(), level_->name.end(),
                    level_->name.begin(), [](const char character) {

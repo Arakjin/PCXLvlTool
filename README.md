@@ -50,8 +50,9 @@ The current milestone supports:
   `.pxlp` projects
 - creating, opening, editing, and publishing fixed-size 320 x 400 AUTS levels
   with the original AUTS palette and documented material indices
-- importing 320 x 400 uncompressed 8-bit indexed BMP images into AUTS projects;
-  source indices are preserved and the fixed game palette is applied
+- a single game-explicit image import action: V-Wing and Wings accept indexed
+  PCX, while AUTS accepts indexed PCX or 320 x 400 uncompressed 8-bit BMP;
+  source indices are preserved and game-specific palette rules are applied
 - creating a fresh level with **File > New level** (`Ctrl+N`)
 - editing the in-game level-menu name directly in the top toolbar; LEV names
   are limited to 20 printable ASCII characters, so non-ASCII letters such as

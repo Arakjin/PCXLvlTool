@@ -10,8 +10,10 @@ Planned first multi-game development release.
   gameplay settings, an optional parallax-background document, and native
   Wings `.LEV` publishing.
 - Add AUTS level creation, its fixed 320 x 400 palette/material profile,
-  indexed BMP import, existing-level loading, and native AUTS `.LEV`
+  indexed BMP and PCX import, existing-level loading, and native AUTS `.LEV`
   publishing.
+- Add a single game-explicit image import flow: choose V-Wing, Wings, or AUTS,
+  then import an image validated against that profile.
 - Replace the V-Wing-specific editable project path with the shared,
   versioned, game-tagged `.pxlp` format.
 - Introduce game profiles and feature flags so additional indexed-PCX games

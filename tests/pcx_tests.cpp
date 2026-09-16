@@ -1,3 +1,4 @@
+#include "pcx_reader.h"
 #include "pcx_writer.h"
 
 #include <cstddef>
@@ -51,6 +52,21 @@ std::uint16_t littleEndian16(const std::vector<std::uint8_t>& bytes,
 {
     return static_cast<std::uint16_t>(bytes[offset]) |
            static_cast<std::uint16_t>(bytes[offset + 1] << 8);
+}
+
+void putLittleEndian16(std::vector<std::uint8_t>& bytes,
+                       const std::size_t offset, const std::uint16_t value)
+{
+    bytes[offset] = static_cast<std::uint8_t>(value);
+    bytes[offset + 1] = static_cast<std::uint8_t>(value >> 8);
+}
+
+void writeBytes(const std::filesystem::path& path,
+                const std::vector<std::uint8_t>& bytes)
+{
+    std::ofstream output(path, std::ios::binary);
+    output.write(reinterpret_cast<const char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()));
 }
 
 } // namespace
@@ -107,6 +123,41 @@ int main()
                      "palette entry was not preserved");
     }
 
+    Level loaded;
+    error.clear();
+    ok &= expect(loadPcx(file.path(), loaded, error),
+                 "valid PCX could not be loaded: " + error);
+    ok &= expect(loaded.width == Level::Width &&
+                     loaded.height == Level::Height &&
+                     loaded.pixels == level->pixels &&
+                     loaded.palette == level->palette,
+                 "PCX reader/writer round-trip did not preserve indexed data");
+
+    const TestFile variable(std::filesystem::current_path() /
+                            "pcx-variable-test.pcx");
+    std::vector<std::uint8_t> variableBytes(128);
+    variableBytes[0] = 0x0a;
+    variableBytes[1] = 5;
+    variableBytes[2] = 1;
+    variableBytes[3] = 8;
+    putLittleEndian16(variableBytes, 8, 2);  // width = 3
+    putLittleEndian16(variableBytes, 10, 1); // height = 2
+    variableBytes[65] = 1;
+    putLittleEndian16(variableBytes, 66, 4); // one padding byte per row
+    variableBytes.insert(variableBytes.end(), {1, 2, 3, 99, 4, 5, 6, 88});
+    variableBytes.push_back(0x0c);
+    variableBytes.resize(variableBytes.size() + 256 * 3);
+    writeBytes(variable.path(), variableBytes);
+    error.clear();
+    ok &= expect(loadPcx(variable.path(), loaded, error),
+                 "variable-size PCX could not be loaded: " + error);
+    ok &= expect(loaded.width == 3 && loaded.height == 2 &&
+                     loaded.pixels.size() == 6 && loaded.pixels[0] == 1 &&
+                     loaded.pixels[1] == 2 && loaded.pixels[2] == 3 &&
+                     loaded.pixels[3] == 4 && loaded.pixels[4] == 5 &&
+                     loaded.pixels[5] == 6,
+                 "PCX reader did not remove scanline padding");
+
     const std::filesystem::path invalidPath =
         std::filesystem::current_path() / "pcx-writer-missing-directory" /
         "output.pcx";
@@ -118,6 +169,6 @@ int main()
     if (!ok) {
         return 1;
     }
-    std::cout << "All PCX writer tests passed\n";
+    std::cout << "All PCX tests passed\n";
     return 0;
 }

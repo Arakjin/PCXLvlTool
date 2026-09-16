@@ -97,6 +97,19 @@ void initializeBlankAutsLevel(Level& level)
     applyBorder(level.pixels);
 }
 
+void applyAutsGameRules(Level& level)
+{
+    if (level.width != kWidth || level.height != kHeight ||
+        level.pixels.size() != kPixelCount) {
+        throw std::invalid_argument(
+            "AUTS levels must be exactly 320 x 400 pixels");
+    }
+    level.palette = defaultAutsPalette();
+    applyBorder(level.pixels);
+    level.layers.clear();
+    level.activeLayer = 0;
+}
+
 bool loadAutsLev(const std::filesystem::path& path, Level& level,
                  std::string& error)
 {

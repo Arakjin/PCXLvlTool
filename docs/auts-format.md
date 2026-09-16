@@ -62,9 +62,13 @@ The original documentation states:
 
 These are currently documented editing rules, not automatic validation.
 
-## BMP import policy
+## Image import policy
 
 PCX Level Tool accepts only the confirmed 320 x 400, uncompressed 8-bit indexed
 BMP layout for AUTS. Pixel indices are preserved rather than inferred from RGB
 colors, and the fixed AUTS palette is applied. A differing source palette is
 reported to the user because material semantics depend on the indices.
+
+AUTS also accepts an 8-bit indexed PCX of exactly the same dimensions. The
+Import action always asks the user for the target game; game identity is not
+guessed from dimensions or palette colors.

@@ -19,6 +19,7 @@ class LevelCanvas;
 class PaletteWidget;
 class PaletteIndexSpinBox;
 class QComboBox;
+class QString;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -38,14 +39,18 @@ private:
     void createZoomToolBar();
     void newLevel();
     bool createNewLevel(bool checkUnsavedChanges);
-    bool promptForWingsSettings(LevelCreationSettings& settings);
+    bool promptForWingsSettings(LevelCreationSettings& settings,
+                                bool allowDimensionEditing = true);
     void editLevelSettings();
     void switchWingsDocument(int index);
     Level* activeLevel() const;
     void configureWingsDocuments();
     void configurePaletteForGame();
     void openLevel();
-    void importAutsBmp();
+    void importImage();
+    void installImportedLevel(std::unique_ptr<Level> imported,
+                              const LevelCreationSettings& settings,
+                              const QString& statusMessage);
     bool saveProject();
     bool saveProjectAs();
     bool publishLevel();
@@ -74,7 +79,6 @@ private:
     QListWidget* layerListWidget_ = nullptr;
     QAction* saveAction_ = nullptr;
     QAction* levelSettingsAction_ = nullptr;
-    QAction* importAutsBmpAction_ = nullptr;
     QTabBar* documentTabs_ = nullptr;
     LevelCreationSettings creationSettings_;
     std::filesystem::path projectPath_;

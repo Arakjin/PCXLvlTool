@@ -7,6 +7,7 @@
 
 // AUTS uses a fixed 320 x 400 indexed image and a fixed game palette.
 void initializeBlankAutsLevel(Level& level);
+void applyAutsGameRules(Level& level);
 bool loadAutsLev(const std::filesystem::path& path, Level& level,
                  std::string& error);
 bool saveAutsLev(const std::filesystem::path& path, const Level& level,

@@ -99,8 +99,10 @@ vain read-only-referenssinä.
 - Wingsin muuttuvankokoiset kentät ja tarkka oletuspaletti
 - Wingsin peliasetukset, parallax-taustan oma välilehti ja oikea kokolaskenta
 - Wings-yhteensopiva `.LEV`-julkaisu ilman alkuperäisen MAKELEV-ohjelman ajoa
-- AUTS-kenttien luonti, BMP-tuonti ja `.LEV`-julkaisu ilman alkuperäisen
-  BMP2LEV-ohjelman ajoa
+- pelin aina käyttäjältä kysyvä indeksoidun kuvan tuonti: PCX kaikille
+  tuetuille peleille sekä BMP AUTSille
+- AUTS-kenttien luonti ja `.LEV`-julkaisu ilman alkuperäisen BMP2LEV-ohjelman
+  ajoa
 - V-Wingin nykyisten muokkaus- ja julkaisutoimintojen säilyminen
 
 ### Ennen 0.2.0-julkaisua
