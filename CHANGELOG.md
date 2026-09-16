@@ -2,9 +2,9 @@
 
 All notable changes to PCX Level Tool are documented in this file.
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-09-16
 
-Planned first multi-game development release.
+First multi-game release.
 
 - Add Wings as the second supported game, including variable-size levels,
   gameplay settings, an optional parallax-background document, and native

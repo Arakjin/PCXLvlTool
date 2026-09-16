@@ -39,6 +39,7 @@ Copy-Item LICENSE, CHANGELOG.md, README.md, QT-LGPL-NOTICE.md, `
   THIRD_PARTY_NOTICES.md package\PCXLvlTool\
 Copy-Item docs\install-fi.md package\PCXLvlTool\
 Copy-Item docs\user-guide-fi.md package\PCXLvlTool\
+Copy-Item docs\pxlp-format.md package\PCXLvlTool\
 Copy-Item docs\auts-format.md package\PCXLvlTool\
 Copy-Item -Recurse third_party package\PCXLvlTool\third_party
 New-Item -ItemType Directory -Force `
@@ -142,8 +143,8 @@ Varmista ensin, että `CMakeLists.txt`:n versio ja `CHANGELOG.md` ovat oikein ja
 että main-haara on puskettu. Luo ja puske sen jälkeen annotoitu tagi:
 
 ```sh
-git tag -a v0.1.0 -m "PCX Level Tool 0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "PCX Level Tool 0.2.0"
+git push origin v0.2.0
 ```
 
 Tagin pusku käynnistää julkaisu-workflow'n. GitHub Release luodaan vasta, jos

@@ -1,7 +1,7 @@
 # PCX Level Tool – kehittäjän muistilista
 
 Tämä tiedosto kuvaa projektin nykyiset rajat, tärkeimmät tekniset ratkaisut ja
-seuraavan julkaisun tavoitteen. Yksityiskohtaiset käyttäjä- ja formaattiohjeet
+julkaistun 0.2.0-version pohjan jatkokehitykselle. Yksityiskohtaiset käyttäjä- ja formaattiohjeet
 pidetään `README.md`- ja `docs/`-tiedostoissa.
 
 ## Projektin tavoite
@@ -89,9 +89,9 @@ Arvauksia ei kirjoiteta tiedostoformaatin säännöiksi. Havainnot erotellaan
 vahvistettuihin ja vielä epävarmoihin, ja alkuperäisiä tiedostoja käsitellään
 vain read-only-referenssinä.
 
-## Version 0.2.0 tavoite
+## Versio 0.2.0
 
-0.2.0 on ensimmäinen monen pelin kehitysversio. Sen pääsisältö on:
+0.2.0 on 16.9.2026 julkaistu ensimmäinen monen pelin versio. Sen pääsisältö on:
 
 - yhteinen `.pxlp`-projektimuoto V-Wingille, Wingsille ja myöhemmille peleille
 - peliprofiileihin perustuva laajennettava backend
@@ -104,20 +104,6 @@ vain read-only-referenssinä.
 - AUTS-kenttien luonti ja `.LEV`-julkaisu ilman alkuperäisen BMP2LEV-ohjelman
   ajoa
 - V-Wingin nykyisten muokkaus- ja julkaisutoimintojen säilyminen
-
-### Ennen 0.2.0-julkaisua
-
-- Viimeistele käyttöohje kattamaan V-Wing, Wings ja AUTS.
-- Tee manuaalinen smoke test alkuperäisissä V-Wing-, Wings- ja AUTS-peleissä:
-  tavallinen Wings-kenttä, parallax-kenttä, AUTS-kenttä ja V-Wing-regressiotesti.
-- Varmista `.pxlp`-round-trip molemmilla peliprofiileilla ja enintään viidellä
-  tasolla.
-- Aja GCC- ja Clang-buildit sekä kaikki CTest-testit Linuxissa.
-- Varmista GitHub Actionsin Windows- ja Linux-paketointi puhtaasta tagista.
-- Tarkista, ettei `Wings/`, `AUTSCONV/`, build-hakemistoja tai muuta
-  referenssiaineistoa ole lähde- tai binääripaketeissa.
-- Päivitä `CMakeLists.txt` versionumeroon 0.2.0 vasta julkaisuvalmiina, viimeistele
-  `CHANGELOG.md` ja luo sen jälkeen tagi `v0.2.0`.
 
 ## Kehityssäännöt
 
