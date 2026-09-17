@@ -333,6 +333,7 @@ void LevelCanvas::setLevel(Level* level)
     }
     clearSelection();
     curveStage_ = CurveStage::None;
+    curveHandle_ = CurveHandle::None;
     polygonActive_ = false;
     polygonPoints_.clear();
     textDraftActive_ = false;
@@ -1157,6 +1158,36 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                     event->accept();
                     return;
                 }
+                if (curveStage_ == CurveStage::Editing) {
+                    const int hitRadius =
+                        std::max(1, static_cast<int>(std::ceil(6.0 / zoom_)));
+                    const auto distanceSquared = [](const QPoint& first,
+                                                    const QPoint& second) {
+                        const QPoint delta = first - second;
+                        return delta.x() * delta.x() +
+                               delta.y() * delta.y();
+                    };
+                    const int firstDistance =
+                        distanceSquared(point, curveControl1_);
+                    const int secondDistance =
+                        distanceSquared(point, curveControl2_);
+                    const int maximumDistance = hitRadius * hitRadius;
+                    if (firstDistance <= maximumDistance &&
+                        firstDistance <= secondDistance) {
+                        curveHandle_ = CurveHandle::First;
+                        curveHandleDragOffset_ = curveControl1_ - point;
+                    } else if (secondDistance <= maximumDistance) {
+                        curveHandle_ = CurveHandle::Second;
+                        curveHandleDragOffset_ = curveControl2_ - point;
+                    } else {
+                        curveHandle_ = CurveHandle::None;
+                        event->accept();
+                        return;
+                    }
+                } else {
+                    curveHandle_ = CurveHandle::None;
+                    curveHandleDragOffset_ = {};
+                }
                 drawing_ = true;
                 lastImagePoint_ = point;
                 if (curveStage_ == CurveStage::FirstControl) {
@@ -1278,6 +1309,12 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
                 curveControl1_ = point;
             } else if (curveStage_ == CurveStage::SecondControl) {
                 curveControl2_ = point;
+            } else if (curveStage_ == CurveStage::Editing) {
+                if (curveHandle_ == CurveHandle::First) {
+                    curveControl1_ = point + curveHandleDragOffset_;
+                } else if (curveHandle_ == CurveHandle::Second) {
+                    curveControl2_ = point + curveHandleDragOffset_;
+                }
             }
             viewport()->update();
             return;
@@ -1365,8 +1402,17 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
                     curveStage_ = CurveStage::SecondControl;
                 } else if (curveStage_ == CurveStage::SecondControl) {
                     curveControl2_ = lastImagePoint_;
-                    commitCurve();
+                    curveStage_ = CurveStage::Editing;
+                } else if (curveStage_ == CurveStage::Editing) {
+                    if (curveHandle_ == CurveHandle::First) {
+                        curveControl1_ = lastImagePoint_ +
+                                         curveHandleDragOffset_;
+                    } else if (curveHandle_ == CurveHandle::Second) {
+                        curveControl2_ = lastImagePoint_ +
+                                         curveHandleDragOffset_;
+                    }
                 }
+                curveHandle_ = CurveHandle::None;
                 viewport()->update();
                 event->accept();
                 return;
@@ -2411,6 +2457,7 @@ void LevelCanvas::cancelCurve()
         return;
     }
     curveStage_ = CurveStage::None;
+    curveHandle_ = CurveHandle::None;
     drawing_ = false;
     strokeChanges_.clear();
     strokeChangeIndices_.clear();
@@ -2423,6 +2470,7 @@ void LevelCanvas::commitCurve()
         return;
     }
     curveStage_ = CurveStage::None;
+    curveHandle_ = CurveHandle::None;
     drawing_ = false;
     drawBezier(curveStartPoint_, curveControl1_, curveControl2_, curveEndPoint_,
                strokePaintIndex_, strokeThickness_);

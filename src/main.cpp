@@ -1,8 +1,11 @@
 #include "main_window.h"
 
+#include "level_canvas.h"
+
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
+#include <QSignalBlocker>
 #include <QTimer>
 
 int main(int argc, char* argv[])
@@ -20,6 +23,10 @@ int main(int argc, char* argv[])
     MainWindow window;
     window.show();
     if (smokeTest) {
+        if (auto* canvas = window.findChild<LevelCanvas*>()) {
+            const QSignalBlocker blocker(canvas);
+            canvas->setPaletteColor(0, RGB{1, 2, 3});
+        }
         QTimer::singleShot(0, &application, &QCoreApplication::quit);
     } else {
         QTimer::singleShot(0, &window, &MainWindow::promptForInitialLevel);

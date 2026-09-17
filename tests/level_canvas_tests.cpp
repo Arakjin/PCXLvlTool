@@ -568,6 +568,14 @@ int main(int argc, char *argv[])
     ok &= expect(canvas.undoStack()->count() == 0,
                  "first Bezier bend should keep the curve in preview");
     drag(viewport, {114.5, 200.5}, {114.5, 190.5});
+    ok &= expect(level.pixels[offset(110, 195)] == 0 &&
+                     canvas.undoStack()->count() == 0,
+                 "second Bezier bend should remain editable");
+    drag(viewport, {106.5, 190.5}, {106.5, 185.5});
+    drag(viewport, {114.5, 190.5}, {114.5, 185.5});
+    ok &= expect(canvas.undoStack()->count() == 0,
+                 "both Bezier handles should remain movable before acceptance");
+    sendKey(&canvas, Qt::Key_Return);
     bool curvedAboveBaseline = false;
     for (int y = 188; y < 199; ++y) {
         for (int x = 100; x <= 120; ++x) {
@@ -577,7 +585,7 @@ int main(int argc, char *argv[])
     ok &= expect(level.pixels[offset(100, 200)] == 61 &&
                      level.pixels[offset(120, 200)] == 61 &&
                      curvedAboveBaseline && canvas.undoStack()->count() == 1,
-                 "second Bezier bend should commit one curved undo operation");
+                 "Enter should commit one curved undo operation");
     ok &= expect(canvas.toolThickness(DrawTool::BezierCurve) == 2,
                  "Bezier curve should remember its own thickness");
 
@@ -590,6 +598,14 @@ int main(int argc, char *argv[])
     drag(viewport, {130.5, 220.5}, {150.5, 226.5}, Qt::ShiftModifier);
     drag(viewport, {136.5, 220.5}, {136.5, 210.5}, Qt::ShiftModifier);
     drag(viewport, {144.5, 220.5}, {144.5, 210.5}, Qt::ShiftModifier);
+    sendKey(&canvas, Qt::Key_Escape);
+    ok &= expect(canvas.undoStack()->count() == 0,
+                 "Escape should cancel an editable Bezier curve");
+
+    drag(viewport, {130.5, 220.5}, {150.5, 226.5}, Qt::ShiftModifier);
+    drag(viewport, {136.5, 220.5}, {136.5, 210.5}, Qt::ShiftModifier);
+    drag(viewport, {144.5, 220.5}, {144.5, 210.5}, Qt::ShiftModifier);
+    sendKey(&canvas, Qt::Key_Return);
     bool shiftedBezierAboveBaseline = false;
     for (int y = 208; y < 220; ++y) {
         for (int x = 130; x <= 150; ++x) {

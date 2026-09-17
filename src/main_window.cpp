@@ -421,6 +421,16 @@ MainWindow::MainWindow(QWidget* parent)
     updateWindowTitle();
 }
 
+MainWindow::~MainWindow()
+{
+    // Child widgets are destroyed by QMainWindow after this class's members.
+    // A dirty undo stack emits cleanChanged while LevelCanvas is torn down;
+    // disconnect it before level_ and the other title data cease to exist.
+    if (canvas_ != nullptr) {
+        QObject::disconnect(canvas_, nullptr, this, nullptr);
+    }
+}
+
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     if (maybeSave()) {

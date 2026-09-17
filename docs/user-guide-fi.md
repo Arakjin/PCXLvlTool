@@ -91,7 +91,9 @@ Työkalut:
 - **Line** piirtää suoran viivan. `Shift` rajoittaa suunnan vaaka-, pysty- tai
   45 asteen linjaan.
 - **Bezier curve** tehdään kolmella vedolla: ensin lähtöviiva ja sitten kaksi
-  taivutusta. `Shift` rajoittaa vain lähtöviivan suunnan.
+  taivutusta. Taivutuspisteitä voi siirtää uudelleen ennen hyväksymistä.
+  `Enter` hyväksyy käyrän, `Esc` peruu sen ja `Shift` rajoittaa vain
+  lähtöviivan suunnan.
 - **Rectangle** ja **Ellipse** tukevat pelkkää ääriviivaa, ääriviivaa ja
   täyttöä sekä pelkkää täyttöä. `Shift` tekee neliön tai ympyrän.
 - **Polygon** luodaan napsauttamalla kulmapisteet. Päätä muoto kaksoisnapsautuksella

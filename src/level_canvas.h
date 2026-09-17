@@ -137,6 +137,13 @@ private:
         Baseline,
         FirstControl,
         SecondControl,
+        Editing,
+    };
+
+    enum class CurveHandle {
+        None,
+        First,
+        Second,
     };
 
     enum class SelectionCombineMode {
@@ -233,6 +240,7 @@ private:
     bool textDraftActive_ = false;
     bool movingTextBox_ = false;
     CurveStage curveStage_ = CurveStage::None;
+    CurveHandle curveHandle_ = CurveHandle::None;
     QPoint lastImagePoint_;
     QPoint hoverImagePoint_{-1, -1};
     QPoint strokeStartPoint_;
@@ -246,6 +254,7 @@ private:
     QPoint curveEndPoint_;
     QPoint curveControl1_;
     QPoint curveControl2_;
+    QPoint curveHandleDragOffset_;
     QRect textBoxBounds_;
     QPoint textMoveAnchor_;
     QPoint textMoveStart_;

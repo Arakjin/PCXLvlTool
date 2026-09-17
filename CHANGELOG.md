@@ -20,6 +20,10 @@ All notable changes to PCX Level Tool are documented in this file.
 - Clarify in the user documentation that each game's `.LEV` format is
   incompatible with the others, and move shared editor behavior out of the
   game-specific guides.
+- Keep both Bezier control handles editable until the curve is accepted with
+  Enter, and allow Escape to cancel it.
+- Prevent a shutdown crash when discarding an unsaved document with a dirty
+  undo stack.
 
 ## 0.2.0 - 2026-09-16
 
