@@ -52,6 +52,8 @@ luo tykit omien sääntöjensä mukaan ja käyttää näitä värejä niiden ulk
 
 ## Piirto-ohjeita
 
+- Älä käytä suuria yhtenäisiä räjähtäviä tai palavia alueita, sillä ne voivat
+  estää ampumisen.
 - Käytä kahta palavaa materiaaliryhmää yhdessä, jotta rakennelmista jää
   tarkoituksenmukaisia raunioita.
 - Veden alla olevan maaston kannattaa olla rikkoutumatonta tai tuhoutua

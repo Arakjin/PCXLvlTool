@@ -177,9 +177,3 @@ Help-valikon erillisistä V-Wing-, Wings- ja AUTS-ohjeista.
    julkaisemisen jälkeen. V-Wing ja AUTS käyttävät pelin omaa kansiota;
    Wingsin kentät kuuluvat pelin `LEV`-alikansioon.
 5. Avaa kenttä pelissä ja tarkista materiaalit, törmäykset sekä erikoisosat.
-
-Ohjelma ei kopioi tiedostoa pelihakemistoon taustalla. Pelikohtaisen
-vientikansion voi kuitenkin valita kohdassa **Settings > Preferences**. Tällöin
-**Publish LEV** avaa tiedostodialogin valmiiksi kyseiseen kansioon, ja kentän
-voi tallentaa sinne suoraan. Pelikohtainen ohje kertoo, mitä julkaistusta
-kentästä pitää erityisesti testata.
