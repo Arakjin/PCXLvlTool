@@ -26,6 +26,7 @@
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontComboBox>
@@ -50,6 +51,8 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QTabWidget>
+#include <QTextBrowser>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -132,6 +135,30 @@ std::filesystem::path toPath(const QString& path)
 QString toQString(const std::filesystem::path& path)
 {
     return QString::fromStdU16String(path.u16string());
+}
+
+QString readResourceText(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QStringLiteral("Unable to load %1").arg(path);
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
+QTextBrowser* markdownBrowser(const QString& resourcePath, QWidget* parent)
+{
+    auto* browser = new QTextBrowser(parent);
+    browser->setMarkdown(readResourceText(resourcePath));
+    browser->setOpenExternalLinks(true);
+    return browser;
+}
+
+QTextBrowser* plainTextBrowser(const QString& resourcePath, QWidget* parent)
+{
+    auto* browser = new QTextBrowser(parent);
+    browser->setPlainText(readResourceText(resourcePath));
+    return browser;
 }
 
 QString materialDescription(const GameId game, const int paletteIndex)
@@ -635,6 +662,76 @@ void MainWindow::createActions()
     levelSettingsAction_->setEnabled(false);
     connect(levelSettingsAction_, &QAction::triggered, this,
             &MainWindow::editLevelSettings);
+
+    QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
+    QAction* userGuideAction = helpMenu->addAction(tr("&User guide..."));
+    userGuideAction->setShortcut(QKeySequence::HelpContents);
+    connect(userGuideAction, &QAction::triggered, this, [this] {
+        showMarkdownDocument(tr("PCX Level Tool user guide"),
+                             QStringLiteral(":/help/user-guide-fi.md"));
+    });
+
+    QMenu* gameGuidesMenu = helpMenu->addMenu(tr("&Game guides"));
+    QAction* vwingGuideAction = gameGuidesMenu->addAction(tr("&V-Wing..."));
+    connect(vwingGuideAction, &QAction::triggered, this, [this] {
+        showMarkdownDocument(tr("V-Wing level guide"),
+                             QStringLiteral(":/help/game-guide-vwing-fi.md"));
+    });
+    QAction* wingsGuideAction = gameGuidesMenu->addAction(tr("&Wings..."));
+    connect(wingsGuideAction, &QAction::triggered, this, [this] {
+        showMarkdownDocument(tr("Wings level guide"),
+                             QStringLiteral(":/help/game-guide-wings-fi.md"));
+    });
+    QAction* autsGuideAction = gameGuidesMenu->addAction(tr("&AUTS..."));
+    connect(autsGuideAction, &QAction::triggered, this, [this] {
+        showMarkdownDocument(tr("AUTS level guide"),
+                             QStringLiteral(":/help/game-guide-auts-fi.md"));
+    });
+
+    helpMenu->addSeparator();
+    QAction* licensesAction = helpMenu->addAction(tr("&Licenses..."));
+    connect(licensesAction, &QAction::triggered, this,
+            &MainWindow::showLicenses);
+}
+
+void MainWindow::showMarkdownDocument(const QString& title,
+                                      const QString& resourcePath)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(title);
+    auto* layout = new QVBoxLayout(&dialog);
+    layout->addWidget(markdownBrowser(resourcePath, &dialog), 1);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(850, 700);
+    dialog.exec();
+}
+
+void MainWindow::showLicenses()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("PCX Level Tool licenses"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* tabs = new QTabWidget(&dialog);
+    tabs->addTab(markdownBrowser(QStringLiteral(":/help/licenses-fi.md"), tabs),
+                 tr("Summary"));
+    tabs->addTab(plainTextBrowser(QStringLiteral(":/help/LICENSE"), tabs),
+                 tr("PCX Level Tool"));
+    tabs->addTab(markdownBrowser(
+                     QStringLiteral(":/help/THIRD_PARTY_NOTICES.md"), tabs),
+                 tr("Third-party"));
+    tabs->addTab(markdownBrowser(
+                     QStringLiteral(":/help/QT-LGPL-NOTICE.md"), tabs),
+                 tr("Qt"));
+    tabs->addTab(plainTextBrowser(QStringLiteral(":/help/CONVERT.TXT"), tabs),
+                 tr("V-Wing converter"));
+    layout->addWidget(tabs, 1);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.resize(850, 700);
+    dialog.exec();
 }
 
 void MainWindow::editApplicationSettings()

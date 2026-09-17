@@ -7,6 +7,8 @@ All notable changes to PCX Level Tool are documented in this file.
 - Add user-level, game-specific default directories for publishing V-Wing,
   Wings, and AUTS `.LEV` files.
 - Add a configurable `.pxlp` project directory with a Documents-based default.
+- Add in-application user-guide and license windows, with separate V-Wing,
+  Wings, and AUTS guides under a Game guides submenu.
 
 ## 0.2.0 - 2026-09-16
 

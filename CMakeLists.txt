@@ -123,6 +123,10 @@ install(FILES
     THIRD_PARTY_NOTICES.md
     docs/install-fi.md
     docs/user-guide-fi.md
+    docs/game-guide-vwing-fi.md
+    docs/game-guide-wings-fi.md
+    docs/game-guide-auts-fi.md
+    docs/licenses-fi.md
     docs/pxlp-format.md
     docs/auts-format.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool

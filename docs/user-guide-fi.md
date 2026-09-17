@@ -43,39 +43,16 @@ edelleen valita dialogissa muun sijainnin. Tyhjä asetus käyttää nykyisen
 projektin tai edellisen julkaisun sijaintia kuten ennenkin. Asetukset ovat
 käyttäjä- ja konekohtaisia, eikä niitä tallenneta `.pxlp`-projektiin.
 
-AUTS ei tallenna kentän nimeä LEV-datan sisään. Yläpalkin enintään kahdeksan
-merkin DOS-turvallista nimeä käytetään ehdotuksena julkaistavan tiedoston
-nimeksi. Nimi muutetaan tallennettaessa isoiksi kirjaimiksi.
+## Kuvan tuonti
 
-## AUTS-kentät ja BMP-tuonti
-
-AUTS-kenttä on aina 320 x 400 pikseliä ja käyttää alkuperäisen `BLANK.BMP`-
-mallin kiinteää 256 värin palettia. Dokumentoidut erikoisindeksit ovat:
-
-- 0: avaruus
-- 7: rikkoutumaton materiaali
-- 39: vesi
-- 92–95: telakointilevy
-
-Uusi kenttä saa automaattisesti kahden pikselin paksuisen rikkoutumattoman
-reunan indeksillä 7. Julkaisu palauttaa tämän reunan, vaikka sitä olisi
-muokattu editorissa. Alkuperäisen converterin ohjeen mukaan yhdessä kentässä
-saa olla enintään seitsemän veden pintaa, veden pinnan tulee olla alle 100
-pikseliä pitkä ja aaltojen pitää pysyä yli viiden pikselin päässä katosta tai
-koskettaa kattoa.
-
-**File > Import** kysyy ensin kohdepelin. V-Wing ja Wings hyväksyvät 8-bittisen
+**File > Import** kysyy aina kohdepelin. V-Wing ja Wings hyväksyvät 8-bittisen
 indeksoidun PCX-kuvan. AUTS hyväksyy sellaisen PCX-kuvan tai pakkaamattoman
-320 x 400, 8-bittisen indeksoidun BMP-kuvan. Valinta tehdään aina itse; ohjelma
-ei arvaa peliä kuvan koon perusteella.
+8-bittisen indeksoidun BMP-kuvan. Ohjelma ei arvaa peliä kuvan koon perusteella.
 
-Tuonnissa pikselien indeksit säilytetään ja tiedosto validoidaan valitun pelin
-kokorajoja vasten. AUTS-kuva saa kiinteän AUTS-paletin ja suojareunan. Wings
-palauttaa paletin kiinteät ja varatut kohdat pelin arvoihin sekä kysyy kentän
-muut asetukset ennen tuontia. Jos AUTS-lähteen paletti poikkeaa alkuperäisestä,
-ohjelma ilmoittaa siitä; käytä materiaalien varmaan vastaavuuteen alkuperäistä
-`BLANK.BMP`-palettia. Tallenna tuotu työ `.pxlp`-projektiksi ja tee peliin
-menevä tiedosto valinnalla **Publish LEV**.
+Tuonnissa pikselien indeksit säilytetään ja kuva validoidaan valitun pelin
+kokorajoja vasten. Katso paletti-, koko- ja materiaalirajoitukset Help-valikon
+erillisestä pelikohtaisesta ohjeesta. Tallenna tuotu työ `.pxlp`-projektiksi ja
+tee peliin menevä tiedosto valinnalla **Publish LEV**.
 
 ## Piirtäminen ja värit
 
@@ -156,13 +133,17 @@ eikä poistaa.
 
 Osoittimen koordinaatit ja sen alla oleva tiedostoindeksi näkyvät alapalkissa.
 
-## Kentän vieminen V-Wingiin
+Pelikohtaiset materiaalit, kokorajoitukset ja piirto-ohjeet löytyvät
+Help-valikon erillisistä V-Wing-, Wings- ja AUTS-ohjeista.
+
+## Kentän julkaiseminen peliin
 
 1. Tallenna ensin muokattava `.pxlp`-projekti.
 2. Valitse **File > Publish LEV** ja anna julkaistavalle kentälle `.LEV`-nimi.
 3. Ota alkuperäisestä pelikentästä varmuuskopio.
-4. Kopioi julkaistu tiedosto V-Wingin kenttähakemistoon pelin käyttämällä
+4. Kopioi julkaistu tiedosto pelin kenttähakemistoon pelin käyttämällä
    tiedostonimellä.
 5. Avaa kenttä pelissä ja tarkista materiaalit, törmäykset sekä erikoisosat.
 
-Ohjelma ei asenna tai siirrä tiedostoja V-Wingin hakemistoon automaattisesti.
+Ohjelma ei asenna tai siirrä tiedostoja pelihakemistoon automaattisesti.
+Pelikohtainen ohje kertoo, mitä julkaistusta kentästä pitää erityisesti testata.

@@ -38,6 +38,9 @@ private:
     void createLayerDock();
     void createZoomToolBar();
     void editApplicationSettings();
+    void showMarkdownDocument(const QString& title,
+                              const QString& resourcePath);
+    void showLicenses();
     void newLevel();
     bool createNewLevel(bool checkUnsavedChanges);
     bool promptForWingsSettings(LevelCreationSettings& settings,

@@ -39,6 +39,10 @@ Copy-Item LICENSE, CHANGELOG.md, README.md, QT-LGPL-NOTICE.md, `
   THIRD_PARTY_NOTICES.md package\PCXLvlTool\
 Copy-Item docs\install-fi.md package\PCXLvlTool\
 Copy-Item docs\user-guide-fi.md package\PCXLvlTool\
+Copy-Item docs\game-guide-vwing-fi.md package\PCXLvlTool\
+Copy-Item docs\game-guide-wings-fi.md package\PCXLvlTool\
+Copy-Item docs\game-guide-auts-fi.md package\PCXLvlTool\
+Copy-Item docs\licenses-fi.md package\PCXLvlTool\
 Copy-Item docs\pxlp-format.md package\PCXLvlTool\
 Copy-Item docs\auts-format.md package\PCXLvlTool\
 Copy-Item -Recurse third_party package\PCXLvlTool\third_party

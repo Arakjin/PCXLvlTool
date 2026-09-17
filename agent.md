@@ -34,6 +34,9 @@ Windows ZIP- ja Linux AppImage -paketteina.
   asetuksia eivätkä kuulu `.pxlp`-projektiin.
 - Uusien `.pxlp`-projektien oletushakemisto on Documents-kansion alla
   `PCX Level Tool/Projects`, ellei käyttäjä muuta sitä yleisissä asetuksissa.
+- Yleinen käyttöohje, erilliset pelikohtaiset ohjeet ja lisenssitiedot ovat
+  ohjelmaan upotettuja resursseja, jotta Help-valikko toimii itsenäisesti
+  kaikissa julkaisupaketeissa.
 
 ## Peliprofiilit
 

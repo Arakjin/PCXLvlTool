@@ -17,4 +17,15 @@
     <file>icons/hand-move.svg</file>
     <file>icons/kolourpaint/tool_curve.png</file>
   </qresource>
+  <qresource prefix="/help">
+    <file alias="user-guide-fi.md">../docs/user-guide-fi.md</file>
+    <file alias="game-guide-vwing-fi.md">../docs/game-guide-vwing-fi.md</file>
+    <file alias="game-guide-wings-fi.md">../docs/game-guide-wings-fi.md</file>
+    <file alias="game-guide-auts-fi.md">../docs/game-guide-auts-fi.md</file>
+    <file alias="licenses-fi.md">../docs/licenses-fi.md</file>
+    <file alias="LICENSE">../LICENSE</file>
+    <file alias="THIRD_PARTY_NOTICES.md">../THIRD_PARTY_NOTICES.md</file>
+    <file alias="QT-LGPL-NOTICE.md">../QT-LGPL-NOTICE.md</file>
+    <file alias="CONVERT.TXT">../CONVERT.TXT</file>
+  </qresource>
 </RCC>

@@ -1,6 +1,6 @@
 # Qt runtime notice
 
-Official PCX Level Tool 0.1.x binary packages are built with Qt 6.8.3 and
+Official PCX Level Tool binary packages are built with Qt 6.8.3 and
 dynamically link the Qt runtime libraries included in those packages. Qt and
 its bundled third-party components are not covered by the PCX Level Tool MIT
 License and remain under their respective licenses.
