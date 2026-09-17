@@ -2,10 +2,11 @@
 
 ## Kentän perusrakenne
 
-AUTS-kenttä on aina 320 × 400 pikseliä ja käyttää pelin kiinteää 256 värin
-palettia. AUTS-kentässä ei ole erillistä pelin sisäistä nimeä. Kenttä
-tunnistetaan `.LEV`-tiedostonimestä, jonka tulee olla enintään kahdeksan merkkiä
-pitkä. Turvallisia merkkejä ovat kirjaimet, numerot, alaviiva ja yhdysmerkki.
+AUTS-kenttä on aina 320 × 400 pikseliä. Pelin paletti on kiinteä, eikä sen
+värejä voi muuttaa editorissa. AUTS-kentässä ei ole erillistä pelin sisäistä
+nimeä. Kenttä tunnistetaan `.LEV`-tiedostonimestä, jonka tulee olla enintään
+kahdeksan merkkiä pitkä. Turvallisia merkkejä ovat kirjaimet, numerot, alaviiva
+ja yhdysmerkki.
 
 Uusi kenttä saa kahden pikselin paksuisen rikkoutumattoman reunuksen indeksillä
 7. **Publish LEV** palauttaa tämän reunan automaattisesti, vaikka sitä olisi
@@ -34,10 +35,7 @@ katosta tai koskettaa kattoa.
 
 AUTS-tuonti hyväksyy 320 × 400, 8-bittisen indeksoidun PCX-kuvan tai
 pakkaamattoman indeksoidun BMP-kuvan. Pikseli-indeksit säilytetään, mutta
-editori ottaa käyttöön kiinteän AUTS-paletin ja lisää suojareunan. Jos
-lähdekuvan paletti poikkeaa AUTS-paletista, editori varoittaa siitä. Tuotavan
-kuvan materiaalinumeroiden pitää vastata AUTSin materiaaleja; pelkkä näkyvien
-värien samankaltaisuus ei riitä.
+editori ottaa käyttöön kiinteän AUTS-paletin ja lisää suojareunan.
 
 Testaa julkaistu kenttä AUTSissa ja tarkista erityisesti reunus, vesi,
 telakointilevyt ja aluksen törmäykset.
