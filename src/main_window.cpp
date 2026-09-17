@@ -644,15 +644,14 @@ void MainWindow::editApplicationSettings()
 
     auto* layout = new QVBoxLayout(&dialog);
     auto* description = new QLabel(
-        tr("Choose the default folder used when publishing a LEV file for "
-           "each game. Leave a field empty to use the current project or "
-           "previous publish location."),
+        tr("Choose the default project folder and the folder used when "
+           "publishing a LEV file for each game. You can still choose a "
+           "different location in every save dialog."),
         &dialog);
     description->setWordWrap(true);
     layout->addWidget(description);
 
-    auto* group = new QGroupBox(tr("Game-specific LEV export folders"),
-                                &dialog);
+    auto* group = new QGroupBox(tr("Default folders"), &dialog);
     auto* form = new QFormLayout(group);
     struct DirectoryEditor {
         GameId game;
@@ -660,6 +659,34 @@ void MainWindow::editApplicationSettings()
     };
     std::vector<DirectoryEditor> editors;
     QSettings settings;
+
+    auto* projectRow = new QWidget(group);
+    auto* projectRowLayout = new QHBoxLayout(projectRow);
+    projectRowLayout->setContentsMargins(0, 0, 0, 0);
+    auto* projectEdit = new QLineEdit(projectRow);
+    projectEdit->setText(QDir::toNativeSeparators(
+        effectiveProjectDirectorySetting(settings)));
+    auto* projectBrowse = new QPushButton(tr("Browse..."), projectRow);
+    auto* projectDefault = new QPushButton(tr("Default"), projectRow);
+    projectRowLayout->addWidget(projectEdit, 1);
+    projectRowLayout->addWidget(projectBrowse);
+    projectRowLayout->addWidget(projectDefault);
+    form->addRow(tr("Projects (.pxlp):"), projectRow);
+    connect(projectBrowse, &QPushButton::clicked, &dialog,
+            [&dialog, projectEdit] {
+                const QString directory = QFileDialog::getExistingDirectory(
+                    &dialog, tr("Select PCX Level Tool project folder"),
+                    projectEdit->text());
+                if (!directory.isEmpty()) {
+                    projectEdit->setText(QDir::toNativeSeparators(directory));
+                }
+            });
+    connect(projectDefault, &QPushButton::clicked, &dialog,
+            [projectEdit] {
+                projectEdit->setText(QDir::toNativeSeparators(
+                    defaultProjectDirectory()));
+            });
+
     for (const GameProfile& profile : availableGameProfiles()) {
         auto* row = new QWidget(group);
         auto* rowLayout = new QHBoxLayout(row);
@@ -702,6 +729,7 @@ void MainWindow::editApplicationSettings()
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
+    setProjectDirectorySetting(settings, projectEdit->text());
     for (const DirectoryEditor& editor : editors) {
         setExportDirectorySetting(settings, editor.game, editor.edit->text());
     }
@@ -1970,9 +1998,28 @@ bool MainWindow::saveProject()
 
 bool MainWindow::saveProjectAs()
 {
+    QString suggested = toQString(projectPath_);
+    if (suggested.isEmpty()) {
+        QSettings settings;
+        const QString directory =
+            effectiveProjectDirectorySetting(settings);
+        if (QDir(directory).exists() || QDir().mkpath(directory)) {
+            QString projectName = QString::fromLatin1(
+                creationSettings_.name.data(),
+                static_cast<qsizetype>(creationSettings_.name.size()));
+            projectName.replace(
+                QRegularExpression(QStringLiteral(R"([\\/:*?"<>|])")),
+                QStringLiteral("_"));
+            if (projectName.isEmpty()) {
+                projectName = tr("Untitled");
+            }
+            suggested = QDir(directory).filePath(
+                projectName + QStringLiteral(".pxlp"));
+        }
+    }
     QString filename = QFileDialog::getSaveFileName(
         this, tr("Save editable PCX Level Tool project"),
-        toQString(projectPath_), tr("PCX Level Tool projects (*.pxlp)"));
+        suggested, tr("PCX Level Tool projects (*.pxlp)"));
     if (filename.isEmpty()) {
         return false;
     }

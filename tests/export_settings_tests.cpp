@@ -28,6 +28,25 @@ int main()
     QSettings settings(temporaryDirectory.filePath(QStringLiteral("test.ini")),
                        QSettings::IniFormat);
     bool ok = true;
+    ok &= expect(!defaultProjectDirectory().isEmpty() &&
+                     defaultProjectDirectory().endsWith(
+                         QStringLiteral("PCX Level Tool/Projects")),
+                 "default project directory");
+    ok &= expect(projectDirectorySetting(settings).isEmpty() &&
+                     effectiveProjectDirectorySetting(settings) ==
+                         defaultProjectDirectory(),
+                 "unset project directory uses the default");
+    setProjectDirectorySetting(settings,
+                               QStringLiteral("projects/custom/../custom"));
+    ok &= expect(projectDirectorySetting(settings) ==
+                     QStringLiteral("projects/custom") &&
+                     effectiveProjectDirectorySetting(settings) ==
+                         QStringLiteral("projects/custom"),
+                 "custom project directory is normalized and used");
+    setProjectDirectorySetting(settings, defaultProjectDirectory());
+    ok &= expect(projectDirectorySetting(settings).isEmpty(),
+                 "selecting the default removes the override");
+
     ok &= expect(exportDirectorySetting(settings, GameId::VWing).isEmpty(),
                  "unset V-Wing directory");
 

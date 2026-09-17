@@ -32,6 +32,8 @@ Windows ZIP- ja Linux AppImage -paketteina.
   kuvaksi. Muokattavat tasot säilyvät `.pxlp`-projektissa.
 - Pelikohtaiset LEV-vientihakemistot ovat käyttäjän yleisiä `QSettings`-
   asetuksia eivätkä kuulu `.pxlp`-projektiin.
+- Uusien `.pxlp`-projektien oletushakemisto on Documents-kansion alla
+  `PCX Level Tool/Projects`, ellei käyttäjä muuta sitä yleisissä asetuksissa.
 
 ## Peliprofiilit
 

@@ -24,11 +24,18 @@ muokattavana `.pxlp`-projektina.
 - **Publish LEV** kirjoittaa pelissä käytettävän `.LEV`-tiedoston. Näkyvät
   tasot yhdistetään yhdeksi kuvaksi, joten jatka muokkausta `.pxlp`-projektista.
 
-## Pelikohtaiset vientihakemistot
+## Projektien ja LEV-tiedostojen oletushakemistot
 
-Valinnassa **Settings > Preferences** voi asettaa V-Wingille, Wingsille ja
-AUTSille omat LEV-vientihakemistot. Polun voi kirjoittaa käsin tai valita
-**Browse**-painikkeella. **Clear** poistaa kyseisen pelin asetuksen.
+Valinnassa **Settings > Preferences** voi asettaa `.pxlp`-projekteille yhteisen
+oletushakemiston sekä V-Wingille, Wingsille ja AUTSille omat LEV-
+vientihakemistot. Polun voi kirjoittaa käsin tai valita **Browse**-painikkeella.
+**Default** palauttaa projektihakemiston oletusarvon ja **Clear** poistaa
+kyseisen pelin LEV-asetuksen.
+
+Projektien oletushakemisto on käyttöjärjestelmän Documents-kansion alla
+`PCX Level Tool/Projects`. Ohjelma luo sen ensimmäisen projektitallennuksen
+yhteydessä. **Save project as** ehdottaa uusille projekteille tätä hakemistoa,
+mutta tiedostodialogissa voi aina valita muun sijainnin.
 
 Kun pelille on asetettu vientihakemisto, **Publish LEV** avaa tiedostodialogin
 siihen hakemistoon ja säilyttää kentän ehdotetun tiedostonimen. Käyttäjä voi
