@@ -17,6 +17,9 @@ All notable changes to PCX Level Tool are documented in this file.
   over pixels that already contain the requested result.
 - Show the internal Level name field only for V-Wing; Wings and AUTS derive
   their level names from the published filenames.
+- Clarify in the user documentation that each game's `.LEV` format is
+  incompatible with the others, and move shared editor behavior out of the
+  game-specific guides.
 
 ## 0.2.0 - 2026-09-16
 

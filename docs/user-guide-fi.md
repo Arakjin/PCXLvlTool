@@ -7,23 +7,29 @@ muokattavana `.pxlp`-projektina.
 > Säilytä alkuperäisestä `.LEV`-tiedostosta varmuuskopio. Testaa julkaistu
 > kenttä pelissä ennen sen jakamista muille.
 
+Vaikka kaikki kolme peliä käyttävät kentilleen `.LEV`-tiedostopäätettä, niiden
+tiedostomuodot eivät ole keskenään yhteensopivia. V-Wingille julkaistua kenttää
+ei voi käyttää Wingsissä tai AUTSissa eikä päinvastoin. Valitse uutta kenttää
+luodessa ja kuvaa tuodessa aina oikea kohdepeli.
+
 ## Uuden työn aloittaminen
 
 - **File > New level** (`Ctrl+N`) kysyy pelin ja luo sille oikeankokoisen tyhjän
   kentän sekä oletuspaletin.
 - **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän tai `.pxlp`-projektin.
 - V-Wingissä yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen.
-  Sen enimmäispituus on 20 tulostettavaa ASCII-merkkiä. Ääkkösiä ei hyväksytä
-  ja nimi muutetaan tallennettaessa isoiksi kirjaimiksi. Wings ja AUTS eivät
-  tallenna erillistä sisäistä kenttänimeä, joten niissä nimeksi tulee julkaistun
-  tiedoston nimi eikä **Level name** -kenttää näytetä.
+  Sen enimmäispituus on 20 perusmerkkiä. Ääkkösiä ei hyväksytä ja nimi muutetaan
+  tallennettaessa isoiksi kirjaimiksi. Wings ja AUTS eivät tallenna erillistä
+  sisäistä kenttänimeä, joten niissä nimeksi tulee julkaistun tiedoston nimi
+  eikä **Level name** -kenttää näytetä.
 
 `.LEV` ja `.pxlp` palvelevat eri tarkoituksia:
 
 - **Save project** (`Ctrl+S`) tallentaa työversion `.pxlp`-muodossa. Tasot,
   tasojen järjestys, läpinäkyvyys ja muut editoritiedot säilyvät.
 - **Publish LEV** kirjoittaa pelissä käytettävän `.LEV`-tiedoston. Näkyvät
-  tasot yhdistetään yhdeksi kuvaksi, joten jatka muokkausta `.pxlp`-projektista.
+  tasot yhdistetään yhdeksi kuvaksi ja tiedosto tehdään valitun pelin omassa
+  muodossa. Jatka myöhempää muokkausta `.pxlp`-projektista.
 
 ## Projektien ja LEV-tiedostojen oletushakemistot
 
@@ -41,7 +47,7 @@ mutta tiedostodialogissa voi aina valita muun sijainnin.
 Kun pelille on asetettu vientihakemisto, **Publish LEV** avaa tiedostodialogin
 siihen hakemistoon ja säilyttää kentän ehdotetun tiedostonimen. Käyttäjä voi
 edelleen valita dialogissa muun sijainnin. Tyhjä asetus käyttää nykyisen
-projektin tai edellisen julkaisun sijaintia kuten ennenkin. Asetukset ovat
+projektin kansiota tai viimeksi käytettyä julkaisukansiota. Asetukset ovat
 käyttäjä- ja konekohtaisia, eikä niitä tallenneta `.pxlp`-projektiin.
 
 ## Kuvan tuonti
@@ -50,13 +56,20 @@ käyttäjä- ja konekohtaisia, eikä niitä tallenneta `.pxlp`-projektiin.
 indeksoidun PCX-kuvan. AUTS hyväksyy sellaisen PCX-kuvan tai pakkaamattoman
 8-bittisen indeksoidun BMP-kuvan. Ohjelma ei arvaa peliä kuvan koon perusteella.
 
-Tuonnissa pikselien indeksit säilytetään ja kuva validoidaan valitun pelin
-kokorajoja vasten. Katso paletti-, koko- ja materiaalirajoitukset Help-valikon
-erillisestä pelikohtaisesta ohjeesta. Tallenna tuotu työ `.pxlp`-projektiksi ja
-tee peliin menevä tiedosto valinnalla **Publish LEV**.
+Tuonnissa materiaalinumerot säilyvät, ja editori tarkistaa kuvan koon valitun
+pelin rajoitusten mukaan. Katso paletti-, koko- ja materiaalirajoitukset
+Help-valikon erillisestä pelikohtaisesta ohjeesta. Tallenna tuotu työ
+`.pxlp`-projektiksi ja tee peliin menevä tiedosto valinnalla **Publish LEV**.
 
 ## Piirtäminen ja värit
 
+Jokaisella paletin materiaalilla on oma numero eli indeksi. Peli päättelee
+numeron perusteella, onko kuvassa esimerkiksi taustaa, vettä tai tuhoutuvaa
+maastoa. Siksi kaksi samalta näyttävää väriä eivät välttämättä toimi pelissä
+samalla tavalla. Pelikohtaiset ohjeet kertovat materiaalien oikeat numerot ja
+käyttötarkoitukset.
+
+Palettipaneeli näyttää valitun materiaalin numeron ja kuvauksen.
 Palettipaneelissa vasen napsautus valitsee ensisijaisen materiaalin ja oikea
 napsautus toissijaisen materiaalin. Piirtoalueella vasen ja oikea hiiren painike
 käyttävät vastaavia materiaaleja. Muotojen ääriviiva käyttää ensisijaista ja
@@ -64,15 +77,16 @@ täyttö toissijaista materiaalia.
 
 Paletin yläpuolisella valikolla voi rajata näkyviin esimerkiksi veden,
 normaalin maaston tai rikkoutumattoman maaston indeksit. Varatut indeksit on
-jätetty valintojen ulkopuolelle. **Edit selected color** muuttaa yksittäisen
-indeksin RGB-väriä. Paletin voi tallentaa ja avata erillisenä JASC-PAL-
-tiedostona.
+jätetty valintojen ulkopuolelle. **Edit selected color** muuttaa valitun
+materiaalin näkyvää väriä. Paletin voi tallentaa ja avata erillisenä
+JASC-PAL-tiedostona.
 
 Työkalut:
 
 - **Pencil** piirtää pikselintarkasti. Kärki voi olla neliö tai ympyrä.
-- **Eraser** pyyhkii ylemmällä tasolla läpinäkyväksi. Background-tasolla se
-  kirjoittaa indeksin 0.
+- **Eraser** tekee pyyhityn kohdan ylemmillä tasoilla läpinäkyväksi, jolloin
+  alemmat tasot näkyvät sen läpi. Alimmalla Background-tasolla kumi palauttaa
+  kohdan pelin taustaksi.
 - **Spray** lisää hajanaisia pikseleitä valitulla säteellä.
 - **Line** piirtää suoran viivan. `Shift` rajoittaa suunnan vaaka-, pysty- tai
   45 asteen linjaan.
@@ -101,11 +115,11 @@ ja tekstin fontti valitaan työkalujen alla olevasta asetuspalkista.
 - Tasot säilyvät projektissa erillisinä. LEV-julkaisu yhdistää vain näkyvät
   tasot.
 
-**Edit selected color** muuttaa koko paletti-indeksin RGB-värin, ei vain
-valittuja pikseleitä. Jos peli käyttää samaa indeksiä kentässä, spriteissä tai
-efekteissä, värimuutos näkyy kaikissa näissä käyttökohteissa. Indeksillä
-piirtäminen ei itsessään sijoita kenttään esinettä, ellei pelikohtainen ohje
-nimenomaan kuvaa indeksiä sijoitus- tai luontimerkiksi.
+**Edit selected color** muuttaa valitun materiaalin näkyvää väriä kaikkialla,
+missä peli käyttää samaa materiaalia. Muutos voi siksi näkyä kentän lisäksi
+myös pelihahmoissa tai efekteissä. Materiaalilla piirtäminen ei itsessään lisää
+kenttään esinettä, ellei pelikohtaisessa ohjeessa erikseen sanota materiaalin
+toimivan sijoitus- tai luontimerkkinä.
 
 ## Valinnat
 
@@ -148,7 +162,7 @@ eikä poistaa.
 - `Ctrl+Shift+S`: tallenna projekti nimellä
 - `Ctrl+A`, `Ctrl+C`, `Ctrl+V`, `Delete`: valintatoiminnot
 
-Osoittimen koordinaatit ja sen alla oleva tiedostoindeksi näkyvät alapalkissa.
+Osoittimen sijainti ja sen alla olevan materiaalin numero näkyvät alapalkissa.
 
 Pelikohtaiset materiaalit, kokorajoitukset ja piirto-ohjeet löytyvät
 Help-valikon erillisistä V-Wing-, Wings- ja AUTS-ohjeista.

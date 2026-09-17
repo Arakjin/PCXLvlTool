@@ -2,21 +2,19 @@
 
 ## Kentän perusrakenne
 
-V-Wing-kenttä on aina 640 × 800 pikselin indeksoitu kuva. Uuden kentän
-Background-taso täytetään tiedostoindeksillä 0, joka on pelissä aina musta.
-Kentän nimi näkyy pelin kenttävalikossa. Nimi voi sisältää enintään 20
-tulostettavaa ASCII-merkkiä, eikä ääkkösiä hyväksytä. Editorissa nimi muutetaan
-julkaistaessa isoiksi kirjaimiksi.
+V-Wing-kenttä on aina 640 × 800 pikselin kuva. Uuden kentän alin
+Background-taso on musta.
 
-Tallenna muokattava työ `.pxlp`-projektiksi. **Publish LEV** yhdistää näkyvät
-tasot ja kirjoittaa V-Wingin ymmärtämän `.LEV`-tiedoston.
+Kentän nimi näkyy pelin kenttävalikossa. Nimi voi sisältää enintään 20
+perusmerkkiä, eikä ääkkösiä hyväksytä. Editorissa nimi muutetaan julkaistaessa
+isoiksi kirjaimiksi.
 
 ## Materiaalien valitseminen
 
 Paletin ryhmävalikko kokoaa indeksit niiden pelillisen toiminnan mukaan.
 Käytä esimerkiksi ryhmiä **Water**, **Fly through**, **Normal terrain**,
 **Burnable**, **Underwater** ja **Indestructible** sen sijaan, että valitsisit
-materiaalin pelkän RGB-värin perusteella.
+materiaalin pelkän näkyvän värin perusteella.
 
 Tärkeimpiä materiaaliryhmiä ovat:
 
@@ -28,18 +26,14 @@ Tärkeimpiä materiaaliryhmiä ovat:
 - 176–199: tuhkaksi palava maasto
 - 201–219: vedenalaiset materiaalit ja vedeksi tuhoutuva maasto
 - 221–243 ja 248–255: rikkoutumaton maasto
-- 244–247: tykkien spritejen värit
-
-Palettipaneeli näyttää valitun materiaalin tiedostoindeksin ja kuvauksen.
-Vasen hiiren painike käyttää ensisijaista ja oikea toissijaista materiaalia.
-Kumi palauttaa alimman Background-tason indeksiksi 0.
+- 244–247: pelin luomien tykkien värit
 
 ## Kentän ja pelihahmojen yhteiset palettivärit
 
-V-Wing käyttää osaa kentän paletista myös spriteihin ja efekteihin. Indeksin
-RGB-värin muuttaminen vaikuttaa siis kaikkiin pelin saman paletti-indeksin
-käyttökohteisiin, ei vain kenttään piirrettyihin pikseleihin. Näihin kuuluvat
-ainakin:
+V-Wing käyttää osaa kentän paletista myös pelihahmoihin ja efekteihin.
+Materiaalin värin muuttaminen vaikuttaa siis kaikkiin pelin saman
+materiaalinumeron käyttökohteisiin, ei vain kenttään piirrettyihin kohtiin.
+Näihin kuuluvat ainakin:
 
 - 39 ja 203: jää
 - 46: lentävien lintujen väri
@@ -54,9 +48,9 @@ luo tykit omien sääntöjensä mukaan, ja nämä neljä palettipaikkaa määrä
 niiden ulkoasun. Sama periaate koskee muiden yhteisten palettipaikkojen
 värinmuutosta: esimerkiksi indeksin 46 muuttaminen punaiseksi tekee lentävistä
 linnuista punaisia ja indeksin 48 muuttaminen vihreäksi tekee myös pilotin
-verestä vihreää.
+verestä vihreää, samoin indeksit 52 lumi ja 56 kuplat.
 
-## Alkuperäisen converterin piirto-ohjeet
+## Piirto-ohjeita
 
 - Älä käytä suuria yhtenäisiä räjähtäviä tai palavia alueita.
 - Käytä kahta palavaa materiaaliryhmää yhdessä, jotta rakennelmista jää
@@ -65,8 +59,8 @@ verestä vihreää.
   vedeksi. Muuten kenttään voi syntyä epäluonnollisia tyhjiä kohtia.
 - Tykkejä ei synny palavaan maastoon, tukikohtiin eikä vedenalaisiin
   materiaaleihin.
-- Alkuperäinen ohje suosittelee tekemään rakennelmista hieman tavallista
-  korkeampia, jos kenttää pelataan 320 × 400 -näyttötilassa.
+- Tee rakennelmista hieman tavallista korkeampia, jos kenttää pelataan
+  320 × 400 -näyttötilassa.
 
 Testaa julkaistu kenttä aina V-Wingissä ja tarkista erityisesti törmäykset,
-vesi, palaminen, räjähdykset ja tykkien toiminta.
+vesi, palaminen ja räjähdykset.

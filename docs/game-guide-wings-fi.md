@@ -4,12 +4,11 @@
 
 Wings-kentän koko voi olla 157 × 90 – 1000 × 1000 pikseliä. Oletuskoko on
 400 × 400. Koko sekä tähdet, sade, lumi, pommitus, siviilit ja aseistettujen
-siviilien todennäköisyys asetetaan uuden kentän dialogissa. Niitä voi muuttaa
+siviilien todennäköisyys asetetaan uuden kentän ikkunassa. Niitä voi muuttaa
 myöhemmin valinnalla **Level > Wings level settings**.
 
-Kentän nimi toimii julkaistavan tiedostonimen ehdotuksena. Muokattava työ
-tallennetaan `.pxlp`-projektiksi ja peliin menevä tiedosto tehdään valinnalla
-**Publish LEV**.
+Wings-kentässä ei ole erillistä pelin sisäistä nimeä. Kenttä tunnistetaan
+nimellä, jonka annat `.LEV`-tiedostolle julkaisemisen yhteydessä.
 
 ## Materiaalit
 
@@ -32,34 +31,23 @@ Tärkeimpiä dokumentoituja indeksejä ovat:
 - 112–127: palava maasto
 - 128–255: tavallinen maasto
 
-Valitse materiaali toiminnan eikä pelkän näkyvän värin perusteella. Vasen
-hiiren painike käyttää ensisijaista ja oikea toissijaista materiaalia.
+Valitse materiaali toiminnan eikä pelkän näkyvän värin perusteella.
 
-Wingsin alkuperäinen `COLORS.TXT` vahvistaa, että paletin indeksit 0–47 ovat
-kiinteitä eikä niiden RGB-värejä saa muuttaa. Siksi editori estää myös indeksin
-16 värin muokkaamisen: indeksi 16 on kenttään piirrettävä **luo vettä** -merkki,
-ei vesipyssyn tai veden vapaasti muokattava väri.
+Paletin indeksien 0–47 värit ovat kiinteitä. Siksi värinmuokkauspainike ei ole
+käytettävissä näille materiaaleille. Materiaali 16 on kenttään piirrettävä
+**luo vettä** -merkki.
 
-Indeksien 48–255 RGB-värejä saa muuttaa. Alkuperäinen suomenkielinen ohje
-nimeää indeksin 52 suoraan kuplien väriksi, joten sen muokkaaminen vaikuttaa
-pelin piirtämiin kupliin. Indeksi 53 on lumi ja on muokattavalla alueella,
-mutta sääefektin lumihiutaleiden saman palettipaikan käyttö pitää vielä
-vahvistaa pelitestillä. Indeksit 48–51 ovat veden ja sen virtausten värejä.
+Indeksien 48–255 värejä saa muuttaa. Indeksi 52 määrää pelin piirtämien kuplien
+värin ja indeksi 53 satavan lumen värin. Indeksit 48–51 ovat veden ja sen
+virtausten värejä.
 
 ## Parallax-tausta
 
 Kun **Parallax background** on valittu, editori luo automaattisesti erillisen
-Background-välilehden. Sen koko lasketaan alkuperäisen MAKELEV-ohjeen mukaan:
-
-```text
-leveys  = kentän leveys / 2 + 78
-korkeus = kentän korkeus / 2 + 45
-```
-
-Jakolasku käyttää kokonaislukujakoa. Varsinainen kenttä ja parallax-tausta
-käyttävät samaa palettia, tallentuvat samaan `.pxlp`-projektiin ja julkaistaan
-samaan Wings-LEV-tiedostoon. Varatut indeksit pysyvät poissa palettivalikosta
-myös Background-välilehdellä.
+Background-välilehden ja laskee sille Wingsin vaatiman koon.
+Varsinainen kenttä ja parallax-tausta käyttävät samaa palettia, tallentuvat
+samaan `.pxlp`-projektiin ja julkaistaan samaan Wings-LEV-tiedostoon. Varatut
+indeksit pysyvät poissa palettivalikosta myös Background-välilehdellä.
 
 Testaa sekä tavallinen että parallaxia käyttävä julkaisu Wingsissä. Tarkista
 kentän rajat, tukikohdat, vesi, materiaalien tuhoutuminen sekä sää- ja
