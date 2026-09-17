@@ -30,10 +30,11 @@ Tärkeimpiä materiaaliryhmiä ovat:
 
 ## Kentän ja pelihahmojen yhteiset palettivärit
 
-V-Wing käyttää osaa kentän paletista myös pelihahmoihin ja efekteihin.
-Materiaalin värin muuttaminen vaikuttaa siis kaikkiin pelin saman
-materiaalinumeron käyttökohteisiin, ei vain kenttään piirrettyihin kohtiin.
-Näihin kuuluvat ainakin:
+V-Wing käyttää joitakin samoja palettivärejä sekä kentässä että pelin
+hahmoissa ja efekteissä. Kun muutat tällaisen materiaalin väriä toiminnolla
+**Edit selected color**, muutos näkyy kaikissa sitä käyttävissä kohteissa.
+Luettelo kertoo värien yhteiskäytöstä, ei siitä, että materiaalilla piirtäminen
+lisäisi kyseisen hahmon tai efektin kenttään:
 
 - 39 ja 203: jää
 - 46: lentävien lintujen väri
@@ -43,16 +44,14 @@ Näihin kuuluvat ainakin:
 - 56: kuplat
 - 244–247: satunnaisesti syntyvien tykkien osien värit
 
-Indekseillä 244–247 piirtäminen ei sijoita kenttään valmiita tykkejä. Peli
-luo tykit omien sääntöjensä mukaan, ja nämä neljä palettipaikkaa määräävät
-niiden ulkoasun. Sama periaate koskee muiden yhteisten palettipaikkojen
-värinmuutosta: esimerkiksi indeksin 46 muuttaminen punaiseksi tekee lentävistä
-linnuista punaisia ja indeksin 48 muuttaminen vihreäksi tekee myös pilotin
-verestä vihreää, samoin indeksit 52 lumi ja 56 kuplat.
+Esimerkiksi indeksin 46 muuttaminen punaiseksi tekee pelin lentävistä linnuista
+punaisia. Indeksin 48 muuttaminen vihreäksi muuttaa myös pilotin veren
+vihreäksi. Samalla tavalla indeksit 52 ja 56 vaikuttavat pelin lumeen ja
+kupliin. Indekseillä 244–247 piirtäminen ei sijoita kenttään tykkejä, vaan peli
+luo tykit omien sääntöjensä mukaan ja käyttää näitä värejä niiden ulkoasuun.
 
 ## Piirto-ohjeita
 
-- Älä käytä suuria yhtenäisiä räjähtäviä tai palavia alueita.
 - Käytä kahta palavaa materiaaliryhmää yhdessä, jotta rakennelmista jää
   tarkoituksenmukaisia raunioita.
 - Veden alla olevan maaston kannattaa olla rikkoutumatonta tai tuhoutua

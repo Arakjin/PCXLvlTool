@@ -3,9 +3,11 @@
 ## Kentän koko ja asetukset
 
 Wings-kentän koko voi olla 157 × 90 – 1000 × 1000 pikseliä. Oletuskoko on
-400 × 400. Koko sekä tähdet, sade, lumi, pommitus, siviilit ja aseistettujen
-siviilien todennäköisyys asetetaan uuden kentän ikkunassa. Niitä voi muuttaa
-myöhemmin valinnalla **Level > Wings level settings**.
+400 × 400. Suuret kentät latautuvat pelissä pienempiä hitaammin, ja 1000 × 1000
+pikselin kentän avaaminen voi kestää hetken. Koko sekä tähdet, sade, lumi,
+pommitus, siviilit ja aseistettujen siviilien todennäköisyys asetetaan uuden
+kentän ikkunassa. Niitä voi muuttaa myöhemmin valinnalla
+**Level > Wings level settings**.
 
 Wings-kentässä ei ole erillistä pelin sisäistä nimeä. Kenttä tunnistetaan
 nimellä, jonka annat `.LEV`-tiedostolle julkaisemisen yhteydessä.

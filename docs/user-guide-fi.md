@@ -169,12 +169,17 @@ Help-valikon erillisistä V-Wing-, Wings- ja AUTS-ohjeista.
 
 ## Kentän julkaiseminen peliin
 
-1. Tallenna ensin muokattava `.pxlp`-projekti.
+1. Jos haluat säilyttää tasot ja jatkaa kentän muokkaamista myöhemmin, tallenna
+   työ ensin `.pxlp`-projektiksi. Tämä vaihe on valinnainen.
 2. Valitse **File > Publish LEV** ja anna julkaistavalle kentälle `.LEV`-nimi.
-3. Ota alkuperäisestä pelikentästä varmuuskopio.
-4. Kopioi julkaistu tiedosto pelin kenttähakemistoon pelin käyttämällä
-   tiedostonimellä.
+3. Jos korvaat olemassa olevan kentän, ota siitä halutessasi varmuuskopio.
+4. Tallenna `.LEV` suoraan pelin kenttäkansioon tai kopioi se sinne
+   julkaisemisen jälkeen. V-Wing ja AUTS käyttävät pelin omaa kansiota;
+   Wingsin kentät kuuluvat pelin `LEV`-alikansioon.
 5. Avaa kenttä pelissä ja tarkista materiaalit, törmäykset sekä erikoisosat.
 
-Ohjelma ei asenna tai siirrä tiedostoja pelihakemistoon automaattisesti.
-Pelikohtainen ohje kertoo, mitä julkaistusta kentästä pitää erityisesti testata.
+Ohjelma ei kopioi tiedostoa pelihakemistoon taustalla. Pelikohtaisen
+vientikansion voi kuitenkin valita kohdassa **Settings > Preferences**. Tällöin
+**Publish LEV** avaa tiedostodialogin valmiiksi kyseiseen kansioon, ja kentän
+voi tallentaa sinne suoraan. Pelikohtainen ohje kertoo, mitä julkaistusta
+kentästä pitää erityisesti testata.
