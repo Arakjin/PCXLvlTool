@@ -45,6 +45,8 @@ add_executable(levroundtrip
 target_link_libraries(levroundtrip PRIVATE vwing_level_format)
 
 add_executable(PCXLvlTool WIN32
+    src/export_settings.cpp
+    src/export_settings.h
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
@@ -174,6 +176,18 @@ if(BUILD_TESTING)
     target_compile_features(game_profile_tests PRIVATE cxx_std_17)
     set_target_properties(game_profile_tests PROPERTIES CXX_EXTENSIONS OFF)
     add_test(NAME game_profile_tests COMMAND game_profile_tests)
+
+    add_executable(export_settings_tests
+        tests/export_settings_tests.cpp
+        src/export_settings.cpp
+    )
+    target_link_libraries(export_settings_tests PRIVATE
+        vwing_level_format
+        Qt6::Core
+    )
+    target_compile_features(export_settings_tests PRIVATE cxx_std_17)
+    set_target_properties(export_settings_tests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME export_settings_tests COMMAND export_settings_tests)
 
     add_executable(lev_tests
         tests/lev_tests.cpp

@@ -37,6 +37,7 @@ private:
     void createMaterialDock();
     void createLayerDock();
     void createZoomToolBar();
+    void editApplicationSettings();
     void newLevel();
     bool createNewLevel(bool checkUnsavedChanges);
     bool promptForWingsSettings(LevelCreationSettings& settings,

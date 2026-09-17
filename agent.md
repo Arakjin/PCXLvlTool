@@ -30,6 +30,8 @@ Windows ZIP- ja Linux AppImage -paketteina.
   numeroida käyttöliittymässä eri tavalla kuin tiedostossa.
 - Pelille julkaistaessa vain näkyvät tasot tasoitetaan yhdeksi indeksoiduksi
   kuvaksi. Muokattavat tasot säilyvät `.pxlp`-projektissa.
+- Pelikohtaiset LEV-vientihakemistot ovat käyttäjän yleisiä `QSettings`-
+  asetuksia eivätkä kuulu `.pxlp`-projektiin.
 
 ## Peliprofiilit
 

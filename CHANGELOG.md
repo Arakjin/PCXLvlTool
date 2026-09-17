@@ -2,6 +2,11 @@
 
 All notable changes to PCX Level Tool are documented in this file.
 
+## Unreleased
+
+- Add user-level, game-specific default directories for publishing V-Wing,
+  Wings, and AUTS `.LEV` files.
+
 ## 0.2.0 - 2026-09-16
 
 First multi-game release.

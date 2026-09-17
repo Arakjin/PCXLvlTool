@@ -24,6 +24,18 @@ muokattavana `.pxlp`-projektina.
 - **Publish LEV** kirjoittaa pelissä käytettävän `.LEV`-tiedoston. Näkyvät
   tasot yhdistetään yhdeksi kuvaksi, joten jatka muokkausta `.pxlp`-projektista.
 
+## Pelikohtaiset vientihakemistot
+
+Valinnassa **Settings > Preferences** voi asettaa V-Wingille, Wingsille ja
+AUTSille omat LEV-vientihakemistot. Polun voi kirjoittaa käsin tai valita
+**Browse**-painikkeella. **Clear** poistaa kyseisen pelin asetuksen.
+
+Kun pelille on asetettu vientihakemisto, **Publish LEV** avaa tiedostodialogin
+siihen hakemistoon ja säilyttää kentän ehdotetun tiedostonimen. Käyttäjä voi
+edelleen valita dialogissa muun sijainnin. Tyhjä asetus käyttää nykyisen
+projektin tai edellisen julkaisun sijaintia kuten ennenkin. Asetukset ovat
+käyttäjä- ja konekohtaisia, eikä niitä tallenneta `.pxlp`-projektiin.
+
 AUTS ei tallenna kentän nimeä LEV-datan sisään. Yläpalkin enintään kahdeksan
 merkin DOS-turvallista nimeä käytetään ehdotuksena julkaistavan tiedoston
 nimeksi. Nimi muutetaan tallennettaessa isoiksi kirjaimiksi.

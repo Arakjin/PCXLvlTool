@@ -2,6 +2,7 @@
 
 #include "auts_io.h"
 #include "default_palette.h"
+#include "export_settings.h"
 #include "game_profile.h"
 #include "lev_reader.h"
 #include "lev_writer.h"
@@ -24,6 +25,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontComboBox>
@@ -43,6 +45,7 @@
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -620,12 +623,89 @@ void MainWindow::createActions()
     connect(deleteAction, &QAction::triggered, canvas_,
             &LevelCanvas::deleteSelection);
 
+    QMenu* settingsMenu = menuBar()->addMenu(tr("&Settings"));
+    QAction* applicationSettingsAction =
+        settingsMenu->addAction(tr("&Preferences..."));
+    connect(applicationSettingsAction, &QAction::triggered, this,
+            &MainWindow::editApplicationSettings);
+
     QMenu* levelMenu = menuBar()->addMenu(tr("&Level"));
     levelSettingsAction_ =
         levelMenu->addAction(tr("Wings level &settings..."));
     levelSettingsAction_->setEnabled(false);
     connect(levelSettingsAction_, &QAction::triggered, this,
             &MainWindow::editLevelSettings);
+}
+
+void MainWindow::editApplicationSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("PCX Level Tool preferences"));
+
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* description = new QLabel(
+        tr("Choose the default folder used when publishing a LEV file for "
+           "each game. Leave a field empty to use the current project or "
+           "previous publish location."),
+        &dialog);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    auto* group = new QGroupBox(tr("Game-specific LEV export folders"),
+                                &dialog);
+    auto* form = new QFormLayout(group);
+    struct DirectoryEditor {
+        GameId game;
+        QLineEdit* edit;
+    };
+    std::vector<DirectoryEditor> editors;
+    QSettings settings;
+    for (const GameProfile& profile : availableGameProfiles()) {
+        auto* row = new QWidget(group);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        auto* edit = new QLineEdit(row);
+        edit->setText(QDir::toNativeSeparators(
+            exportDirectorySetting(settings, profile.id)));
+        edit->setPlaceholderText(tr("Not set"));
+        auto* browse = new QPushButton(tr("Browse..."), row);
+        auto* clear = new QPushButton(tr("Clear"), row);
+        rowLayout->addWidget(edit, 1);
+        rowLayout->addWidget(browse);
+        rowLayout->addWidget(clear);
+
+        const QString gameName =
+            QString::fromUtf8(profile.displayName.data(),
+                              static_cast<qsizetype>(profile.displayName.size()));
+        form->addRow(tr("%1:").arg(gameName), row);
+        connect(browse, &QPushButton::clicked, &dialog,
+                [&dialog, edit, gameName] {
+                    const QString directory = QFileDialog::getExistingDirectory(
+                        &dialog,
+                        tr("Select %1 LEV export folder").arg(gameName),
+                        edit->text());
+                    if (!directory.isEmpty()) {
+                        edit->setText(QDir::toNativeSeparators(directory));
+                    }
+                });
+        connect(clear, &QPushButton::clicked, edit, &QLineEdit::clear);
+        editors.push_back({profile.id, edit});
+    }
+    layout->addWidget(group);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    for (const DirectoryEditor& editor : editors) {
+        setExportDirectorySetting(settings, editor.game, editor.edit->text());
+    }
+    statusBar()->showMessage(tr("Preferences saved"), 3000);
 }
 
 void MainWindow::createToolBars()
@@ -1957,6 +2037,19 @@ bool MainWindow::publishLevel()
     if (suggested.empty() && !projectPath_.empty()) {
         suggested = projectPath_;
         suggested.replace_extension(".LEV");
+    }
+    if (suggested.empty() && !creationSettings_.name.empty()) {
+        suggested = std::filesystem::path(creationSettings_.name + ".LEV");
+    }
+    QSettings settings;
+    const QString configuredDirectory =
+        exportDirectorySetting(settings, creationSettings_.game);
+    if (!configuredDirectory.isEmpty() &&
+        QDir(configuredDirectory).exists()) {
+        const std::filesystem::path directory = toPath(configuredDirectory);
+        suggested = suggested.empty()
+                        ? directory
+                        : directory / suggested.filename();
     }
     QString gameName;
     if (creationSettings_.game == GameId::Wings) {
