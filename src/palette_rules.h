@@ -42,3 +42,11 @@ constexpr bool isReservedColorChartNumber(const GameId game,
     return isReservedPaletteIndex(game,
                                   paletteIndexFromColorChart(colorNumber));
 }
+
+constexpr bool isPaletteColorEditable(const GameId game, const int index)
+{
+    if (isReservedPaletteIndex(game, index) || game == GameId::Auts) {
+        return false;
+    }
+    return game != GameId::Wings || index >= 48;
+}

@@ -13,6 +13,7 @@ class QCloseEvent;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QPushButton;
 class QSpinBox;
 class QTabBar;
 class LevelCanvas;
@@ -78,6 +79,7 @@ private:
     PaletteIndexSpinBox* secondaryIndexSpinBox_ = nullptr;
     QComboBox* paletteGroupCombo_ = nullptr;
     QLabel* materialDetailsLabel_ = nullptr;
+    QPushButton* editColorButton_ = nullptr;
     QLabel* positionLabel_ = nullptr;
     QLineEdit* levelNameEdit_ = nullptr;
     QListWidget* layerListWidget_ = nullptr;

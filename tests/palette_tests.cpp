@@ -1,8 +1,10 @@
 #include "default_palette.h"
 #include "palette_io.h"
+#include "palette_groups.h"
 #include "palette_rules.h"
 
 #include <array>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -61,6 +63,21 @@ int main()
                      colorChartNumber(255) == 255 &&
                      paletteIndexFromColorChart(57) == 57,
                  "material index conversion is incorrect");
+    const auto vwingAll =
+        paletteIndices(PaletteGroup::AllUsable, GameId::VWing);
+    const auto vwingSpecial =
+        paletteIndices(PaletteGroup::Special, GameId::VWing);
+    ok &= expect(vwingAll.size() == 232 &&
+                     std::none_of(vwingAll.begin(), vwingAll.end(),
+                                  [](const std::uint8_t index) {
+                                      return isReservedPaletteIndex(
+                                          GameId::VWing, index);
+                                  }) &&
+                     std::find(vwingAll.begin(), vwingAll.end(), 46) !=
+                         vwingAll.end() &&
+                     std::find(vwingSpecial.begin(), vwingSpecial.end(), 46) !=
+                         vwingSpecial.end(),
+                 "V-Wing palette groups must contain every usable index");
     const auto wingsPalette = defaultWingsPalette();
     ok &= expect(wingsPalette[0] == RGB{0, 0, 0} &&
                      wingsPalette[16] == RGB{112, 112, 168} &&
@@ -76,6 +93,25 @@ int main()
                      isReservedPaletteIndex(GameId::Wings, 57) &&
                      !isReservedPaletteIndex(GameId::Wings, 64),
                  "Wings reserved palette index rules are incorrect");
+    ok &= expect(!isPaletteColorEditable(GameId::Wings, 16) &&
+                     isPaletteColorEditable(GameId::Wings, 48) &&
+                     !isPaletteColorEditable(GameId::Wings, 57) &&
+                     isPaletteColorEditable(GameId::VWing, 46) &&
+                     !isPaletteColorEditable(GameId::Auts, 108),
+                 "game palette color editing rules are incorrect");
+    const auto wingsAll =
+        paletteIndices(PaletteGroup::AllUsable, GameId::Wings);
+    ok &= expect(wingsAll.size() == 219 &&
+                     std::none_of(wingsAll.begin(), wingsAll.end(),
+                                  [](const std::uint8_t index) {
+                                      return isReservedPaletteIndex(
+                                          GameId::Wings, index);
+                                  }) &&
+                     std::find(wingsAll.begin(), wingsAll.end(), 16) !=
+                         wingsAll.end() &&
+                     std::find(wingsAll.begin(), wingsAll.end(), 32) !=
+                         wingsAll.end(),
+                 "Wings palette groups must contain every usable index");
     const auto autsPalette = defaultAutsPalette();
     ok &= expect(autsPalette[0] == RGB{0, 0, 0} &&
                      autsPalette[7] == RGB{92, 92, 92} &&
@@ -86,6 +122,9 @@ int main()
     ok &= expect(!isReservedPaletteIndex(GameId::Auts, 0) &&
                      !isReservedPaletteIndex(GameId::Auts, 255),
                  "AUTS palette indices should remain paintable");
+    ok &= expect(paletteIndices(PaletteGroup::AllUsable, GameId::Auts).size() ==
+                     256,
+                 "AUTS must expose all palette indices for drawing");
     const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
         {1, {0, 0, 171}},      {2, {0, 171, 0}},      {3, {0, 171, 171}},
         {4, {171, 0, 0}},      {5, {171, 0, 171}},    {6, {171, 87, 0}},

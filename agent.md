@@ -47,6 +47,8 @@ Windows ZIP- ja Linux AppImage -paketteina.
 - Pelissä näkyvä nimi tallennetaan LEV-tiedostoon, enintään 20 tulostettavaa
   ASCII-merkkiä ja tallennettaessa isot kirjaimet.
 - Materiaaliryhmät ja varatut paletti-indeksit perustuvat `CONVERT.TXT`:hen.
+- Paletti-indeksejä 46, 48, 51, 52, 56 ja 244–247 käytetään myös pelin
+  spritejen tai efektien väreihin. Tykkiväreillä piirtäminen ei sijoita tykkejä.
 
 ### Wings
 
@@ -58,13 +60,18 @@ Windows ZIP- ja Linux AppImage -paketteina.
   saman projektin dokumentteja ja käyttävät samaa palettia.
 - Wings-asetuksiin kuuluvat tähdet, sade, lumi, pommitus, siviilit ja
   aseistettujen siviilien todennäköisyys.
-- Kiinteitä ja varattuja Wings-indeksejä ei saa tarjota muokattaviksi.
+- Kiinteiden ja varattujen Wings-indeksien RGB-värejä ei saa tarjota
+  muokattaviksi.
+- Indeksit 0–47 käyttävät kiinteitä RGB-arvoja, mutta dokumentoidut 0, 16 ja
+  32–47 ovat piirrettäviä. Indeksien 48–255 värejä voi muuttaa lukuun ottamatta
+  varattua aluetta 57–63.
 - Wingsin paikallinen referenssiaineisto on `Wings/`-hakemistossa. Hakemisto on
   aina Gitin ja julkaisupakettien ulkopuolella eikä sen tiedostoja muokata.
 
 ### AUTS
 
 - Kiinteä kenttäkoko 320 x 400 ja kiinteä 256 värin AUTS-paletti.
+- Kaikilla 256 indeksillä voi piirtää, mutta niiden RGB-arvoja ei voi muuttaa.
 - Dokumentoidut erikoisindeksit ovat avaruus 0, rikkoutumaton 7, vesi 39 ja
   telakointilevy 92–95.
 - Uudessa ja julkaistussa kentässä on alkuperäisen BMP2LEV-converterin tavoin

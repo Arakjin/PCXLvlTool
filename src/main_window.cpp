@@ -9,6 +9,7 @@
 #include "layer_model.h"
 #include "level_canvas.h"
 #include "palette_io.h"
+#include "palette_groups.h"
 #include "palette_rules.h"
 #include "palette_widget.h"
 #include "pcx_reader.h"
@@ -213,13 +214,17 @@ QString materialDescription(const GameId game, const int paletteIndex)
         }
         switch (index) {
         case 0: return QStringLiteral("Background");
-        case 16: return QStringLiteral("Water source");
+        case 16:
+            return QStringLiteral(
+                "Creates water (fixed palette color 0-47)");
         case 48: return QStringLiteral("Water");
         case 49: return QStringLiteral("Water flow down");
         case 50: return QStringLiteral("Water flow left");
         case 51: return QStringLiteral("Water flow right");
-        case 52: return QStringLiteral("Bubbles");
-        case 53: return QStringLiteral("Snow");
+        case 52:
+            return QStringLiteral("Bubbles (editable bubble effect color)");
+        case 53:
+            return QStringLiteral("Snow (editable snow color)");
         case 54: return QStringLiteral("Damaging fire background");
         case 55:
         case 56: return QStringLiteral("Explosive terrain");
@@ -272,23 +277,23 @@ QString materialDescription(const GameId game, const int paletteIndex)
     case 19:
         return QStringLiteral("Water (flows left)");
     case 39:
-        return QStringLiteral("Ice (not in water)");
+        return QStringLiteral("Ice (not in water; shared game color)");
     case 45:
         return QStringLiteral("Plastic explosive");
     case 46:
-        return QStringLiteral("Birds");
+        return QStringLiteral("Bird color (changes flying birds globally)");
     case 48:
-        return QStringLiteral("Blood");
+        return QStringLiteral("Blood color (also changes pilot blood)");
     case 49:
         return QStringLiteral("Clay");
     case 50:
         return QStringLiteral("Base");
     case 51:
-        return QStringLiteral("Ash");
+        return QStringLiteral("Ash color (shared game color)");
     case 52:
-        return QStringLiteral("Snow");
+        return QStringLiteral("Snow color (shared game color)");
     case 56:
-        return QStringLiteral("Bubbles");
+        return QStringLiteral("Bubble color (shared game color)");
     case 150:
         return QStringLiteral("Does not burn");
     case 175:
@@ -302,177 +307,22 @@ QString materialDescription(const GameId game, const int paletteIndex)
     case 202:
         return QStringLiteral("Underwater clay");
     case 203:
-        return QStringLiteral("Ice");
+        return QStringLiteral("Underwater ice (shared game color)");
     case 244:
-        return QStringLiteral("Turret muzzle (firing)");
+        return QStringLiteral(
+            "Turret firing-muzzle color (does not place a turret)");
     case 245:
-        return QStringLiteral("Turret barrel and body");
+        return QStringLiteral(
+            "Turret barrel/body color (does not place a turret)");
     case 246:
-        return QStringLiteral("Turret muzzle");
+        return QStringLiteral(
+            "Turret muzzle color (does not place a turret)");
     case 247:
-        return QStringLiteral("Turret body (sides)");
+        return QStringLiteral(
+            "Turret side color (does not place a turret)");
     default:
         return QStringLiteral("Unknown / undocumented");
     }
-}
-
-enum class PaletteGroup {
-    AllUsable,
-    Background,
-    Water,
-    FlyThrough,
-    Font,
-    Special,
-    NormalTerrain,
-    Burnable,
-    Underwater,
-    Indestructible,
-    Turrets,
-    Bases,
-    Soft,
-    BurningWings,
-    Docking,
-    Other,
-};
-
-void appendRange(std::vector<std::uint8_t>& indices, const int first,
-                 const int last)
-{
-    for (int index = first; index <= last; ++index) {
-        indices.push_back(static_cast<std::uint8_t>(index));
-    }
-}
-
-std::vector<std::uint8_t> paletteIndices(const PaletteGroup group,
-                                         const GameId game)
-{
-    std::vector<std::uint8_t> indices;
-    indices.reserve(256);
-    if (game == GameId::Auts) {
-        switch (group) {
-        case PaletteGroup::AllUsable:
-            appendRange(indices, 0, 255);
-            break;
-        case PaletteGroup::Background:
-            indices.push_back(0);
-            break;
-        case PaletteGroup::Indestructible:
-            indices.push_back(7);
-            break;
-        case PaletteGroup::Water:
-            indices.push_back(39);
-            break;
-        case PaletteGroup::Docking:
-            appendRange(indices, 92, 95);
-            break;
-        case PaletteGroup::Other:
-            for (int index = 0; index < 256; ++index) {
-                if (index != 0 && index != 7 && index != 39 &&
-                    (index < 92 || index > 95)) {
-                    indices.push_back(static_cast<std::uint8_t>(index));
-                }
-            }
-            break;
-        default:
-            break;
-        }
-        return indices;
-    }
-    if (game == GameId::Wings) {
-        switch (group) {
-        case PaletteGroup::AllUsable:
-            indices.push_back(0);
-            indices.push_back(16);
-            appendRange(indices, 32, 56);
-            appendRange(indices, 64, 255);
-            break;
-        case PaletteGroup::Background:
-            indices.push_back(0);
-            break;
-        case PaletteGroup::Water:
-            indices.push_back(16);
-            appendRange(indices, 48, 53);
-            break;
-        case PaletteGroup::Bases:
-            appendRange(indices, 32, 47);
-            break;
-        case PaletteGroup::Special:
-            appendRange(indices, 54, 56);
-            break;
-        case PaletteGroup::FlyThrough:
-            appendRange(indices, 64, 79);
-            break;
-        case PaletteGroup::Indestructible:
-            appendRange(indices, 80, 95);
-            break;
-        case PaletteGroup::Soft:
-            appendRange(indices, 96, 111);
-            break;
-        case PaletteGroup::BurningWings:
-            appendRange(indices, 112, 127);
-            break;
-        case PaletteGroup::NormalTerrain:
-            appendRange(indices, 128, 255);
-            break;
-        default:
-            break;
-        }
-        return indices;
-    }
-    switch (group) {
-    case PaletteGroup::AllUsable:
-        indices.push_back(0);
-        appendRange(indices, 16, 30);
-        appendRange(indices, 32, 37);
-        appendRange(indices, 39, 45);
-        appendRange(indices, 48, 52);
-        appendRange(indices, 56, 174);
-        appendRange(indices, 176, 199);
-        appendRange(indices, 201, 219);
-        appendRange(indices, 221, 255);
-        break;
-    case PaletteGroup::Background:
-        indices.push_back(0);
-        break;
-    case PaletteGroup::Water:
-        appendRange(indices, 16, 19);
-        break;
-    case PaletteGroup::FlyThrough:
-        appendRange(indices, 20, 30);
-        break;
-    case PaletteGroup::Font:
-        appendRange(indices, 32, 37);
-        break;
-    case PaletteGroup::Special:
-        appendRange(indices, 39, 45);
-        appendRange(indices, 48, 52);
-        indices.push_back(56);
-        break;
-    case PaletteGroup::NormalTerrain:
-        appendRange(indices, 57, 149);
-        break;
-    case PaletteGroup::Burnable:
-        appendRange(indices, 150, 174);
-        appendRange(indices, 176, 199);
-        break;
-    case PaletteGroup::Underwater:
-        appendRange(indices, 201, 219);
-        break;
-    case PaletteGroup::Indestructible:
-        appendRange(indices, 221, 243);
-        appendRange(indices, 248, 255);
-        break;
-    case PaletteGroup::Turrets:
-        appendRange(indices, 244, 247);
-        break;
-    case PaletteGroup::Bases:
-    case PaletteGroup::Soft:
-    case PaletteGroup::BurningWings:
-    case PaletteGroup::Docking:
-    case PaletteGroup::Other:
-        break;
-    }
-    return indices;
 }
 
 QIcon toolIcon(const DrawTool tool)
@@ -1049,16 +899,17 @@ void MainWindow::createMaterialDock()
     paletteGroupCombo_ = new QComboBox(contents);
     const std::array<std::pair<const char*, PaletteGroup>, 11> paletteGroups{{
         {"All documented usable", PaletteGroup::AllUsable},
-        {"Background (1)", PaletteGroup::Background},
+        {"Background (0)", PaletteGroup::Background},
         {"Water (16-19)", PaletteGroup::Water},
         {"Fly through (20-30)", PaletteGroup::FlyThrough},
         {"Font (32-37)", PaletteGroup::Font},
-        {"Special materials (39-56)", PaletteGroup::Special},
+        {"Special materials and game colors (39-56)",
+         PaletteGroup::Special},
         {"Normal terrain (57-149)", PaletteGroup::NormalTerrain},
         {"Burnable (150-199)", PaletteGroup::Burnable},
         {"Underwater (201-219)", PaletteGroup::Underwater},
-        {"Indestructible (221-243, 248-256)", PaletteGroup::Indestructible},
-        {"Turrets (244-247)", PaletteGroup::Turrets},
+        {"Indestructible (221-243, 248-255)", PaletteGroup::Indestructible},
+        {"Turret colors (244-247; not placement)", PaletteGroup::Turrets},
     }};
     for (const auto& [label, group] : paletteGroups) {
         paletteGroupCombo_->addItem(tr(label), static_cast<int>(group));
@@ -1091,9 +942,9 @@ void MainWindow::createMaterialDock()
     layout->addLayout(secondaryIndexLayout);
     materialDetailsLabel_ = new QLabel(contents);
     layout->addWidget(materialDetailsLabel_);
-    auto* editColorButton =
+    editColorButton_ =
         new QPushButton(tr("Edit selected color..."), contents);
-    layout->addWidget(editColorButton);
+    layout->addWidget(editColorButton_);
     auto* paletteFileLayout = new QHBoxLayout();
     auto* loadPaletteButton = new QPushButton(tr("Load palette..."), contents);
     auto* savePaletteButton = new QPushButton(tr("Save palette..."), contents);
@@ -1163,7 +1014,7 @@ void MainWindow::createMaterialDock()
                 materialIndexSpinBox_->setValue(colorChartNumber(index));
                 editSelectedPaletteColor();
             });
-    connect(editColorButton, &QPushButton::clicked, this,
+    connect(editColorButton_, &QPushButton::clicked, this,
             &MainWindow::editSelectedPaletteColor);
     connect(loadPaletteButton, &QPushButton::clicked, this,
             &MainWindow::loadPalette);
@@ -2000,7 +1851,7 @@ void MainWindow::configurePaletteForGame()
     if (creationSettings_.game == GameId::Wings) {
         add("All documented usable", PaletteGroup::AllUsable);
         add("Background (0)", PaletteGroup::Background);
-        add("Water and snow (16, 48-53)", PaletteGroup::Water);
+        add("Water, bubbles and snow (16, 48-53)", PaletteGroup::Water);
         add("Bases (32-47)", PaletteGroup::Bases);
         add("Fire and explosives (54-56)", PaletteGroup::Special);
         add("Fly-through background (64-79)", PaletteGroup::FlyThrough);
@@ -2017,17 +1868,19 @@ void MainWindow::configurePaletteForGame()
         add("Other colors", PaletteGroup::Other);
     } else {
         add("All documented usable", PaletteGroup::AllUsable);
-        add("Background (1)", PaletteGroup::Background);
+        add("Background (0)", PaletteGroup::Background);
         add("Water (16-19)", PaletteGroup::Water);
         add("Fly through (20-30)", PaletteGroup::FlyThrough);
         add("Font (32-37)", PaletteGroup::Font);
-        add("Special materials (39-56)", PaletteGroup::Special);
+        add("Special materials and game colors (39-56)",
+            PaletteGroup::Special);
         add("Normal terrain (57-149)", PaletteGroup::NormalTerrain);
         add("Burnable (150-199)", PaletteGroup::Burnable);
         add("Underwater (201-219)", PaletteGroup::Underwater);
-        add("Indestructible (221-243, 248-256)",
+        add("Indestructible (221-243, 248-255)",
             PaletteGroup::Indestructible);
-        add("Turrets (244-247)", PaletteGroup::Turrets);
+        add("Turret colors (244-247; not placement)",
+            PaletteGroup::Turrets);
     }
     paletteWidget_->setIndices(
         paletteIndices(PaletteGroup::AllUsable, creationSettings_.game));
@@ -2086,6 +1939,17 @@ void MainWindow::updateMaterialDetails(const int index)
                                        .arg(hex)
                                        .arg(materialDescription(
                                            creationSettings_.game, index)));
+    const bool editable =
+        isPaletteColorEditable(creationSettings_.game, index);
+    editColorButton_->setEnabled(editable);
+    if (editable) {
+        editColorButton_->setToolTip(tr("Change this palette color globally"));
+    } else if (creationSettings_.game == GameId::Auts) {
+        editColorButton_->setToolTip(tr("AUTS uses a fixed game palette"));
+    } else {
+        editColorButton_->setToolTip(
+            tr("This palette color is fixed or reserved by the game"));
+    }
 }
 
 bool MainWindow::saveProject()
@@ -2302,20 +2166,7 @@ void MainWindow::editSelectedPaletteColor()
 {
     const int index = paletteIndexFromColorChart(
         materialIndexSpinBox_->value());
-    if (creationSettings_.game == GameId::Auts) {
-        QMessageBox::information(
-            this, tr("Fixed AUTS palette"),
-            tr("AUTS uses a fixed 256-color game palette. Its RGB values "
-               "cannot be changed, but every palette index can be painted."));
-        return;
-    }
-    if (creationSettings_.game == GameId::Wings &&
-        (index < 48 || isReservedPaletteIndex(GameId::Wings, index))) {
-        QMessageBox::information(
-            this, tr("Locked Wings palette color"),
-            tr("This Wings palette index is fixed or reserved. It may appear "
-               "in an original parallax image, but its RGB value cannot be "
-               "changed in the editor."));
+    if (!isPaletteColorEditable(creationSettings_.game, index)) {
         return;
     }
     const RGB& current = level_->palette[static_cast<std::size_t>(index)];

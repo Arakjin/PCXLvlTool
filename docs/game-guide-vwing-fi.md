@@ -15,9 +15,8 @@ tasot ja kirjoittaa V-Wingin ymmärtämän `.LEV`-tiedoston.
 
 Paletin ryhmävalikko kokoaa indeksit niiden pelillisen toiminnan mukaan.
 Käytä esimerkiksi ryhmiä **Water**, **Fly through**, **Normal terrain**,
-**Burnable**, **Underwater**, **Indestructible** ja **Turrets** sen sijaan,
-että valitsisit materiaalin pelkän RGB-värin perusteella. Varatut indeksit on
-poistettu valittavista vaihtoehdoista.
+**Burnable**, **Underwater** ja **Indestructible** sen sijaan, että valitsisit
+materiaalin pelkän RGB-värin perusteella.
 
 Tärkeimpiä materiaaliryhmiä ovat:
 
@@ -29,11 +28,33 @@ Tärkeimpiä materiaaliryhmiä ovat:
 - 176–199: tuhkaksi palava maasto
 - 201–219: vedenalaiset materiaalit ja vedeksi tuhoutuva maasto
 - 221–243 ja 248–255: rikkoutumaton maasto
-- 244–247: tykkien osat
+- 244–247: tykkien spritejen värit
 
 Palettipaneeli näyttää valitun materiaalin tiedostoindeksin ja kuvauksen.
 Vasen hiiren painike käyttää ensisijaista ja oikea toissijaista materiaalia.
 Kumi palauttaa alimman Background-tason indeksiksi 0.
+
+## Kentän ja pelihahmojen yhteiset palettivärit
+
+V-Wing käyttää osaa kentän paletista myös spriteihin ja efekteihin. Indeksin
+RGB-värin muuttaminen vaikuttaa siis kaikkiin pelin saman paletti-indeksin
+käyttökohteisiin, ei vain kenttään piirrettyihin pikseleihin. Näihin kuuluvat
+ainakin:
+
+- 39 ja 203: jää
+- 46: lentävien lintujen väri
+- 48: veri, mukaan lukien pilotin veri
+- 51: tuhka
+- 52: lumi
+- 56: kuplat
+- 244–247: satunnaisesti syntyvien tykkien osien värit
+
+Indekseillä 244–247 piirtäminen ei sijoita kenttään valmiita tykkejä. Peli
+luo tykit omien sääntöjensä mukaan, ja nämä neljä palettipaikkaa määräävät
+niiden ulkoasun. Sama periaate koskee muiden yhteisten palettipaikkojen
+värinmuutosta: esimerkiksi indeksin 46 muuttaminen punaiseksi tekee lentävistä
+linnuista punaisia ja indeksin 48 muuttaminen vihreäksi tekee myös pilotin
+verestä vihreää.
 
 ## Alkuperäisen converterin piirto-ohjeet
 
@@ -47,16 +68,5 @@ Kumi palauttaa alimman Background-tason indeksiksi 0.
 - Alkuperäinen ohje suosittelee tekemään rakennelmista hieman tavallista
   korkeampia, jos kenttää pelataan 320 × 400 -näyttötilassa.
 
-## Editorin helpotukset
-
-- Varattuja indeksejä ei voi valita numero- tai palettivalikosta.
-- Materiaaliryhmät vähentävät indeksinumeroiden muistamista.
-- `Shift` tekee viivoista vaaka-, pysty- tai 45 asteen suuntaisia sekä
-  suorakulmioista neliöitä ja ellipseistä ympyröitä.
-- Muodon ääriviiva käyttää ensisijaista ja täyttö toissijaista materiaalia.
-- Tasot voi pitää erillään muokkauksen aikana; vain näkyvät tasot yhdistetään
-  LEV-julkaisussa.
-
 Testaa julkaistu kenttä aina V-Wingissä ja tarkista erityisesti törmäykset,
 vesi, palaminen, räjähdykset ja tykkien toiminta.
-

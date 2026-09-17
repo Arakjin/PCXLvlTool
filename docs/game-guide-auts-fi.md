@@ -39,17 +39,5 @@ editori ottaa käyttöön kiinteän AUTS-paletin ja lisää suojareunan. Jos
 lähdekuvan paletti poikkeaa alkuperäisestä, editori varoittaa siitä. Käytä
 materiaalien varmaan vastaavuuteen alkuperäistä `BLANK.BMP`-palettia.
 
-## Editorin helpotukset
-
-- Kentän koko, kiinteä paletti ja kahden pikselin suojareunus käsitellään
-  automaattisesti.
-- Palettiryhmät tarjoavat avaruuden, rikkoutumattoman, veden ja
-  telakointilevyn erillisinä valintoina.
-- `Shift` tekee viivoista vaaka-, pysty- tai 45 asteen suuntaisia sekä
-  suorakulmioista neliöitä ja ellipseistä ympyröitä.
-- Tasot säilyvät `.pxlp`-projektissa, mutta näkyvät tasot yhdistetään
-  AUTS-LEV-julkaisussa.
-
 Testaa julkaistu kenttä AUTSissa ja tarkista erityisesti reunus, vesi,
 telakointilevyt ja aluksen törmäykset.
-

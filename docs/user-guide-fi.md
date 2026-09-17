@@ -90,6 +90,22 @@ Työkalut:
 Paksuus, kynän tai kumin kärki, muodon täyttötapa, suorakulmion kulmien pyöristys
 ja tekstin fontti valitaan työkalujen alla olevasta asetuspalkista.
 
+## Editorin yleiset helpotukset
+
+- Varattuja indeksejä ei voi valita numero- tai palettivalikosta.
+- Palettiryhmät näyttävät indeksit niiden pelillisen toiminnan mukaan.
+- `Shift` tekee viivoista vaaka-, pysty- tai 45 asteen suuntaisia sekä
+  suorakulmioista neliöitä ja ellipseistä ympyröitä.
+- Muodon ääriviiva käyttää ensisijaista ja täyttö toissijaista materiaalia.
+- Tasot säilyvät projektissa erillisinä. LEV-julkaisu yhdistää vain näkyvät
+  tasot.
+
+**Edit selected color** muuttaa koko paletti-indeksin RGB-värin, ei vain
+valittuja pikseleitä. Jos peli käyttää samaa indeksiä kentässä, spriteissä tai
+efekteissä, värimuutos näkyy kaikissa näissä käyttökohteissa. Indeksillä
+piirtäminen ei itsessään sijoita kenttään esinettä, ellei pelikohtainen ohje
+nimenomaan kuvaa indeksiä sijoitus- tai luontimerkiksi.
+
 ## Valinnat
 
 Käytettävissä ovat suorakulmainen, elliptinen ja vapaamuotoinen valinta.

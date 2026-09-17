@@ -15,8 +15,8 @@ tallennetaan `.pxlp`-projektiksi ja peliin menevä tiedosto tehdään valinnalla
 
 Wings käyttää paletti-indeksejä myös materiaalien toiminnan määrittämiseen.
 Paletin ryhmävalikossa ovat esimerkiksi tukikohdat, vesi, läpilennettävä
-tausta, rikkoutumaton, pehmeä, palava ja tavallinen maasto. Kiinteät ja
-varatut indeksit on poistettu valittavista vaihtoehdoista.
+tausta, rikkoutumaton, pehmeä, palava ja tavallinen maasto. Pelin varaamat
+alueet 1–15, 17–31 ja 57–63 jätetään pois piirrettävistä vaihtoehdoista.
 
 Tärkeimpiä dokumentoituja indeksejä ovat:
 
@@ -35,6 +35,17 @@ Tärkeimpiä dokumentoituja indeksejä ovat:
 Valitse materiaali toiminnan eikä pelkän näkyvän värin perusteella. Vasen
 hiiren painike käyttää ensisijaista ja oikea toissijaista materiaalia.
 
+Wingsin alkuperäinen `COLORS.TXT` vahvistaa, että paletin indeksit 0–47 ovat
+kiinteitä eikä niiden RGB-värejä saa muuttaa. Siksi editori estää myös indeksin
+16 värin muokkaamisen: indeksi 16 on kenttään piirrettävä **luo vettä** -merkki,
+ei vesipyssyn tai veden vapaasti muokattava väri.
+
+Indeksien 48–255 RGB-värejä saa muuttaa. Alkuperäinen suomenkielinen ohje
+nimeää indeksin 52 suoraan kuplien väriksi, joten sen muokkaaminen vaikuttaa
+pelin piirtämiin kupliin. Indeksi 53 on lumi ja on muokattavalla alueella,
+mutta sääefektin lumihiutaleiden saman palettipaikan käyttö pitää vielä
+vahvistaa pelitestillä. Indeksit 48–51 ovat veden ja sen virtausten värejä.
+
 ## Parallax-tausta
 
 Kun **Parallax background** on valittu, editori luo automaattisesti erillisen
@@ -50,17 +61,6 @@ käyttävät samaa palettia, tallentuvat samaan `.pxlp`-projektiin ja julkaistaa
 samaan Wings-LEV-tiedostoon. Varatut indeksit pysyvät poissa palettivalikosta
 myös Background-välilehdellä.
 
-## Editorin helpotukset
-
-- Kentän ja parallax-taustan oikeat mitat lasketaan ja validoidaan
-  automaattisesti.
-- Varattuja indeksejä ei voi valita numero- tai palettivalikosta.
-- Palettiryhmät näyttävät materiaalit niiden toiminnan mukaan.
-- `Shift` tekee viivoista vaaka-, pysty- tai 45 asteen suuntaisia sekä
-  suorakulmioista neliöitä ja ellipseistä ympyröitä.
-- Tasot säilyvät projektissa erillisinä. Julkaisu yhdistää vain näkyvät tasot.
-
 Testaa sekä tavallinen että parallaxia käyttävä julkaisu Wingsissä. Tarkista
 kentän rajat, tukikohdat, vesi, materiaalien tuhoutuminen sekä sää- ja
 siviiliasetukset.
-

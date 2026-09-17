@@ -14,6 +14,7 @@ add_library(vwing_level_format
     src/lev_reader.cpp
     src/lev_writer.cpp
     src/palette_io.cpp
+    src/palette_groups.cpp
     src/pcxl_project_io.cpp
     src/pcx_reader.cpp
     src/pcx_writer.cpp

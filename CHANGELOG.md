@@ -9,6 +9,10 @@ All notable changes to PCX Level Tool are documented in this file.
 - Add a configurable `.pxlp` project directory with a Documents-based default.
 - Add in-application user-guide and license windows, with separate V-Wing,
   Wings, and AUTS guides under a Game guides submenu.
+- Correct V-Wing palette groups to include the bird color and distinguish
+  shared game-effect colors from material placement.
+- Disable palette-color editing for fixed game colors while keeping usable
+  material indices available for drawing.
 
 ## 0.2.0 - 2026-09-16
 
