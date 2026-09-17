@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(PCXLvlTool VERSION 0.2.0 LANGUAGES CXX)
+project(PCXLvlTool VERSION 0.2.5 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
