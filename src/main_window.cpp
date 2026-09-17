@@ -1056,7 +1056,8 @@ void MainWindow::createMaterialDock()
 void MainWindow::createZoomToolBar()
 {
     QToolBar* toolBar = addToolBar(tr("View"));
-    toolBar->addWidget(new QLabel(tr("Level name: "), toolBar));
+    levelNameLabel_ = new QLabel(tr("Level name: "), toolBar);
+    toolBar->addWidget(levelNameLabel_);
     levelNameEdit_ = new QLineEdit(
         QString::fromLatin1(level_->name.data(),
                             static_cast<int>(level_->name.size())),
@@ -1081,7 +1082,7 @@ void MainWindow::createZoomToolBar()
                 setModified(true);
             });
     toolBar->addWidget(levelNameEdit_);
-    toolBar->addSeparator();
+    levelNameSeparatorAction_ = toolBar->addSeparator();
     toolBar->addWidget(new QLabel(tr("Zoom: "), toolBar));
     auto* zoomCombo = new QComboBox(toolBar);
     const std::array<std::pair<const char*, double>, 6> zoomLevels{{
@@ -1815,23 +1816,12 @@ void MainWindow::configurePaletteForGame()
         return;
     }
     canvas_->setGame(creationSettings_.game);
-    if (creationSettings_.game == GameId::Wings) {
-        levelNameEdit_->setMaxLength(64);
-        levelNameEdit_->setValidator(new QRegularExpressionValidator(
-            QRegularExpression(QStringLiteral("[A-Za-z0-9 _.-]{0,64}")),
-            levelNameEdit_));
-        levelNameEdit_->setToolTip(
-            tr("Wings uses the level filename as its name. Printable DOS-safe "
-               "ASCII characters are supported."));
-    } else if (creationSettings_.game == GameId::Auts) {
-        levelNameEdit_->setMaxLength(8);
-        levelNameEdit_->setValidator(new QRegularExpressionValidator(
-            QRegularExpression(QStringLiteral("[A-Za-z0-9_-]{0,8}")),
-            levelNameEdit_));
-        levelNameEdit_->setToolTip(
-            tr("AUTS stores no internal level name. This DOS-safe name is "
-               "used as the suggested LEV filename."));
-    } else {
+    const bool hasInternalLevelName =
+        creationSettings_.game == GameId::VWing;
+    levelNameLabel_->setVisible(hasInternalLevelName);
+    levelNameEdit_->setVisible(hasInternalLevelName);
+    levelNameSeparatorAction_->setVisible(hasInternalLevelName);
+    if (hasInternalLevelName) {
         levelNameEdit_->setMaxLength(20);
         levelNameEdit_->setValidator(new QRegularExpressionValidator(
             QRegularExpression(QStringLiteral("[\\x20-\\x7E]{0,20}")),

@@ -17,6 +17,20 @@
 
 namespace {
 
+class PaintEventCounter final : public QObject {
+public:
+    int count = 0;
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::Paint) {
+            ++count;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+
 bool expect(const bool condition, const char *message)
 {
     if (!condition) {
@@ -159,6 +173,46 @@ int main(int argc, char *argv[])
     click(viewport, {2.5, 1.5});
     ok &= expect(canvas.undoStack()->count() == 1,
                  "drawing the existing index should not add an undo command");
+
+    Level previewLevel;
+    previewLevel.pixels.fill(58);
+    LevelCanvas previewCanvas;
+    previewCanvas.resize(320, 240);
+    previewCanvas.setLevel(&previewLevel);
+    previewCanvas.setSelectedIndex(58);
+    previewCanvas.setDrawTool(DrawTool::Pencil);
+    previewCanvas.show();
+    application.processEvents();
+    PaintEventCounter paintCounter;
+    previewCanvas.viewport()->installEventFilter(&paintCounter);
+    sendMouseEvent(previewCanvas.viewport(), QEvent::MouseButtonPress,
+                   {20.5, 20.5}, Qt::LeftButton, Qt::LeftButton);
+    application.processEvents();
+    paintCounter.count = 0;
+    sendMouseEvent(previewCanvas.viewport(), QEvent::MouseMove,
+                   {30.5, 20.5}, Qt::NoButton, Qt::LeftButton);
+    application.processEvents();
+    ok &= expect(paintCounter.count > 0,
+                 "pencil preview should repaint while drawing the existing index");
+    sendMouseEvent(previewCanvas.viewport(), QEvent::MouseButtonRelease,
+                   {30.5, 20.5}, Qt::LeftButton, Qt::NoButton);
+
+    previewCanvas.setLevel(nullptr);
+    clearLevel(previewLevel);
+    previewCanvas.setLevel(&previewLevel);
+    previewCanvas.setDrawTool(DrawTool::Eraser);
+    application.processEvents();
+    sendMouseEvent(previewCanvas.viewport(), QEvent::MouseButtonPress,
+                   {20.5, 30.5}, Qt::LeftButton, Qt::LeftButton);
+    application.processEvents();
+    paintCounter.count = 0;
+    sendMouseEvent(previewCanvas.viewport(), QEvent::MouseMove,
+                   {30.5, 30.5}, Qt::NoButton, Qt::LeftButton);
+    application.processEvents();
+    ok &= expect(paintCounter.count > 0,
+                 "eraser preview should repaint over an already empty area");
+    sendMouseEvent(previewCanvas.viewport(), QEvent::MouseButtonRelease,
+                   {30.5, 30.5}, Qt::LeftButton, Qt::NoButton);
 
     canvas.setLevel(nullptr);
     clearLevel(level);

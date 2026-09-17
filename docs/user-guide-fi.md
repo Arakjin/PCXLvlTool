@@ -14,8 +14,9 @@ muokattavana `.pxlp`-projektina.
 - **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän tai `.pxlp`-projektin.
 - V-Wingissä yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen.
   Sen enimmäispituus on 20 tulostettavaa ASCII-merkkiä. Ääkkösiä ei hyväksytä
-  ja nimi muutetaan tallennettaessa isoiksi kirjaimiksi. Wingsissä ja AUTSissa
-  nimi toimii julkaistavan tiedostonimen ehdotuksena.
+  ja nimi muutetaan tallennettaessa isoiksi kirjaimiksi. Wings ja AUTS eivät
+  tallenna erillistä sisäistä kenttänimeä, joten niissä nimeksi tulee julkaistun
+  tiedoston nimi eikä **Level name** -kenttää näytetä.
 
 `.LEV` ja `.pxlp` palvelevat eri tarkoituksia:
 

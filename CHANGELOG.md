@@ -13,6 +13,10 @@ All notable changes to PCX Level Tool are documented in this file.
   shared game-effect colors from material placement.
 - Disable palette-color editing for fixed game colors while keeping usable
   material indices available for drawing.
+- Keep the pencil and eraser footprint preview under the cursor while dragging
+  over pixels that already contain the requested result.
+- Show the internal Level name field only for V-Wing; Wings and AUTS derive
+  their level names from the published filenames.
 
 ## 0.2.0 - 2026-09-16
 

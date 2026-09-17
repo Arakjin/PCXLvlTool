@@ -81,10 +81,12 @@ private:
     QLabel* materialDetailsLabel_ = nullptr;
     QPushButton* editColorButton_ = nullptr;
     QLabel* positionLabel_ = nullptr;
+    QLabel* levelNameLabel_ = nullptr;
     QLineEdit* levelNameEdit_ = nullptr;
     QListWidget* layerListWidget_ = nullptr;
     QAction* saveAction_ = nullptr;
     QAction* levelSettingsAction_ = nullptr;
+    QAction* levelNameSeparatorAction_ = nullptr;
     QTabBar* documentTabs_ = nullptr;
     LevelCreationSettings creationSettings_;
     std::filesystem::path projectPath_;

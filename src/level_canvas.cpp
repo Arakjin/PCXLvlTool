@@ -1288,6 +1288,10 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
             drawLine(lastImagePoint_, point, strokePaintIndex_,
                      strokeThickness_);
             lastImagePoint_ = point;
+            // The brush outline follows the cursor even when drawing does not
+            // change any pixels (for example over the same index, or while
+            // erasing an already empty area).
+            viewport()->update();
         } else if (drawing_ && (event->buttons() & strokeButton_) &&
                    strokeTool_ == DrawTool::Spray) {
             sprayLine(lastImagePoint_, point, strokePaintIndex_,
