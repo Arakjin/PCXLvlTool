@@ -1,8 +1,8 @@
 # PCX Level Tool – kehittäjän muistilista
 
 Tämä tiedosto kuvaa projektin nykyiset rajat, tärkeimmät tekniset ratkaisut ja
-julkaistun 0.2.0-version pohjan jatkokehitykselle. Yksityiskohtaiset käyttäjä- ja formaattiohjeet
-pidetään `README.md`- ja `docs/`-tiedostoissa.
+julkaistun 0.2.5-version pohjan jatkokehitykselle. Yksityiskohtaiset käyttäjä-
+ja formaattiohjeet pidetään `README.md`- ja `docs/`-tiedostoissa.
 
 ## Projektin tavoite
 
@@ -147,6 +147,132 @@ vain read-only-referenssinä.
   deterministisesti oikealla aineistolla.
 - Arvioi englanninkieliset käyttöohjeet ja käyttöliittymän lokalisointi erillisinä
   julkaisutavoitteina.
+
+## Piirtotyökalujen suunnitteluideat
+
+Seuraavat ovat jatkokehitysideoita, eivät vielä toteutettavia ominaisuuksia.
+Niiden käyttöliittymä ja tiedonkäsittely pitää suunnitella ennen koodaamista.
+
+### Terrain Brush
+
+- Täytetty vapaamuotoinen sivellin suurten maastoalueiden nopeaan piirtämiseen.
+- Kirjoittaa aina tarkkoja paletti-indeksejä ilman pehmennystä, läpinäkyvyyttä
+  tai automaattista värien sekoittamista.
+- Suunniteltavia asetuksia ovat siveltimen koko, kärjen muoto sekä tasainen tai
+  hallitusti rosoinen reuna.
+- Esikatselun ja lopullisen rasteroinnin pitää vastata toisiaan, ja yhden vedon
+  pitää muodostaa yksi undo-operaatio.
+
+### Magic Wand
+
+- Valitsee napsautetun yhtenäisen alueen saman paletti-indeksin perusteella.
+- Mahdollinen lisätila valitsee kaikki saman indeksin kohdat aktiivisesta
+  dokumentista tai rajatulta valinta-alueelta.
+- Ei väritoleranssia: samannäköiset RGB-värit voivat olla eri materiaaleja.
+- Toimii nykyisten valintojen yhdistämissääntöjen kanssa: tavallinen valinta,
+  `Shift` lisää, `Ctrl` vähentää ja `Shift+Ctrl` leikkaa.
+- Ennen toteutusta päätetään, tutkitaanko aktiivista tasoa vai näkyvien tasojen
+  yhdistettyä kuvaa. Valinnan muokkaamisen pitää silti kohdistua aktiiviseen
+  tasoon yksiselitteisesti.
+
+### Valinnan peilaus ja kierto
+
+- Peilaus vaaka- ja pystysuunnassa sekä kierrot 90, 180 ja 270 astetta.
+- Säilyttää paletti-indeksit ja läpinäkyvän maskin täsmälleen; ei interpolointia
+  tai reunan pehmennystä.
+- Käyttää nykyistä kelluvaa valintaa, jotta tulosta voi siirtää ennen
+  hyväksymistä.
+- Ennen toteutusta määritellään ei-neliömäisen valinnan ankkurointi sekä
+  kentän ulkopuolelle kiertyvien pikselien käsittely.
+
+### Materiaaliryhmään rajattu liukuväri
+
+Liukuväri vaatii vielä lisäsuunnittelua ennen toteutusta.
+Tavallinen indeksivälin läpikäynti ei kelpaa, koska peräkkäiset indeksit voivat
+vaihtua esimerkiksi vedestä maastoksi tai kulkea varattujen indeksien kautta.
+
+Liukuväri toteutetaan omana **Gradient Fill** -työkaluna tavallisen
+**Flood Fill** -työkalun vieressä, ei siveltimenä tai Flood Fillin piilotettuna
+tilana. Työkalut jakavat saman yhtenäisen alueen tunnistuksen, mutta niiden
+hiiritoiminta ja asetukset pysyvät erillisinä. Yksi täyttö on yksi
+undo-operaatio.
+
+#### Kohdealue ja suuntaveto
+
+- Hiiren painallus toimii täytön siemenpisteenä. Täytettävä kohde on siitä
+  löytyvä yhtenäinen saman materiaalin alue kuten tavallisessa Flood Fillissä.
+- Aktiivinen valinta rajaa kohdealuetta. Vain yhtenäisen alueen ja aktiivisen
+  valinnan leikkaukseen saa kirjoittaa.
+- Painalluksesta vapautukseen vedetty viiva määrittää vain liukuvärin suunnan,
+  pituuden tai säteen. Veto ei muodosta täytettävää suorakulmiota eikä rajaa
+  täyttöä vetojäljen ympärille.
+- Vedon aikana näytetään esikatselu koko kohdealueella, jotta käyttäjä näkee
+  ennen hyväksymistä sekä täytettävän alueen että indeksien lopullisen
+  sijoittumisen. Varsinaisia pikseleitä muutetaan vasta vedon hyväksymisen
+  yhteydessä.
+- Lineaarisessa tilassa vedon alku vastaa liu'un alkua ja loppu liu'un loppua.
+  Säteittäisessä tilassa alku on keskipiste ja vedon pituus määrää säteen.
+- Ilman toistoa ennen alkua ja lopun jälkeen käytetään lähintä päätyindeksiä.
+  Toistotilassa valittu indeksisarja jatkuu asetetun jakson mukaisesti koko
+  kohdealueelle.
+
+#### Asetusten avaaminen
+
+- Liukuvärityökalun painikkeen oikea napsautus avaa liukuväriasetukset.
+- Kun liukuvärityökalu on aktiivinen, normaalin palettipaneelin alle ilmestyy
+  erillinen **Gradient settings** -painike samaan ikkunaan.
+- Asetuspainiketta ei näytetä muiden työkalujen aikana.
+
+#### Materiaalin ja indeksien valinta
+
+- Asetusikkunassa on normaalin palettipaneelin kaltainen palettinäkymä ja
+  pelikohtaisten materiaaliryhmien pudotusvalikko.
+- Liukuvärissä saa valita vain pelillisesti yhtenäisen materiaaliryhmän, kuten
+  **Fly through** tai **Normal terrain**. Laajat sekaryhmät, kuten
+  **All usable**, eivät kelpaa liukuväriryhmäksi.
+- Käyttäjä valitsee alku- ja loppuindeksin valitusta ryhmästä. Molempien sekä
+  kaikkien käytettävien väli-indeksien pitää kuulua samaan materiaalityyppiin.
+- Varattuja indeksejä tai toisen toiminnon materiaaleja ei saa tulla sarjaan,
+  vaikka niiden numerot sijaitsisivat alku- ja loppuindeksin välissä.
+- Asetusikkuna näyttää alku- ja loppuvärin sekä kaikki mukaan tulevat
+  väli-indeksit numeroineen ja väreineen. Näin käyttäjä näkee etukäteen myös
+  monivärisen liu'un, esimerkiksi vihreästä keltaisen kautta punaiseen.
+- Gradient Fill sijoittaa edelleen vain olemassa olevia paletti-indeksejä.
+  Asetusikkunaan lisätään erillinen palettirampin laskin, jolla näiden indeksien
+  RGB-värit voidaan valmistella ennen täyttämistä.
+
+#### Palettirampin laskin
+
+- Käyttäjä valitsee alkuindeksin ja loppuindeksin värit. Laskin muodostaa
+  ehdotetut RGB-värit niiden välissä oleville sallituille indekseille.
+- Käyttäjä voi lisätä väli-indeksin väripisteeksi. Tällöin laskenta tehdään
+  osissa, esimerkiksi vihreästä keltaiseen ja keltaisesta punaiseen.
+- Kaikki indeksit ja lasketut värit näytetään yhtenä esikatseltavana rampina
+  ennen paletin muuttamista.
+- **Calculate** päivittää vain esikatselun. Erillinen hyväksyntä kirjoittaa
+  lasketut värit projektin palettiin yhtenä undo-operaationa; peruutus ei muuta
+  palettia.
+- Laskin saa muuttaa vain valitun yhtenäisen materiaalityypin muokattavia
+  indeksejä. Varatut ja pelin kiinteät värit ovat aina poissa laskennasta.
+- AUTSin paletti on kokonaan kiinteä, joten laskinta ei tarjota AUTSille.
+  Gradient Fill voi silti käyttää AUTSin olemassa olevia saman
+  materiaalityypin indeksejä muuttamatta niiden värejä.
+- V-Wingissä laskimen pitää näyttää varoitus, jos valittu indeksi vaikuttaa
+  myös pelihahmojen tai efektien väriin.
+- Ennen toteutusta päätetään värien laskentatapa, esimerkiksi suora RGB-liuku
+  tai sävyn kautta kulkeva laskenta. Valittu tapa pitää näyttää esikatselussa,
+  eikä laskin saa päätellä materiaalityyppiä pelkän näkyvän värin perusteella.
+
+#### Täyttötavat
+
+- **Linear** muodostaa suoran liu'un valittuun suuntaan.
+- **Radial** muodostaa liu'un keskipisteestä ulospäin.
+- **Repeat** toistaa valitun indeksisarjan täytettävällä alueella.
+- Ennen toteutusta määritellään, onko toisto tavallinen, peilattu vai molemmat
+  valittavina, sekä kuinka suunta, keskipiste ja jakson pituus asetetaan
+  hiirellä.
+- Myös yhden napsautuksen oletustoiminta ja vedolla tehtävä esikatselu pitää
+  ratkaista ennen koodaamista.
 
 Vältä tarpeettomia service/controller/plugin-kerroksia. Laajennettavuus tässä
 projektissa tarkoittaa selkeitä peliprofiileja ja formaattirajoja, ei dynaamista
