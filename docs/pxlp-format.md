@@ -2,7 +2,7 @@
 
 `.pxlp` is PCX Level Tool's versioned, game-tagged editable project format.
 It is not a game level file. A project must be published separately to the
-selected game's `.LEV` format.
+selected game's runtime format (`.LEV` or an OverThrust `.OLV` package directory).
 
 Version 1 stores:
 
@@ -16,3 +16,22 @@ Version 1 stores:
 V-Wing, Wings, and AUTS projects use `.pxlp`. Wings' variable-size level,
 gameplay settings, and optional parallax document, as well as AUTS' fixed-size
 indexed image, therefore survive editing in the same extensible container.
+
+Version 2 is used by OverThrust projects and remains backward-readable with
+version 1. It stores exactly one indexed document with the `materials` role,
+plus bounded typed sections for:
+
+- an optional normalized sRGB, straight-alpha RGBA8 background, its parallax
+  flag, decoded dimensions, SHA-256 content hash, and optional source filename;
+- level identity and typed profile settings;
+- declared activation channels;
+- sliding doors, teleporters, service orbs, and team bases with a shared
+  world-pixel transform; team bases additionally retain an absolute
+  world-pixel polygon defining their gameplay area;
+- team-mode base bindings; and
+- tagged unknown object properties retained for forward compatibility.
+
+Unknown object types or properties survive editable-project round trips, but
+they prevent publication under `overthrust:authoring-v3`. Background source
+paths are not needed after import: saving and publishing use the embedded
+normalized pixels.

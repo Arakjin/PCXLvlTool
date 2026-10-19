@@ -1,8 +1,7 @@
 # PCX Level Tool
 
-Portable C++17 and Qt 6 level editor. V-Wing, Wings, and AUTS are the first
-supported games. Layered work is stored as game-tagged `.pxlp` projects, with
-room for additional games and formats in the future.
+Portable C++17 and Qt 6 level editor for V-Wing, Wings, AUTS, and OverThrust.
+Layered work is stored as game-tagged `.pxlp` projects.
 
 ## Build
 
@@ -45,7 +44,19 @@ Run:
 
 The current milestone supports:
 
-- opening `.LEV` levels and layered `.pxlp` projects
+- opening `.LEV`, indexed `.pcx`, and layered `.pxlp` files, plus exporting
+  the current indexed document directly as deterministic PCX
+- authoring OverThrust material grids with expanded rock, bedrock, soil, and
+  rubble appearances plus editable fly-through colors through index 255,
+  category filters, an optional normalized true-color background with a
+  parallax flag and preview, typed level
+  settings, and non-rasterized sliding gates, teleporters, service orbs, and polygonal
+  team-base areas
+- publishing deterministic `.OLV` level-package directories containing
+  `manifest.json`, `materials.pcx`, `objects.json`, and optional
+  `background.png`
+- PXLP v2 persistence for embedded OverThrust backgrounds and object records,
+  while retaining PXLP v1 loading for existing projects
 - saving and reopening Wings work, including parallax layers and settings, as
   `.pxlp` projects
 - creating, opening, editing, and publishing fixed-size 320 x 400 AUTS levels

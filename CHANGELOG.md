@@ -4,6 +4,36 @@ All notable changes to PCX Level Tool are documented in this file.
 
 ## Unreleased
 
+- Add the OverThrust authoring profile with its material registry,
+  true-color background import and preview, typed settings, and non-rasterized
+  sliding gates, teleporters, service orbs, and team bases.
+- Add dedicated OverThrust object-tool icons and canvas sprites, independently
+  sized sliding-gate previews, editable teleporter targets, automatic pairing for new
+  unpaired teleporters, and dotted connection overlays.
+- Define team-base gameplay coverage with editable canvas polygons, retain the
+  polygon in PXLP, and publish it in deterministic objects schema version 2.
+- Expand rock, bedrock, soil, and rubble appearance indices; expose indices
+  97–255 as empty fly-through colors; and rename toxic gas to acidic gas.
+- Keep the imported presentation PNG hidden during editing by default, with an
+  explicitly labelled optional canvas-preview toggle.
+- Add direct object move, separate width/height resize, corner resize, and
+  rotation handles while retaining numeric properties for precision.
+- Publish deterministic `.OLV` level-package directories containing canonical
+  `manifest.json`, `materials.pcx`, and `objects.json` files, plus
+  `background.png` when an optional presentation background is supplied.
+- Simplify OverThrust settings by removing level player-count, spawn-policy,
+  and boundary-policy fields; author world dimensions and object measurements
+  directly in pixels without editor-side cell conversion; and add a background
+  parallax flag alongside the existing scroll factors.
+- Add PXLP v2 persistence with a backward-readable OverThrust data v3 section
+  for optional embedded backgrounds, settings, and forward-compatible object
+  records while retaining older project loading.
+- Allow indexed PCX files to be opened directly under a selected compatible
+  game profile and export the current flattened document as PCX.
+- Correct the PCX writer for variable and odd-sized images with deterministic
+  row padding and bounded RLE runs.
+- Keep local OverThrust contract documents and golden fixtures out of Git.
+
 ## 0.2.5 - 2026-09-17
 
 - Add user-level, game-specific default directories for publishing V-Wing,

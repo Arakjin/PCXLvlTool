@@ -2,6 +2,7 @@
 #include "palette_io.h"
 #include "palette_groups.h"
 #include "palette_rules.h"
+#include "overthrust_profile.h"
 
 #include <array>
 #include <algorithm>
@@ -125,6 +126,51 @@ int main()
     ok &= expect(paletteIndices(PaletteGroup::AllUsable, GameId::Auts).size() ==
                      256,
                  "AUTS must expose all palette indices for drawing");
+    const auto overthrustPalette = defaultOverThrustPalette();
+    const auto& overthrustMappings = overthrustMaterials();
+    ok &= expect(overthrustMaterials().size() == 256 &&
+                     overthrustPalette[0] == RGB{8, 10, 18} &&
+                     overthrustPalette[50] == RGB{184, 193, 204} &&
+                     overthrustPalette[78] == RGB{73, 236, 210} &&
+                     overthrustPalette[96] == RGB{157, 98, 188} &&
+                     overthrustMaterial(255)->materialId == "core:empty",
+                 "OverThrust material mappings and preview palette");
+    ok &= expect(overthrustMappings[3].label == "Rock C" &&
+                     overthrustMappings[4].label == "Rock D" &&
+                     overthrustMappings[5].label == "Bedrock Natural A" &&
+                     overthrustMappings[10].label == "Bedrock Technical B" &&
+                     overthrustMappings[11].label == "Soil A" &&
+                     overthrustMappings[14].label == "Soil D" &&
+                     overthrustMappings[70].label == "Rubble A" &&
+                     overthrustMappings[73].label == "Rubble D" &&
+                     overthrustMappings[95].materialId == "core:acidic_gas" &&
+                     overthrustMappings[96].appearanceId ==
+                         "appearance:acidic-gas/b" &&
+                     overthrustMappings[97].category == "fly_through",
+                 "OverThrust shifted and expanded index registry");
+    ok &= expect(
+        paletteIndices(PaletteGroup::AllUsable, GameId::OverThrust).size() ==
+                256 &&
+            paletteIndices(PaletteGroup::Background,
+                           GameId::OverThrust).size() == 1 &&
+            paletteIndices(PaletteGroup::Structural,
+                           GameId::OverThrust).size() == 24 &&
+            paletteIndices(PaletteGroup::Organic,
+                           GameId::OverThrust).size() == 30 &&
+            paletteIndices(PaletteGroup::Metal,
+                           GameId::OverThrust).size() == 9 &&
+            paletteIndices(PaletteGroup::Granular,
+                           GameId::OverThrust).size() == 14 &&
+            paletteIndices(PaletteGroup::Liquid,
+                           GameId::OverThrust).size() == 10 &&
+            paletteIndices(PaletteGroup::Gas,
+                           GameId::OverThrust).size() == 8 &&
+            paletteIndices(PaletteGroup::Gameplay,
+                           GameId::OverThrust).size() == 1 &&
+            paletteIndices(PaletteGroup::FlyThrough,
+                           GameId::OverThrust).size() == 159 &&
+            !isReservedPaletteIndex(GameId::OverThrust, 255),
+        "OverThrust palette category filters");
     const std::array<std::pair<std::size_t, RGB>, 20> reservedDefaults{{
         {1, {0, 0, 171}},      {2, {0, 171, 0}},      {3, {0, 171, 171}},
         {4, {171, 0, 0}},      {5, {171, 0, 171}},    {6, {171, 87, 0}},

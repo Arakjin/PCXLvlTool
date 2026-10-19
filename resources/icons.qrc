@@ -16,12 +16,21 @@
     <file>icons/kolourpaint/tool_free_form_selection.png</file>
     <file>icons/hand-move.svg</file>
     <file>icons/kolourpaint/tool_curve.png</file>
+    <file alias="overthrust/canvas-teleporter.png">icons/overthrust/canvas-teleporter.png</file>
+    <file alias="overthrust/canvas-service-orb.png">icons/overthrust/canvas-service-orb.png</file>
+    <file alias="overthrust/canvas-door.png">icons/overthrust/canvas-door.png</file>
+    <file alias="overthrust/canvas-team-base.png">icons/overthrust/canvas-team-base.png</file>
+    <file alias="overthrust/tool-teleporter.png">icons/overthrust/tool-teleporter.png</file>
+    <file alias="overthrust/tool-service-orb.png">icons/overthrust/tool-service-orb.png</file>
+    <file alias="overthrust/tool-door.png">icons/overthrust/tool-door.png</file>
+    <file alias="overthrust/tool-team-base.png">icons/overthrust/tool-team-base.png</file>
   </qresource>
   <qresource prefix="/help">
     <file alias="user-guide-fi.md">../docs/user-guide-fi.md</file>
     <file alias="game-guide-vwing-fi.md">../docs/game-guide-vwing-fi.md</file>
     <file alias="game-guide-wings-fi.md">../docs/game-guide-wings-fi.md</file>
     <file alias="game-guide-auts-fi.md">../docs/game-guide-auts-fi.md</file>
+    <file alias="game-guide-overthrust-fi.md">../docs/game-guide-overthrust-fi.md</file>
     <file alias="licenses-fi.md">../docs/licenses-fi.md</file>
     <file alias="LICENSE">../LICENSE</file>
     <file alias="THIRD_PARTY_NOTICES.md">../THIRD_PARTY_NOTICES.md</file>

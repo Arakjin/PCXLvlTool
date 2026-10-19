@@ -158,6 +158,60 @@ int main()
                      loaded.pixels[5] == 6,
                  "PCX reader did not remove scanline padding");
 
+    Level oddWidth;
+    oddWidth.resize(3, 2);
+    oddWidth.pixels = Level::PixelBuffer(6);
+    oddWidth.pixels[0] = 1;
+    oddWidth.pixels[1] = 2;
+    oddWidth.pixels[2] = 3;
+    oddWidth.pixels[3] = 4;
+    oddWidth.pixels[4] = 5;
+    oddWidth.pixels[5] = 6;
+    oddWidth.palette = level->palette;
+    error.clear();
+    ok &= expect(savePcx(variable.path(), oddWidth, error),
+                 "odd-width PCX could not be written: " + error);
+    const std::vector<std::uint8_t> oddBytes = readBytes(variable.path());
+    ok &= expect(littleEndian16(oddBytes, 8) == 2 &&
+                     littleEndian16(oddBytes, 10) == 1 &&
+                     littleEndian16(oddBytes, 12) == 3 &&
+                     littleEndian16(oddBytes, 14) == 2 &&
+                     littleEndian16(oddBytes, 66) == 4,
+                 "odd-width PCX header did not use variable dimensions");
+    Level oddLoaded;
+    error.clear();
+    ok &= expect(loadPcx(variable.path(), oddLoaded, error),
+                 "written odd-width PCX could not be loaded: " + error);
+    ok &= expect(oddLoaded.width == oddWidth.width &&
+                     oddLoaded.height == oddWidth.height &&
+                     oddLoaded.pixels == oddWidth.pixels &&
+                     oddLoaded.palette == oddWidth.palette,
+                 "odd-width PCX round-trip changed indexed data");
+
+    Level fourHundred;
+    fourHundred.resize(400, 400);
+    for (std::size_t index = 0; index < fourHundred.pixels.size(); ++index) {
+        fourHundred.pixels[index] =
+            static_cast<std::uint8_t>((index / 400 + index % 400) & 0xff);
+    }
+    fourHundred.palette = level->palette;
+    error.clear();
+    ok &= expect(savePcx(variable.path(), fourHundred, error),
+                 "400x400 PCX could not be written: " + error);
+    error.clear();
+    ok &= expect(loadPcx(variable.path(), oddLoaded, error) &&
+                     oddLoaded.width == 400 && oddLoaded.height == 400 &&
+                     oddLoaded.pixels == fourHundred.pixels &&
+                     oddLoaded.palette == fourHundred.palette,
+                 "400x400 PCX round-trip changed indexed data");
+
+    Level malformed;
+    malformed.resize(2, 2);
+    malformed.pixels.pop_back();
+    error.clear();
+    ok &= expect(!savePcx(variable.path(), malformed, error),
+                 "writer accepted a mismatched pixel buffer");
+
     const std::filesystem::path invalidPath =
         std::filesystem::current_path() / "pcx-writer-missing-directory" /
         "output.pcx";

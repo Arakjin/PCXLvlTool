@@ -2,6 +2,7 @@
 
 #include "game_profile.h"
 #include "level.h"
+#include "overthrust_model.h"
 
 #include <filesystem>
 #include <memory>
@@ -14,7 +15,19 @@ bool savePxlProject(const std::filesystem::path& path, const Level& level,
                     const LevelCreationSettings& settings,
                     std::string& error);
 
+bool savePxlProject(const std::filesystem::path& path, const Level& level,
+                    const Level* background,
+                    const LevelCreationSettings& settings,
+                    const OverThrustProjectData* overthrust,
+                    std::string& error);
+
 bool loadPxlProject(const std::filesystem::path& path, Level& level,
                     std::unique_ptr<Level>& background,
                     LevelCreationSettings& settings,
+                    std::string& error);
+
+bool loadPxlProject(const std::filesystem::path& path, Level& level,
+                    std::unique_ptr<Level>& background,
+                    LevelCreationSettings& settings,
+                    std::unique_ptr<OverThrustProjectData>& overthrust,
                     std::string& error);

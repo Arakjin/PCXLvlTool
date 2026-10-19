@@ -8,11 +8,14 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
 
 add_library(vwing_level_format
     src/auts_io.cpp
+    src/canonical_png.cpp
     src/default_palette.cpp
     src/game_profile.cpp
     src/layer_model.cpp
     src/lev_reader.cpp
     src/lev_writer.cpp
+    src/overthrust_profile.cpp
+    src/overthrust_package.cpp
     src/palette_io.cpp
     src/palette_groups.cpp
     src/pcxl_project_io.cpp
@@ -127,6 +130,7 @@ install(FILES
     docs/game-guide-vwing-fi.md
     docs/game-guide-wings-fi.md
     docs/game-guide-auts-fi.md
+    docs/game-guide-overthrust-fi.md
     docs/licenses-fi.md
     docs/pxlp-format.md
     docs/auts-format.md
@@ -150,6 +154,17 @@ install(DIRECTORY third_party/qt/LICENSES/
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(overthrust_package_tests
+        tests/overthrust_package_tests.cpp
+    )
+    target_link_libraries(overthrust_package_tests PRIVATE vwing_level_format)
+    target_compile_features(overthrust_package_tests PRIVATE cxx_std_17)
+    target_compile_definitions(overthrust_package_tests PRIVATE
+        PCXLVLTOOL_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    set_target_properties(overthrust_package_tests PROPERTIES CXX_EXTENSIONS OFF)
+    add_test(NAME overthrust_package_tests COMMAND overthrust_package_tests)
+
     add_executable(auts_io_tests
         tests/auts_io_tests.cpp
     )

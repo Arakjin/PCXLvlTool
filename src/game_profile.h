@@ -10,6 +10,7 @@ enum class GameId : std::uint8_t {
     VWing,
     Wings,
     Auts,
+    OverThrust,
 };
 
 enum class GameFeature : std::uint32_t {
@@ -19,6 +20,10 @@ enum class GameFeature : std::uint32_t {
     Stars = 1U << 2,
     Weather = 1U << 3,
     Civilians = 1U << 4,
+    ExternalTrueColorBackground = 1U << 5,
+    LevelObjects = 1U << 6,
+    GameSpecificSettings = 1U << 7,
+    PackagePublishing = 1U << 8,
 };
 
 constexpr GameFeature operator|(const GameFeature left,
@@ -45,12 +50,14 @@ struct GameProfile {
     int maximumHeight;
     int defaultWidth;
     int defaultHeight;
+    std::uint64_t maximumCells;
     GameFeature features;
 };
 
 enum class BackgroundMode : std::uint8_t {
     None,
     Parallax,
+    ExternalTrueColor,
 };
 
 struct LevelCreationSettings {

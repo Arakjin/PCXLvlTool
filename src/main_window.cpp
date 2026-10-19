@@ -8,11 +8,15 @@
 #include "lev_writer.h"
 #include "layer_model.h"
 #include "level_canvas.h"
+#include "overthrust_profile.h"
+#include "canonical_png.h"
+#include "overthrust_package.h"
 #include "palette_io.h"
 #include "palette_groups.h"
 #include "palette_rules.h"
 #include "palette_widget.h"
 #include "pcx_reader.h"
+#include "pcx_writer.h"
 #include "pcxl_project_io.h"
 #include "wings_lev_writer.h"
 
@@ -21,15 +25,19 @@
 #include <QButtonGroup>
 #include <QCloseEvent>
 #include <QColorDialog>
+#include <QColorSpace>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QImageReader>
+#include <QCryptographicHash>
 #include <QFontComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -44,6 +52,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPolygon>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QScrollArea>
@@ -54,8 +63,10 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTextBrowser>
+#include <QTextEdit>
 #include <QToolBar>
 #include <QToolButton>
+#include <QUndoCommand>
 #include <QVBoxLayout>
 #include <QValidator>
 #include <QWidget>
@@ -65,6 +76,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -138,6 +150,267 @@ QString toQString(const std::filesystem::path& path)
     return QString::fromStdU16String(path.u16string());
 }
 
+bool dimensionsFitProfile(const GameProfile& profile, const std::size_t width,
+                          const std::size_t height)
+{
+    return width >= static_cast<std::size_t>(profile.minimumWidth) &&
+           width <= static_cast<std::size_t>(profile.maximumWidth) &&
+           height >= static_cast<std::size_t>(profile.minimumHeight) &&
+           height <= static_cast<std::size_t>(profile.maximumHeight) &&
+           height != 0 && width <= profile.maximumCells / height;
+}
+
+bool validateBackgroundContainer(const QString& filename,
+                                 const QByteArray& format, QString& error)
+{
+    QFile file(filename);
+    if (!file.open(QIODevice::ReadOnly)) {
+        error = file.errorString();
+        return false;
+    }
+    const QByteArray bytes = file.readAll();
+    const auto be32 = [&](const qsizetype offset) -> quint32 {
+        return static_cast<quint32>(
+            static_cast<unsigned char>(bytes[offset])) << 24 |
+               static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset + 1])) << 16 |
+               static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset + 2])) << 8 |
+               static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset + 3]));
+    };
+    const auto le32 = [&](const qsizetype offset) -> quint32 {
+        return static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset])) |
+               static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset + 1])) << 8 |
+               static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset + 2])) << 16 |
+               static_cast<quint32>(
+                   static_cast<unsigned char>(bytes[offset + 3])) << 24;
+    };
+    if (format == "png") {
+        const QByteArray signature("\x89PNG\r\n\x1a\n", 8);
+        if (bytes.size() < 33 || !bytes.startsWith(signature) ||
+            be32(8) != 13 || bytes.mid(12, 4) != "IHDR" ||
+            static_cast<unsigned char>(bytes[24]) > 8) {
+            error = QObject::tr("PNG header is malformed or uses more than 8 bits per channel.");
+            return false;
+        }
+        qsizetype offset = 8;
+        bool ended = false;
+        while (offset + 12 <= bytes.size()) {
+            const quint32 size = be32(offset);
+            if (size > static_cast<quint32>(bytes.size() - offset - 12)) {
+                error = QObject::tr("PNG contains a truncated chunk.");
+                return false;
+            }
+            const QByteArray type = bytes.mid(offset + 4, 4);
+            if (type == "acTL") {
+                error = QObject::tr("Animated PNG backgrounds are not supported.");
+                return false;
+            }
+            offset += 12 + size;
+            if (type == "IEND") {
+                ended = true;
+                break;
+            }
+        }
+        if (!ended || offset != bytes.size()) {
+            error = QObject::tr("PNG has trailing or malformed data.");
+            return false;
+        }
+    } else if (format == "jpeg" || format == "jpg") {
+        if (bytes.size() < 4 ||
+            static_cast<unsigned char>(bytes[0]) != 0xff ||
+            static_cast<unsigned char>(bytes[1]) != 0xd8 ||
+            static_cast<unsigned char>(bytes[bytes.size() - 2]) != 0xff ||
+            static_cast<unsigned char>(bytes[bytes.size() - 1]) != 0xd9) {
+            error = QObject::tr("JPEG has a malformed signature or trailing data.");
+            return false;
+        }
+        qsizetype offset = 2;
+        while (offset + 4 <= bytes.size()) {
+            while (offset < bytes.size() &&
+                   static_cast<unsigned char>(bytes[offset]) == 0xff) ++offset;
+            if (offset >= bytes.size()) break;
+            const unsigned char marker =
+                static_cast<unsigned char>(bytes[offset++]);
+            if (marker == 0xda || marker == 0xd9) break;
+            if (marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+            if (offset + 2 > bytes.size()) break;
+            const quint16 size = static_cast<quint16>(
+                static_cast<unsigned char>(bytes[offset]) << 8 |
+                static_cast<unsigned char>(bytes[offset + 1]));
+            if (size < 2 || offset + size > bytes.size()) {
+                error = QObject::tr("JPEG contains a malformed segment.");
+                return false;
+            }
+            const bool startOfFrame =
+                (marker >= 0xc0 && marker <= 0xc3) ||
+                (marker >= 0xc5 && marker <= 0xc7) ||
+                (marker >= 0xc9 && marker <= 0xcb) ||
+                (marker >= 0xcd && marker <= 0xcf);
+            if (startOfFrame &&
+                (size < 8 || static_cast<unsigned char>(bytes[offset + 2]) > 8 ||
+                 static_cast<unsigned char>(bytes[offset + 7]) == 4)) {
+                error = QObject::tr("JPEG must be 8-bit RGB, not CMYK or high-bit-depth.");
+                return false;
+            }
+            offset += size;
+        }
+    } else if (format == "webp") {
+        if (bytes.size() < 20 || bytes.mid(0, 4) != "RIFF" ||
+            bytes.mid(8, 4) != "WEBP" || le32(4) + 8ULL !=
+                                               static_cast<quint64>(bytes.size())) {
+            error = QObject::tr("WebP container is malformed or has trailing data.");
+            return false;
+        }
+        qsizetype offset = 12;
+        while (offset + 8 <= bytes.size()) {
+            const QByteArray type = bytes.mid(offset, 4);
+            const quint32 size = le32(offset + 4);
+            if (size > static_cast<quint32>(bytes.size() - offset - 8)) {
+                error = QObject::tr("WebP contains a truncated chunk.");
+                return false;
+            }
+            if (type == "ANIM" || type == "ANMF" ||
+                (type == "VP8X" && size >= 1 &&
+                 (static_cast<unsigned char>(bytes[offset + 8]) & 0x02))) {
+                error = QObject::tr("Animated WebP backgrounds are not supported.");
+                return false;
+            }
+            offset += 8 + size + (size & 1U);
+        }
+        if (offset != bytes.size()) {
+            error = QObject::tr("WebP contains malformed trailing bytes.");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool loadOverThrustBackground(const QString& filename,
+                              const std::size_t materialWidth,
+                              const std::size_t materialHeight,
+                              OverThrustBackground& background,
+                              QString& error)
+{
+    const QFileInfo fileInfo(filename);
+    if (!fileInfo.exists() || fileInfo.size() < 1 ||
+        fileInfo.size() > 64LL * 1024LL * 1024LL) {
+        error = QObject::tr("Background source must be between 1 byte and 64 MiB.");
+        return false;
+    }
+    QImageReader reader(filename);
+    reader.setDecideFormatFromContent(true);
+    reader.setAutoTransform(true);
+    const QByteArray format = reader.format().toLower();
+    const QString extension = fileInfo.suffix().toLower();
+    const bool formatAllowed = format == "png" || format == "jpeg" ||
+                               format == "jpg" || format == "webp";
+    const bool extensionMatches =
+        (format == "png" && extension == QStringLiteral("png")) ||
+        ((format == "jpeg" || format == "jpg") &&
+         (extension == QStringLiteral("jpg") ||
+          extension == QStringLiteral("jpeg"))) ||
+        (format == "webp" && extension == QStringLiteral("webp"));
+    if (!formatAllowed || !extensionMatches) {
+        error = QObject::tr(
+            "The background signature must match a PNG, JPEG, or WebP extension.");
+        return false;
+    }
+    if (!validateBackgroundContainer(filename, format, error)) {
+        return false;
+    }
+    if (reader.supportsAnimation() || reader.imageCount() > 1) {
+        error = QObject::tr("Animated or multi-image backgrounds are not supported.");
+        return false;
+    }
+    const QSize decodedSize = reader.size();
+    if (!decodedSize.isValid() || decodedSize.width() > 8192 ||
+        decodedSize.height() > 8192 ||
+        static_cast<quint64>(decodedSize.width()) * decodedSize.height() >
+            33554432ULL ||
+        static_cast<quint64>(decodedSize.width()) * materialHeight !=
+            static_cast<quint64>(decodedSize.height()) * materialWidth) {
+        error = QObject::tr(
+            "Background dimensions exceed limits or do not match the material-grid aspect ratio.");
+        return false;
+    }
+    QImage image = reader.read();
+    if (image.isNull()) {
+        error = reader.errorString();
+        return false;
+    }
+    if (image.format() == QImage::Format_RGBA64 ||
+        image.format() == QImage::Format_RGBA64_Premultiplied ||
+        image.format() == QImage::Format_RGBX64 ||
+        image.format() == QImage::Format_Grayscale16) {
+        error = QObject::tr("Backgrounds must use RGB/RGBA with at most 8 bits per channel.");
+        return false;
+    }
+    if (image.colorSpace().isValid() &&
+        image.colorSpace() != QColorSpace(QColorSpace::SRgb)) {
+        image.convertToColorSpace(QColorSpace(QColorSpace::SRgb));
+    }
+    image = image.convertToFormat(QImage::Format_RGBA8888);
+    image.setColorSpace(QColorSpace(QColorSpace::SRgb));
+    if (image.isNull()) {
+        error = QObject::tr("Could not normalize the background to sRGB RGBA8.");
+        return false;
+    }
+    background.width = static_cast<std::uint32_t>(image.width());
+    background.height = static_cast<std::uint32_t>(image.height());
+    background.rgba.resize(static_cast<std::size_t>(image.width()) *
+                           image.height() * 4);
+    const std::size_t rowBytes = static_cast<std::size_t>(image.width()) * 4;
+    for (int y = 0; y < image.height(); ++y) {
+        std::copy_n(image.constScanLine(y), rowBytes,
+                    background.rgba.begin() +
+                        static_cast<std::ptrdiff_t>(y * rowBytes));
+    }
+    QCryptographicHash hashBuilder(QCryptographicHash::Sha256);
+    hashBuilder.addData(QByteArrayView(
+        reinterpret_cast<const char*>(background.rgba.data()),
+        static_cast<qsizetype>(background.rgba.size())));
+    const QByteArray hash = hashBuilder.result();
+    std::copy_n(reinterpret_cast<const std::uint8_t*>(hash.constData()),
+                background.contentHash.size(), background.contentHash.begin());
+    background.sourceProvenance = fileInfo.fileName().toStdString();
+    std::vector<std::uint8_t> canonical;
+    std::string canonicalError;
+    if (!encodeCanonicalRgbaPng(background.width, background.height,
+                                background.rgba, canonical,
+                                canonicalError)) {
+        error = QString::fromStdString(canonicalError);
+        return false;
+    }
+    return true;
+}
+
+void rebuildTeamModeSettings(OverThrustProjectData& data)
+{
+    std::vector<OverThrustTeamBinding> teams;
+    for (const OverThrustObject& object : data.objects) {
+        if (object.type == "team_base") {
+            teams.push_back({object.teamSlot, object.id});
+        }
+    }
+    std::sort(teams.begin(), teams.end(),
+              [](const OverThrustTeamBinding& left,
+                 const OverThrustTeamBinding& right) {
+                  return left.teamSlot < right.teamSlot;
+              });
+    data.teamModeSettings.clear();
+    for (const std::string& mode : data.allowedGameModes) {
+        if (mode == "core:team_deathmatch" ||
+            mode == "core:capture_the_flag") {
+            data.teamModeSettings.push_back({mode, teams});
+        }
+    }
+}
+
 QString readResourceText(const QString& path)
 {
     QFile file(path);
@@ -165,6 +438,55 @@ QTextBrowser* plainTextBrowser(const QString& resourcePath, QWidget* parent)
 QString materialDescription(const GameId game, const int paletteIndex)
 {
     const int index = colorChartNumber(paletteIndex);
+    if (game == GameId::OverThrust) {
+        const OverThrustMaterial* material = overthrustMaterial(
+            static_cast<std::uint8_t>(index));
+        if (material == nullptr) {
+            return QStringLiteral("Unmapped; cannot be published");
+        }
+        QString mechanics = QStringLiteral("Game-owned material behavior");
+        if (material->materialId == "core:empty") {
+            mechanics = material->category == "fly_through"
+                            ? QStringLiteral(
+                                  "Empty/fly-through simulation cell; color is visual only")
+                            : QStringLiteral("Empty simulation cell");
+        } else if (material->materialId == "core:fertile_soil") {
+            mechanics = QStringLiteral("Schedules deterministic upward grass growth");
+        } else if (material->materialId == "core:bedrock") {
+            mechanics = QStringLiteral("Indestructible structural material");
+        } else if (material->materialId == "core:aluminium") {
+            mechanics = QStringLiteral("Conductive; stage-2 heat can produce molten aluminium");
+        } else if (material->materialId == "core:titanium") {
+            mechanics = QStringLiteral("Highly resistant and conductive; slowly erodes at stage 2");
+        } else if (material->materialId == "core:tungsten") {
+            mechanics = QStringLiteral("Indestructible, conductive, and thermally immune");
+        } else if (material->materialId == "core:water") {
+            mechanics = QStringLiteral("Suppresses fire/coatings and cools lava into steam");
+        } else if (material->materialId == "core:oil") {
+            mechanics = QStringLiteral("Flammable liquid that can coat actors");
+        } else if (material->materialId == "core:napalm") {
+            mechanics = QStringLiteral("Slow flammable liquid with a strong coating");
+        } else if (material->materialId == "core:lava") {
+            mechanics = QStringLiteral("Slow damaging liquid and stage-2 heat source");
+        } else if (material->materialId == "core:smoke") {
+            mechanics = QStringLiteral("Gas concentration reduces visibility");
+        } else if (material->materialId == "core:acidic_gas") {
+            mechanics = QStringLiteral(
+                "Acidic gas seed; game-owned rules apply corrosive effects");
+        } else if (material->materialId == "core:base_pad") {
+            mechanics = QStringLiteral("Solid contact surface using the game-owned healing profile");
+        }
+        return QStringLiteral("%1\nMaterial: %2\nAppearance: %3\nCategory: %4\n%5")
+            .arg(QString::fromUtf8(material->label.data(),
+                                   material->label.size()),
+                 QString::fromUtf8(material->materialId.data(),
+                                   material->materialId.size()),
+                 QString::fromUtf8(material->appearanceId.data(),
+                                   material->appearanceId.size()),
+                 QString::fromUtf8(material->category.data(),
+                                   material->category.size()),
+                 mechanics);
+    }
     if (isReservedPaletteIndex(game, paletteIndex)) {
         return QStringLiteral("Reserved (do not use)");
     }
@@ -325,6 +647,37 @@ QString materialDescription(const GameId game, const int paletteIndex)
     }
 }
 
+class ObjectListCommand final : public QUndoCommand {
+public:
+    ObjectListCommand(std::vector<OverThrustObject>* objects,
+                      std::vector<OverThrustObject> before,
+                      std::vector<OverThrustObject> after,
+                      std::function<void()> refresh, const QString& text)
+        : objects_(objects), before_(std::move(before)),
+          after_(std::move(after)), refresh_(std::move(refresh))
+    {
+        setText(text);
+    }
+
+    void undo() override
+    {
+        *objects_ = before_;
+        refresh_();
+    }
+
+    void redo() override
+    {
+        *objects_ = after_;
+        refresh_();
+    }
+
+private:
+    std::vector<OverThrustObject>* objects_;
+    std::vector<OverThrustObject> before_;
+    std::vector<OverThrustObject> after_;
+    std::function<void()> refresh_;
+};
+
 QIcon toolIcon(const DrawTool tool)
 {
     switch (tool) {
@@ -390,6 +743,7 @@ MainWindow::MainWindow(QWidget* parent)
     createToolBars();
     createMaterialDock();
     createLayerDock();
+    createObjectDock();
     createZoomToolBar();
 
     positionLabel_ = new QLabel(tr("Ready"), this);
@@ -414,8 +768,57 @@ MainWindow::MainWindow(QWidget* parent)
             });
     connect(canvas_, &LevelCanvas::layersChanged, this,
             &MainWindow::refreshLayerList);
+    connect(canvas_, &LevelCanvas::objectSelectionChanged, this,
+            [this](const int index) {
+                if (objectListWidget_ == nullptr) return;
+                objectListWidget_->setCurrentRow(index);
+            });
+    connect(canvas_, &LevelCanvas::objectTransformRequested, this,
+            [this](const int index, const int x, const int y,
+                   const int width, const int height,
+                   const int rotationMillidegrees) {
+                if (!overthrustData_ || index < 0 ||
+                    index >= static_cast<int>(overthrustData_->objects.size())) {
+                    return;
+                }
+                auto before = overthrustData_->objects;
+                auto after = before;
+                OverThrustObject& moved =
+                    after[static_cast<std::size_t>(index)];
+                const int oldWidth = moved.transform.width;
+                int slideDistance = static_cast<int>(std::round(std::hypot(
+                    moved.openOffsetX, moved.openOffsetY)));
+                const int deltaX = x - moved.transform.x;
+                const int deltaY = y - moved.transform.y;
+                moved.transform.x = x;
+                moved.transform.y = y;
+                moved.transform.width = width;
+                moved.transform.height = height;
+                moved.transform.rotationMillidegrees =
+                    rotationMillidegrees;
+                if (moved.type == "sliding_door") {
+                    if (slideDistance <= 0) slideDistance = oldWidth;
+                    if (slideDistance == oldWidth && width != oldWidth) {
+                        slideDistance = width;
+                    }
+                    const double radians = rotationMillidegrees *
+                        3.14159265358979323846 / 180000.0;
+                    moved.openOffsetX = static_cast<int>(std::round(
+                        slideDistance * std::cos(radians)));
+                    moved.openOffsetY = static_cast<int>(std::round(
+                        slideDistance * std::sin(radians)));
+                }
+                for (OverThrustPoint& point : moved.areaPolygon) {
+                    point.x += deltaX;
+                    point.y += deltaY;
+                }
+                applyObjectListChange(tr("Transform object"),
+                                      std::move(before), std::move(after));
+            });
+    connect(canvas_, &LevelCanvas::teamBasePolygonRequested, this,
+            &MainWindow::applyTeamBasePolygon);
     connect(documentTabs_, &QTabBar::currentChanged, this,
-            &MainWindow::switchWingsDocument);
+            &MainWindow::switchProfileDocument);
 
     resize(1000, 800);
     updateWindowTitle();
@@ -460,6 +863,11 @@ void MainWindow::createActions()
     connect(importAction, &QAction::triggered, this,
             &MainWindow::importImage);
 
+    QAction* exportPcxAction =
+        fileMenu->addAction(tr("Export current image as &PCX..."));
+    connect(exportPcxAction, &QAction::triggered, this,
+            &MainWindow::exportPcx);
+
     saveAction_ = fileMenu->addAction(tr("&Save project"));
     saveAction_->setShortcut(QKeySequence::Save);
     connect(saveAction_, &QAction::triggered, this,
@@ -470,8 +878,8 @@ void MainWindow::createActions()
     connect(saveAsAction, &QAction::triggered, this,
             [this] { saveProjectAs(); });
 
-    QAction* publishAction = fileMenu->addAction(tr("&Publish LEV..."));
-    connect(publishAction, &QAction::triggered, this,
+    publishAction_ = fileMenu->addAction(tr("&Publish LEV..."));
+    connect(publishAction_, &QAction::triggered, this,
             [this] { publishLevel(); });
 
     fileMenu->addSeparator();
@@ -507,8 +915,14 @@ void MainWindow::createActions()
             &LevelCanvas::pasteSelection);
     QAction* deleteAction = editMenu->addAction(tr("&Delete selection"));
     deleteAction->setShortcut(QKeySequence::Delete);
-    connect(deleteAction, &QAction::triggered, canvas_,
-            &LevelCanvas::deleteSelection);
+    connect(deleteAction, &QAction::triggered, this, [this] {
+        if (creationSettings_.game == GameId::OverThrust &&
+            objectModeCheck_ != nullptr && objectModeCheck_->isChecked()) {
+            deleteSelectedOverThrustObject();
+        } else {
+            canvas_->deleteSelection();
+        }
+    });
 
     QMenu* settingsMenu = menuBar()->addMenu(tr("&Settings"));
     QAction* applicationSettingsAction =
@@ -546,6 +960,13 @@ void MainWindow::createActions()
     connect(autsGuideAction, &QAction::triggered, this, [this] {
         showMarkdownDocument(tr("AUTS level guide"),
                              QStringLiteral(":/help/game-guide-auts-fi.md"));
+    });
+    QAction* overthrustGuideAction =
+        gameGuidesMenu->addAction(tr("&OverThrust..."));
+    connect(overthrustGuideAction, &QAction::triggered, this, [this] {
+        showMarkdownDocument(
+            tr("OverThrust level guide"),
+            QStringLiteral(":/help/game-guide-overthrust-fi.md"));
     });
 
     helpMenu->addSeparator();
@@ -602,7 +1023,7 @@ void MainWindow::editApplicationSettings()
     auto* layout = new QVBoxLayout(&dialog);
     auto* description = new QLabel(
         tr("Choose the default project folder and the folder used when "
-           "publishing a LEV file for each game. You can still choose a "
+           "publishing for each game. You can still choose a "
            "different location in every save dialog."),
         &dialog);
     description->setWordWrap(true);
@@ -661,12 +1082,12 @@ void MainWindow::editApplicationSettings()
         const QString gameName =
             QString::fromUtf8(profile.displayName.data(),
                               static_cast<qsizetype>(profile.displayName.size()));
-        form->addRow(tr("%1:").arg(gameName), row);
+        form->addRow(tr("%1 publish folder:").arg(gameName), row);
         connect(browse, &QPushButton::clicked, &dialog,
                 [&dialog, edit, gameName] {
                     const QString directory = QFileDialog::getExistingDirectory(
                         &dialog,
-                        tr("Select %1 LEV export folder").arg(gameName),
+                        tr("Select %1 publish folder").arg(gameName),
                         edit->text());
                     if (!directory.isEmpty()) {
                         edit->setText(QDir::toNativeSeparators(directory));
@@ -925,6 +1346,13 @@ void MainWindow::createMaterialDock()
         paletteGroupCombo_->addItem(tr(label), static_cast<int>(group));
     }
     layout->addWidget(paletteGroupCombo_);
+    backgroundPreviewCheck_ = new QCheckBox(
+        tr("Show imported PNG background behind materials"), contents);
+    backgroundPreviewCheck_->setChecked(false);
+    backgroundPreviewCheck_->setVisible(false);
+    backgroundPreviewCheck_->setToolTip(
+        tr("Presentation preview only. Turn this off for a clear material-editing view."));
+    layout->addWidget(backgroundPreviewCheck_);
     paletteWidget_ = new PaletteWidget(contents);
     paletteWidget_->setLevel(level_.get());
     paletteWidget_->setIndices(
@@ -951,6 +1379,7 @@ void MainWindow::createMaterialDock()
     secondaryIndexLayout->addWidget(secondaryIndexSpinBox_);
     layout->addLayout(secondaryIndexLayout);
     materialDetailsLabel_ = new QLabel(contents);
+    materialDetailsLabel_->setWordWrap(true);
     layout->addWidget(materialDetailsLabel_);
     editColorButton_ =
         new QPushButton(tr("Edit selected color..."), contents);
@@ -988,6 +1417,8 @@ void MainWindow::createMaterialDock()
                         colorChartNumber(firstIndex));
                 }
             });
+    connect(backgroundPreviewCheck_, &QCheckBox::toggled, this,
+            [this] { updateOverThrustBackgroundPreview(); });
     connect(materialIndexSpinBox_, &QSpinBox::valueChanged, this,
             [this](const int value) {
                 const auto index = static_cast<std::uint8_t>(
@@ -1280,6 +1711,638 @@ void MainWindow::refreshLayerList()
     }
 }
 
+void MainWindow::createObjectDock()
+{
+    objectDock_ = new QDockWidget(tr("Objects"), this);
+    auto* contents = new QWidget(objectDock_);
+    auto* layout = new QVBoxLayout(contents);
+    objectModeCheck_ = new QCheckBox(tr("Edit objects on canvas"), contents);
+    objectModeCheck_->setChecked(false);
+    layout->addWidget(objectModeCheck_);
+    auto* tools = new QHBoxLayout();
+    const auto addObjectTool = [&](const QString& icon, const QString& label,
+                                   const char* type) {
+        auto* button = new QToolButton(contents);
+        button->setIcon(QIcon(icon));
+        button->setIconSize(QSize(32, 32));
+        button->setToolTip(label);
+        button->setAccessibleName(label);
+        connect(button, &QToolButton::clicked, this,
+                [this, type] { addOverThrustObject(type); });
+        tools->addWidget(button);
+    };
+    addObjectTool(QStringLiteral(":/icons/overthrust/tool-door.png"),
+                  tr("Create sliding gate"), "sliding_door");
+    addObjectTool(QStringLiteral(":/icons/overthrust/tool-teleporter.png"),
+                  tr("Create teleporter"), "teleporter");
+    addObjectTool(QStringLiteral(":/icons/overthrust/tool-service-orb.png"),
+                  tr("Create service orb"), "service_orb");
+    addObjectTool(QStringLiteral(":/icons/overthrust/tool-team-base.png"),
+                  tr("Create team base"), "team_base");
+    tools->addStretch();
+    layout->addLayout(tools);
+    objectListWidget_ = new QListWidget(contents);
+    objectListWidget_->setSelectionMode(QAbstractItemView::SingleSelection);
+    layout->addWidget(objectListWidget_, 1);
+    auto* row = new QHBoxLayout();
+    auto* add = new QPushButton(tr("Create"), contents);
+    auto* edit = new QPushButton(tr("Properties"), contents);
+    auto* duplicate = new QPushButton(tr("Duplicate"), contents);
+    auto* remove = new QPushButton(tr("Delete"), contents);
+    auto* redraw = new QPushButton(tr("Redraw area"), contents);
+    row->addWidget(add);
+    row->addWidget(edit);
+    row->addWidget(duplicate);
+    row->addWidget(remove);
+    layout->addLayout(row);
+    layout->addWidget(redraw);
+    auto* hint = new QLabel(
+        tr("Drag an object to move it. Selected objects have separate width, height, corner-resize, and rotation handles. Properties remains available for precise values and teleporter connections."),
+        contents);
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+    objectDock_->setWidget(contents);
+    addDockWidget(Qt::RightDockWidgetArea, objectDock_);
+    objectDock_->setVisible(false);
+    connect(add, &QPushButton::clicked, this,
+            [this] { addOverThrustObject(); });
+    connect(edit, &QPushButton::clicked, this,
+            &MainWindow::editSelectedOverThrustObject);
+    connect(duplicate, &QPushButton::clicked, this,
+            &MainWindow::duplicateSelectedOverThrustObject);
+    connect(remove, &QPushButton::clicked, this,
+            &MainWindow::deleteSelectedOverThrustObject);
+    connect(redraw, &QPushButton::clicked, this,
+            &MainWindow::redrawSelectedTeamBase);
+    connect(objectListWidget_, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem*) { editSelectedOverThrustObject(); });
+    connect(objectListWidget_, &QListWidget::currentRowChanged, canvas_,
+            &LevelCanvas::setSelectedObject);
+    connect(objectModeCheck_, &QCheckBox::toggled, this,
+            [this](const bool enabled) {
+                canvas_->setObjectEditingEnabled(
+                    enabled && creationSettings_.game == GameId::OverThrust);
+            });
+    refreshObjectList();
+}
+
+void MainWindow::refreshObjectList()
+{
+    const bool enabled = creationSettings_.game == GameId::OverThrust &&
+                         overthrustData_ != nullptr;
+    objectDock_->setVisible(enabled);
+    canvas_->setObjectEditingEnabled(enabled && objectModeCheck_->isChecked());
+    canvas_->setObjects(enabled ? &overthrustData_->objects : nullptr);
+    if (!enabled) return;
+    for (const OverThrustObject& object : overthrustData_->objects) {
+        if (object.type != "sliding_door" ||
+            object.activationMode != "channel" ||
+            object.activationChannel.empty()) {
+            continue;
+        }
+        const auto found = std::find_if(
+            overthrustData_->channels.begin(), overthrustData_->channels.end(),
+            [&](const OverThrustChannel& channel) {
+                return channel.id == object.activationChannel;
+            });
+        if (found == overthrustData_->channels.end()) {
+            overthrustData_->channels.push_back(
+                {object.activationChannel, false});
+        }
+    }
+    const int selected = objectListWidget_->currentRow();
+    const QSignalBlocker blocker(objectListWidget_);
+    objectListWidget_->clear();
+    for (const OverThrustObject& object : overthrustData_->objects) {
+        QString iconPath;
+        if (object.type == "sliding_door")
+            iconPath = QStringLiteral(":/icons/overthrust/tool-door.png");
+        else if (object.type == "teleporter")
+            iconPath = QStringLiteral(":/icons/overthrust/tool-teleporter.png");
+        else if (object.type == "service_orb")
+            iconPath = QStringLiteral(":/icons/overthrust/tool-service-orb.png");
+        else if (object.type == "team_base")
+            iconPath = QStringLiteral(":/icons/overthrust/tool-team-base.png");
+        const QString typeLabel =
+            object.type == "sliding_door"
+                ? tr("sliding gate")
+                : QString::fromStdString(object.type);
+        auto* item = new QListWidgetItem(
+            QIcon(iconPath),
+            QStringLiteral("%1  [%2]")
+                .arg(QString::fromStdString(object.id),
+                     typeLabel),
+            objectListWidget_);
+        item->setToolTip(QString::fromStdString(object.id));
+    }
+    if (!overthrustData_->objects.empty()) {
+        objectListWidget_->setCurrentRow(std::clamp(
+            selected, 0, static_cast<int>(overthrustData_->objects.size()) - 1));
+    }
+    canvas_->refreshImage();
+}
+
+void MainWindow::applyObjectListChange(
+    const QString& text, std::vector<OverThrustObject> before,
+    std::vector<OverThrustObject> after)
+{
+    if (!overthrustData_) return;
+    canvas_->undoStack()->push(new ObjectListCommand(
+        &overthrustData_->objects, std::move(before), std::move(after),
+        [this] { refreshObjectList(); }, text));
+    setModified(true);
+}
+
+bool MainWindow::editOverThrustObject(OverThrustObject& object,
+                                      const bool creating)
+{
+    const bool knownType = object.type == "sliding_door" ||
+                           object.type == "teleporter" ||
+                           object.type == "service_orb" ||
+                           object.type == "team_base";
+    if (!knownType) {
+        QMessageBox::information(
+            this, tr("Unknown object type"),
+            tr("This object is retained for forward compatibility but cannot be edited or published by this profile revision."));
+        return false;
+    }
+    const std::string originalId = object.id;
+    QDialog dialog(this);
+    dialog.setWindowTitle(creating ? tr("Create OverThrust object")
+                                   : tr("Object properties"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+    form->addRow(tr("Type:"),
+                 new QLabel(QString::fromStdString(object.type), &dialog));
+    auto* id = new QLineEdit(QString::fromStdString(object.id), &dialog);
+    id->setMaxLength(256);
+    form->addRow(tr("Stable ID:"), id);
+    const auto integer = [&dialog](const int minimum, const int maximum,
+                                   const int value) {
+        auto* spin = new QSpinBox(&dialog);
+        spin->setRange(minimum, maximum);
+        spin->setValue(value);
+        return spin;
+    };
+    auto* x = integer(0, static_cast<int>(level_->width) - 1,
+                      object.transform.x);
+    auto* y = integer(0, static_cast<int>(level_->height) - 1,
+                      object.transform.y);
+    auto* width = integer(1, static_cast<int>(level_->width),
+                          object.transform.width);
+    auto* height = integer(1, static_cast<int>(level_->height),
+                           object.transform.height);
+    auto* rotation = new QDoubleSpinBox(&dialog);
+    rotation->setRange(-359.999, 359.999);
+    rotation->setDecimals(3);
+    rotation->setSuffix(QStringLiteral("°"));
+    rotation->setValue(object.transform.rotationMillidegrees / 1000.0);
+    form->addRow(tr("X (px):"), x);
+    form->addRow(tr("Y (px):"), y);
+    form->addRow(tr("Width (px):"), width);
+    form->addRow(tr("Height (px):"), height);
+    form->addRow(tr("Rotation:"), rotation);
+    if (object.type == "team_base") {
+        width->setEnabled(false);
+        height->setEnabled(false);
+        rotation->setEnabled(false);
+        width->setToolTip(tr("Team-base size is defined by its polygon."));
+        height->setToolTip(tr("Team-base size is defined by its polygon."));
+    }
+
+    auto* appearance = new QComboBox(&dialog);
+    auto addAppearances = [&](const std::initializer_list<const char*> values) {
+        for (const char* value : values) {
+            appearance->addItem(QString::fromLatin1(value));
+        }
+        const int current = appearance->findText(
+            QString::fromStdString(object.appearanceId));
+        if (current >= 0) appearance->setCurrentIndex(current);
+    };
+    QSpinBox* slideDistance = nullptr;
+    QDoubleSpinBox* speed = nullptr;
+    QComboBox* initialState = nullptr;
+    QComboBox* activationMode = nullptr;
+    QDoubleSpinBox* activationRadius = nullptr;
+    QLineEdit* channel = nullptr;
+    QComboBox* material = nullptr;
+    QDoubleSpinBox* radius = nullptr;
+    QComboBox* target = nullptr;
+    QComboBox* velocity = nullptr;
+    QComboBox* serviceProfile = nullptr;
+    QSpinBox* teamSlot = nullptr;
+    QSpinBox* anchorX = nullptr;
+    QSpinBox* anchorY = nullptr;
+    QComboBox* accessMode = nullptr;
+    QLineEdit* accessSlots = nullptr;
+    if (object.type == "sliding_door") {
+        const int currentDistance = std::max(
+            1, static_cast<int>(std::round(std::hypot(
+                   object.openOffsetX, object.openOffsetY))));
+        slideDistance = integer(1, 4096, currentDistance);
+        speed = new QDoubleSpinBox(&dialog);
+        speed->setRange(0.001, 1024);
+        speed->setDecimals(6);
+        speed->setValue(object.speedPixelsPerSecond);
+        initialState = new QComboBox(&dialog);
+        initialState->addItems({QStringLiteral("closed"), QStringLiteral("open")});
+        initialState->setCurrentText(QString::fromStdString(object.initialState));
+        activationMode = new QComboBox(&dialog);
+        activationMode->addItems({QStringLiteral("proximity"),
+                                  QStringLiteral("channel")});
+        activationMode->setCurrentText(
+            QString::fromStdString(object.activationMode));
+        activationRadius = new QDoubleSpinBox(&dialog);
+        activationRadius->setRange(0.001, 1024);
+        activationRadius->setValue(object.activationRadiusPixels);
+        channel = new QLineEdit(QString::fromStdString(object.activationChannel),
+                                &dialog);
+        material = new QComboBox(&dialog);
+        material->addItems({QStringLiteral("core:aluminium"),
+                            QStringLiteral("core:titanium"),
+                            QStringLiteral("core:tungsten")});
+        material->setCurrentText(QString::fromStdString(object.materialId));
+        addAppearances({"appearance:door/aluminium",
+                        "appearance:door/titanium",
+                        "appearance:door/tungsten"});
+        form->addRow(tr("Slide distance along arrow (px):"), slideDistance);
+        form->addRow(tr("Speed (px/s):"), speed);
+        form->addRow(tr("Initial state:"), initialState);
+        form->addRow(tr("Activation:"), activationMode);
+        form->addRow(tr("Proximity radius (px):"), activationRadius);
+        form->addRow(tr("Activation channel:"), channel);
+        form->addRow(tr("Gate material:"), material);
+    } else if (object.type == "teleporter") {
+        radius = new QDoubleSpinBox(&dialog);
+        radius->setRange(0.001, 1024);
+        radius->setValue(object.radiusPixels);
+        target = new QComboBox(&dialog);
+        target->setEditable(true);
+        target->addItem(QString());
+        for (const OverThrustObject& candidate : overthrustData_->objects) {
+            if (candidate.type == "teleporter" &&
+                candidate.id != originalId) {
+                target->addItem(QString::fromStdString(candidate.id));
+            }
+        }
+        const QString currentTarget =
+            QString::fromStdString(object.targetObjectId);
+        if (!currentTarget.isEmpty() && target->findText(currentTarget) < 0)
+            target->addItem(currentTarget);
+        target->setCurrentText(currentTarget);
+        velocity = new QComboBox(&dialog);
+        velocity->addItems({QStringLiteral("preserve"), QStringLiteral("zero"),
+                            QStringLiteral("rotate_to_exit")});
+        velocity->setCurrentText(QString::fromStdString(object.velocityMode));
+        addAppearances({"appearance:teleporter/blue",
+                        "appearance:teleporter/orange"});
+        form->addRow(tr("Interaction radius (px):"), radius);
+        form->addRow(tr("Target teleporter ID:"), target);
+        form->addRow(tr("Velocity mode:"), velocity);
+    } else if (object.type == "service_orb") {
+        radius = new QDoubleSpinBox(&dialog);
+        radius->setRange(0.001, 1024);
+        radius->setValue(object.radiusPixels);
+        serviceProfile = new QComboBox(&dialog);
+        serviceProfile->addItems({QStringLiteral("core:heal-only"),
+                                  QStringLiteral("core:heal-and-weapons")});
+        serviceProfile->setCurrentText(
+            QString::fromStdString(object.serviceProfileId));
+        addAppearances({"appearance:service-orb/default",
+                        "appearance:service-orb/private"});
+        form->addRow(tr("Interaction radius (px):"), radius);
+        form->addRow(tr("Service profile:"), serviceProfile);
+    } else {
+        teamSlot = integer(1, 4, object.teamSlot);
+        anchorX = integer(0, 4096, object.objectiveAnchorX);
+        anchorY = integer(0, 4096, object.objectiveAnchorY);
+        addAppearances({"appearance:team-base/default"});
+        form->addRow(tr("Team slot:"), teamSlot);
+        form->addRow(tr("Objective anchor X:"), anchorX);
+        form->addRow(tr("Objective anchor Y:"), anchorY);
+    }
+    if (object.type != "team_base") {
+        accessMode = new QComboBox(&dialog);
+        accessMode->addItems({QStringLiteral("everyone"),
+                              QStringLiteral("player_slots")});
+        accessMode->setCurrentIndex(object.access.everyone ? 0 : 1);
+        QStringList slotTexts;
+        for (const int slot : object.access.playerSlots) {
+            slotTexts.push_back(QString::number(slot));
+        }
+        accessSlots =
+            new QLineEdit(slotTexts.join(QStringLiteral(",")), &dialog);
+        accessSlots->setPlaceholderText(tr("For example: 1,3"));
+        form->addRow(tr("Access:"), accessMode);
+        form->addRow(tr("Player slots:"), accessSlots);
+    }
+    form->addRow(tr("Appearance:"), appearance);
+    layout->addLayout(form);
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted) return false;
+    const QString editedId = id->text().trimmed();
+    const QRegularExpression idPattern(
+        QStringLiteral("^[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}$"));
+    const bool duplicateId = overthrustData_ && std::any_of(
+        overthrustData_->objects.begin(), overthrustData_->objects.end(),
+        [&](const OverThrustObject& existing) {
+            return existing.id == editedId.toStdString() &&
+                   (creating || existing.id != originalId);
+        });
+    if (!idPattern.match(editedId).hasMatch() || duplicateId) {
+        QMessageBox::critical(
+            this, tr("Invalid object ID"),
+            duplicateId ? tr("Every object ID must be unique.")
+                        : tr("Use 1–256 identifier characters beginning with a letter or number."));
+        return false;
+    }
+    object.id = editedId.toStdString();
+    const int moveX = x->value() - object.transform.x;
+    const int moveY = y->value() - object.transform.y;
+    if (object.type == "team_base") {
+        for (OverThrustPoint& point : object.areaPolygon) {
+            point.x += moveX;
+            point.y += moveY;
+        }
+    }
+    object.transform = {x->value(), y->value(), width->value(),
+                        height->value(),
+                        static_cast<int>(std::round(rotation->value() * 1000))};
+    object.appearanceId = appearance->currentText().toStdString();
+    if (slideDistance) {
+        const double radians = object.transform.rotationMillidegrees *
+            3.14159265358979323846 / 180000.0;
+        object.openOffsetX = static_cast<int>(std::round(
+            slideDistance->value() * std::cos(radians)));
+        object.openOffsetY = static_cast<int>(std::round(
+            slideDistance->value() * std::sin(radians)));
+        object.speedPixelsPerSecond = speed->value();
+        object.initialState = initialState->currentText().toStdString();
+        object.activationMode = activationMode->currentText().toStdString();
+        object.activationRadiusPixels = activationRadius->value();
+        object.activationChannel = channel->text().toStdString();
+        object.materialId = material->currentText().toStdString();
+    }
+    if (radius) object.radiusPixels = radius->value();
+    if (target)
+        object.targetObjectId = target->currentText().trimmed().toStdString();
+    if (velocity) object.velocityMode = velocity->currentText().toStdString();
+    if (serviceProfile) {
+        object.serviceProfileId = serviceProfile->currentText().toStdString();
+        object.services = object.serviceProfileId == "core:heal-only"
+                              ? std::vector<std::string>{"heal"}
+                              : std::vector<std::string>{"heal",
+                                                         "weapon_change"};
+    }
+    if (teamSlot) {
+        object.teamSlot = teamSlot->value();
+        object.baseProfileId = "core:team-base/heal-and-weapons";
+        object.objectiveAnchorX = anchorX->value();
+        object.objectiveAnchorY = anchorY->value();
+    }
+    if (accessMode) {
+        object.access.everyone = accessMode->currentIndex() == 0;
+        object.access.playerSlots.clear();
+        if (!object.access.everyone) {
+            for (const QString& slot : accessSlots->text().split(
+                     QLatin1Char(','), Qt::SkipEmptyParts)) {
+                object.access.playerSlots.push_back(slot.trimmed().toInt());
+            }
+        }
+    }
+    return true;
+}
+
+void MainWindow::addOverThrustObject()
+{
+    if (!overthrustData_) return;
+    const QStringList types{tr("Sliding gate"), tr("Teleporter"),
+                            tr("Service orb"), tr("Team base")};
+    bool accepted = false;
+    const QString selected = QInputDialog::getItem(
+        this, tr("Create object"), tr("Object type:"), types, 0, false,
+        &accepted);
+    if (!accepted) return;
+    const int type = types.indexOf(selected);
+    addOverThrustObject(type == 0   ? "sliding_door"
+                        : type == 1 ? "teleporter"
+                        : type == 2 ? "service_orb"
+                                    : "team_base");
+}
+
+void MainWindow::addOverThrustObject(const std::string& type)
+{
+    if (!overthrustData_) return;
+    if (type == "team_base") {
+        objectModeCheck_->setChecked(true);
+        canvas_->beginTeamBasePolygon();
+        statusBar()->showMessage(
+            tr("Click polygon corners; double-click, right-click, or press Enter to finish. Escape cancels."));
+        return;
+    }
+    OverThrustObject object;
+    object.type = type;
+    std::size_t sequence = overthrustData_->objects.size() + 1;
+    do {
+        object.id = object.type + "_" + std::to_string(sequence++);
+    } while (std::any_of(
+        overthrustData_->objects.begin(), overthrustData_->objects.end(),
+        [&](const OverThrustObject& existing) {
+            return existing.id == object.id;
+        }));
+    const int objectWidth = object.type == "sliding_door" ? 12 : 8;
+    const int objectHeight = object.type == "sliding_door" ? 4 : 8;
+    object.transform = {
+        std::max(0, (static_cast<int>(level_->width) - objectWidth) / 2),
+        std::max(0, (static_cast<int>(level_->height) - objectHeight) / 2),
+        objectWidth, objectHeight, 0};
+    if (object.type == "sliding_door") {
+        object.openOffsetX = objectWidth;
+        object.materialId = "core:aluminium";
+        object.appearanceId = "appearance:door/aluminium";
+    } else if (object.type == "teleporter") {
+        object.appearanceId = "appearance:teleporter/blue";
+    } else if (object.type == "service_orb") {
+        object.serviceProfileId = "core:heal-only";
+        object.services = {"heal"};
+        object.appearanceId = "appearance:service-orb/default";
+    }
+    auto before = overthrustData_->objects;
+    auto after = before;
+    if (object.type == "teleporter" && object.targetObjectId.empty()) {
+        const auto unpaired = std::find_if(
+            after.begin(), after.end(), [](const OverThrustObject& existing) {
+                return existing.type == "teleporter" &&
+                       existing.targetObjectId.empty();
+            });
+        if (unpaired != after.end()) {
+            object.targetObjectId = unpaired->id;
+            unpaired->targetObjectId = object.id;
+        }
+    }
+    after.push_back(std::move(object));
+    applyObjectListChange(tr("Create object"), std::move(before),
+                          std::move(after));
+    objectListWidget_->setCurrentRow(
+        static_cast<int>(overthrustData_->objects.size()) - 1);
+    statusBar()->showMessage(
+        tr("Object created at the level center. Drag it or use its transform handles; open Properties for gameplay settings."),
+        5000);
+}
+
+void MainWindow::redrawSelectedTeamBase()
+{
+    if (!overthrustData_) return;
+    const int row = objectListWidget_->currentRow();
+    if (row < 0 || row >= static_cast<int>(overthrustData_->objects.size()) ||
+        overthrustData_->objects[static_cast<std::size_t>(row)].type !=
+            "team_base") {
+        QMessageBox::information(this, tr("Redraw team-base area"),
+                                 tr("Select a team-base object first."));
+        return;
+    }
+    objectModeCheck_->setChecked(true);
+    canvas_->beginTeamBasePolygon(row);
+    statusBar()->showMessage(
+        tr("Click replacement polygon corners; double-click, right-click, or press Enter to finish. Escape cancels."));
+}
+
+void MainWindow::applyTeamBasePolygon(const QPolygon& polygon,
+                                      const int objectIndex)
+{
+    if (!overthrustData_ || polygon.size() < 3) return;
+    const QRect bounds = polygon.boundingRect();
+    if (bounds.width() < 2 || bounds.height() < 2) {
+        QMessageBox::warning(this, tr("Invalid team-base area"),
+                             tr("The polygon must enclose a non-zero area."));
+        return;
+    }
+    QPoint anchor = bounds.center();
+    if (!polygon.containsPoint(anchor, Qt::OddEvenFill)) {
+        bool found = false;
+        for (int y = bounds.top(); y <= bounds.bottom() && !found; ++y) {
+            for (int x = bounds.left(); x <= bounds.right(); ++x) {
+                if (polygon.containsPoint({x, y}, Qt::OddEvenFill)) {
+                    anchor = {x, y};
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            QMessageBox::warning(this, tr("Invalid team-base area"),
+                                 tr("The polygon must enclose a non-zero area."));
+            return;
+        }
+    }
+    const auto assignPolygon = [&](OverThrustObject& object) {
+        object.areaPolygon.clear();
+        object.areaPolygon.reserve(static_cast<std::size_t>(polygon.size()));
+        for (const QPoint& point : polygon)
+            object.areaPolygon.push_back({point.x(), point.y()});
+        object.transform = {bounds.left(), bounds.top(), bounds.width(),
+                            bounds.height(), 0};
+        object.objectiveAnchorX = anchor.x() - bounds.left();
+        object.objectiveAnchorY = anchor.y() - bounds.top();
+    };
+
+    auto before = overthrustData_->objects;
+    auto after = before;
+    if (objectIndex >= 0 && objectIndex < static_cast<int>(after.size()) &&
+        after[static_cast<std::size_t>(objectIndex)].type == "team_base") {
+        assignPolygon(after[static_cast<std::size_t>(objectIndex)]);
+        applyObjectListChange(tr("Redraw team-base area"), std::move(before),
+                              std::move(after));
+        objectListWidget_->setCurrentRow(objectIndex);
+        return;
+    }
+
+    OverThrustObject object;
+    object.type = "team_base";
+    std::size_t sequence = after.size() + 1;
+    do {
+        object.id = object.type + "_" + std::to_string(sequence++);
+    } while (std::any_of(after.begin(), after.end(),
+                         [&](const OverThrustObject& existing) {
+                             return existing.id == object.id;
+                         }));
+    object.baseProfileId = "core:team-base/heal-and-weapons";
+    object.appearanceId = "appearance:team-base/default";
+    assignPolygon(object);
+    if (!editOverThrustObject(object, true)) return;
+    after.push_back(std::move(object));
+    applyObjectListChange(tr("Create team base"), std::move(before),
+                          std::move(after));
+    objectListWidget_->setCurrentRow(
+        static_cast<int>(overthrustData_->objects.size()) - 1);
+}
+
+void MainWindow::editSelectedOverThrustObject()
+{
+    if (!overthrustData_) return;
+    const int row = objectListWidget_->currentRow();
+    if (row < 0 || row >= static_cast<int>(overthrustData_->objects.size()))
+        return;
+    auto before = overthrustData_->objects;
+    auto after = before;
+    if (!editOverThrustObject(after[static_cast<std::size_t>(row)], false))
+        return;
+    applyObjectListChange(tr("Edit object properties"), std::move(before),
+                          std::move(after));
+    objectListWidget_->setCurrentRow(row);
+}
+
+void MainWindow::duplicateSelectedOverThrustObject()
+{
+    if (!overthrustData_) return;
+    const int row = objectListWidget_->currentRow();
+    if (row < 0 || row >= static_cast<int>(overthrustData_->objects.size()))
+        return;
+    auto before = overthrustData_->objects;
+    auto after = before;
+    OverThrustObject copy = after[static_cast<std::size_t>(row)];
+    const std::string baseId = copy.id + "_copy";
+    copy.id = baseId;
+    int suffix = 2;
+    const auto idExists = [&](const std::string& id) {
+        return std::any_of(after.begin(), after.end(),
+                           [&](const OverThrustObject& existing) {
+                               return existing.id == id;
+                           });
+    };
+    while (idExists(copy.id)) {
+        copy.id = baseId + std::to_string(suffix++);
+    }
+    copy.transform.x = std::min(copy.transform.x + 1,
+                                static_cast<int>(level_->width) -
+                                    copy.transform.width);
+    copy.transform.y = std::min(copy.transform.y + 1,
+                                static_cast<int>(level_->height) -
+                                    copy.transform.height);
+    after.push_back(std::move(copy));
+    applyObjectListChange(tr("Duplicate object"), std::move(before),
+                          std::move(after));
+    objectListWidget_->setCurrentRow(
+        static_cast<int>(overthrustData_->objects.size()) - 1);
+}
+
+void MainWindow::deleteSelectedOverThrustObject()
+{
+    if (!overthrustData_) return;
+    const int row = objectListWidget_->currentRow();
+    if (row < 0 || row >= static_cast<int>(overthrustData_->objects.size()))
+        return;
+    auto before = overthrustData_->objects;
+    auto after = before;
+    after.erase(after.begin() + row);
+    applyObjectListChange(tr("Delete object"), std::move(before),
+                          std::move(after));
+}
+
 void MainWindow::openLevel()
 {
     if (!maybeSave()) {
@@ -1288,9 +2351,10 @@ void MainWindow::openLevel()
 
     const QString filename = QFileDialog::getOpenFileName(
         this, tr("Open project or level"), QString(),
-        tr("PCX Level Tool projects and levels (*.pxlp *.PXLP *.lev *.LEV);;"
+        tr("PCX Level Tool projects, levels and PCX (*.pxlp *.PXLP *.lev *.LEV *.pcx *.PCX);;"
            "PCX Level Tool projects (*.pxlp *.PXLP);;"
-           "Supported game levels (*.lev *.LEV)"));
+           "Supported game levels (*.lev *.LEV);;"
+           "Indexed PCX images (*.pcx *.PCX)"));
     if (filename.isEmpty()) {
         return;
     }
@@ -1302,13 +2366,64 @@ void MainWindow::openLevel()
     const bool isPxlProject =
         QString::compare(suffix, QStringLiteral("pxlp"),
                          Qt::CaseInsensitive) == 0;
+    const bool isPcx =
+        QString::compare(suffix, QStringLiteral("pcx"),
+                         Qt::CaseInsensitive) == 0;
     const bool isProject = isPxlProject;
     std::unique_ptr<Level> loadedBackground;
+    std::unique_ptr<OverThrustProjectData> loadedOverThrust;
     LevelCreationSettings loadedSettings;
     bool loadedSuccessfully = false;
     if (isPxlProject) {
         loadedSuccessfully = loadPxlProject(
-            path, *loaded, loadedBackground, loadedSettings, error);
+            path, *loaded, loadedBackground, loadedSettings, loadedOverThrust,
+            error);
+    } else if (isPcx) {
+        loadedSuccessfully = loadPcx(path, *loaded, error);
+        if (loadedSuccessfully) {
+            QStringList compatibleNames;
+            std::vector<GameId> compatibleGames;
+            for (const GameProfile& profile : availableGameProfiles()) {
+                if (dimensionsFitProfile(profile, loaded->width,
+                                         loaded->height)) {
+                    compatibleNames.push_back(QString::fromUtf8(
+                        profile.displayName.data(), profile.displayName.size()));
+                    compatibleGames.push_back(profile.id);
+                }
+            }
+            if (compatibleGames.empty()) {
+                loadedSuccessfully = false;
+                error = "PCX dimensions are not supported by any game profile";
+            } else {
+                bool selected = false;
+                const QString gameName = QInputDialog::getItem(
+                    this, tr("Open PCX image"), tr("Use game profile:"),
+                    compatibleNames, 0, false, &selected);
+                if (!selected) {
+                    return;
+                }
+                const int selectedIndex = compatibleNames.indexOf(gameName);
+                if (selectedIndex < 0) {
+                    return;
+                }
+                loadedSettings.game = compatibleGames[static_cast<std::size_t>(
+                    selectedIndex)];
+                loadedSettings.name = loaded->name;
+                loadedSettings.width = static_cast<int>(loaded->width);
+                loadedSettings.height = static_cast<int>(loaded->height);
+                if (loadedSettings.game == GameId::OverThrust) {
+                    loadedSettings.backgroundMode =
+                        BackgroundMode::ExternalTrueColor;
+                    loadedOverThrust =
+                        std::make_unique<OverThrustProjectData>();
+                    loadedOverThrust->levelId = loaded->name;
+                    loadedOverThrust->displayName = loaded->name;
+                }
+                if (loadedSettings.game == GameId::Auts) {
+                    applyAutsGameRules(*loaded);
+                }
+            }
+        }
     } else {
         std::string vwingError;
         loadedSuccessfully = loadLev(path, *loaded, vwingError);
@@ -1334,8 +2449,9 @@ void MainWindow::openLevel()
     canvas_->forgetLevel(level_.get());
     level_ = std::move(loaded);
     backgroundLevel_ = std::move(loadedBackground);
+    overthrustData_ = std::move(loadedOverThrust);
     creationSettings_ = loadedSettings;
-    if (!isPxlProject) {
+    if (!isPxlProject && !isPcx) {
         if (creationSettings_.game != GameId::Auts) {
             creationSettings_.game = GameId::VWing;
         }
@@ -1343,15 +2459,21 @@ void MainWindow::openLevel()
         creationSettings_.width = static_cast<int>(level_->width);
         creationSettings_.height = static_cast<int>(level_->height);
     }
-    levelSettingsAction_->setEnabled(creationSettings_.game == GameId::Wings);
+    levelSettingsAction_->setEnabled(creationSettings_.game == GameId::Wings ||
+                                     creationSettings_.game ==
+                                         GameId::OverThrust);
+    levelSettingsAction_->setText(
+        creationSettings_.game == GameId::OverThrust
+            ? tr("OverThrust level &settings...")
+            : tr("Wings level &settings..."));
     documentTabs_->setCurrentIndex(0);
     documentTabs_->setVisible(creationSettings_.game == GameId::Wings);
     configurePaletteForGame();
     if (creationSettings_.game == GameId::Wings) {
-        configureWingsDocuments();
+        configureProfileDocuments();
     }
     projectPath_ = isProject ? path : std::filesystem::path{};
-    publishPath_ = isProject ? std::filesystem::path{} : path;
+    publishPath_ = isProject || isPcx ? std::filesystem::path{} : path;
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
     {
@@ -1367,6 +2489,37 @@ void MainWindow::openLevel()
     nonUndoModified_ = false;
     setModified(false);
     statusBar()->showMessage(tr("Opened %1").arg(filename), 3000);
+}
+
+void MainWindow::exportPcx()
+{
+    Level* document = activeLevel();
+    if (document == nullptr) {
+        return;
+    }
+    QString suggested = QString::fromStdString(document->name);
+    if (suggested.isEmpty()) {
+        suggested = tr("Untitled");
+    }
+    suggested += QStringLiteral(".pcx");
+    QString filename = QFileDialog::getSaveFileName(
+        this, tr("Export indexed PCX image"), suggested,
+        tr("Indexed PCX images (*.pcx *.PCX)"));
+    if (filename.isEmpty()) {
+        return;
+    }
+    if (!filename.endsWith(QStringLiteral(".pcx"), Qt::CaseInsensitive)) {
+        filename += QStringLiteral(".pcx");
+    }
+    canvas_->commitSelection();
+    flattenLayers(*document);
+    std::string error;
+    if (!savePcx(toPath(filename), *document, error)) {
+        QMessageBox::critical(this, tr("PCX export failed"),
+                              QString::fromStdString(error));
+        return;
+    }
+    statusBar()->showMessage(tr("Exported %1").arg(filename), 3000);
 }
 
 void MainWindow::importImage()
@@ -1418,10 +2571,7 @@ void MainWindow::importImage()
         return;
     }
 
-    if (imported->width < static_cast<std::size_t>(profile.minimumWidth) ||
-        imported->width > static_cast<std::size_t>(profile.maximumWidth) ||
-        imported->height < static_cast<std::size_t>(profile.minimumHeight) ||
-        imported->height > static_cast<std::size_t>(profile.maximumHeight)) {
+    if (!dimensionsFitProfile(profile, imported->width, imported->height)) {
         QMessageBox::critical(
             this, tr("Wrong image dimensions"),
             tr("%1 requires an image between %2 x %3 and %4 x %5 pixels. "
@@ -1491,13 +2641,25 @@ void MainWindow::installImportedLevel(
     canvas_->forgetLevel(level_.get());
     level_ = std::move(imported);
     backgroundLevel_.reset();
+    overthrustData_.reset();
     creationSettings_ = settings;
+    if (settings.game == GameId::OverThrust) {
+        overthrustData_ = std::make_unique<OverThrustProjectData>();
+        overthrustData_->levelId = level_->name;
+        overthrustData_->displayName = level_->name;
+        creationSettings_.backgroundMode = BackgroundMode::None;
+    }
     projectPath_.clear();
     publishPath_.clear();
     documentTabs_->setCurrentIndex(0);
     configurePaletteForGame();
-    configureWingsDocuments();
-    levelSettingsAction_->setEnabled(settings.game == GameId::Wings);
+    configureProfileDocuments();
+    levelSettingsAction_->setEnabled(settings.game == GameId::Wings ||
+                                     settings.game == GameId::OverThrust);
+    levelSettingsAction_->setText(
+        settings.game == GameId::OverThrust
+            ? tr("OverThrust level &settings...")
+            : tr("Wings level &settings..."));
     canvas_->setLevel(level_.get());
     paletteWidget_->setLevel(level_.get());
     {
@@ -1542,6 +2704,7 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
     }
 
     LevelCreationSettings settings;
+    std::unique_ptr<OverThrustProjectData> previousOverThrust;
     const GameProfile& profile =
         availableGameProfiles()[static_cast<std::size_t>(selectedIndex)];
     settings.game = profile.id;
@@ -1550,18 +2713,31 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
     if (profile.id == GameId::Wings && !promptForWingsSettings(settings)) {
         return false;
     }
+    if (profile.id == GameId::OverThrust) {
+        previousOverThrust = std::move(overthrustData_);
+        overthrustData_ = std::make_unique<OverThrustProjectData>();
+        if (!promptForOverThrustSettings(settings)) {
+            overthrustData_ = std::move(previousOverThrust);
+            updateOverThrustBackgroundPreview();
+            refreshObjectList();
+            return false;
+        }
+    }
 
     auto fresh = std::make_unique<Level>();
     fresh->name = settings.name;
     if (settings.game == GameId::Wings) {
         fresh->palette = defaultWingsPalette();
+    } else if (settings.game == GameId::OverThrust) {
+        fresh->palette = defaultOverThrustPalette();
     } else if (settings.game == GameId::Auts) {
         initializeBlankAutsLevel(*fresh);
         fresh->name = settings.name;
     } else {
         fresh->palette = defaultVWingPalette();
     }
-    if (settings.game == GameId::Wings) {
+    if (settings.game == GameId::Wings ||
+        settings.game == GameId::OverThrust) {
         fresh->resize(static_cast<std::size_t>(settings.width),
                       static_cast<std::size_t>(settings.height));
     } else if (settings.game == GameId::VWing) {
@@ -1572,11 +2748,19 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
     canvas_->forgetLevel(backgroundLevel_.get());
     canvas_->forgetLevel(level_.get());
     level_ = std::move(fresh);
+    if (settings.game != GameId::OverThrust) {
+        overthrustData_.reset();
+    }
     creationSettings_ = settings;
     documentTabs_->setCurrentIndex(0);
     configurePaletteForGame();
-    configureWingsDocuments();
-    levelSettingsAction_->setEnabled(settings.game == GameId::Wings);
+    configureProfileDocuments();
+    levelSettingsAction_->setEnabled(settings.game == GameId::Wings ||
+                                     settings.game == GameId::OverThrust);
+    levelSettingsAction_->setText(
+        settings.game == GameId::OverThrust
+            ? tr("OverThrust level &settings...")
+            : tr("Wings level &settings..."));
     projectPath_.clear();
     publishPath_.clear();
     canvas_->setLevel(level_.get());
@@ -1606,6 +2790,12 @@ bool MainWindow::createNewLevel(const bool checkUnsavedChanges)
                       .arg(settings.width)
                       .arg(settings.height),
             5000);
+    } else if (settings.game == GameId::OverThrust) {
+        statusBar()->showMessage(
+            tr("Created a new OverThrust material grid: %1 x %2")
+                .arg(settings.width)
+                .arg(settings.height),
+            4000);
     } else if (settings.game == GameId::Auts) {
         statusBar()->showMessage(
             tr("Created a new AUTS level: 320 x 400 with a protected border"),
@@ -1740,25 +2930,213 @@ bool MainWindow::promptForWingsSettings(LevelCreationSettings& settings,
     return true;
 }
 
+bool MainWindow::promptForOverThrustSettings(
+    LevelCreationSettings& settings, const bool allowDimensionEditing)
+{
+    if (!overthrustData_) {
+        overthrustData_ = std::make_unique<OverThrustProjectData>();
+    }
+    OverThrustProjectData edited = *overthrustData_;
+    const GameProfile& profile = gameProfile(GameId::OverThrust);
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("OverThrust level settings"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+    auto* levelId = new QLineEdit(QString::fromStdString(edited.levelId),
+                                  &dialog);
+    levelId->setMaxLength(256);
+    levelId->setValidator(new QRegularExpressionValidator(
+        QRegularExpression(QStringLiteral("[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}")),
+        levelId));
+    form->addRow(tr("Level ID:"), levelId);
+    auto* displayName = new QLineEdit(
+        QString::fromStdString(edited.displayName), &dialog);
+    displayName->setMaxLength(256);
+    form->addRow(tr("Display name:"), displayName);
+    auto* author = new QLineEdit(QString::fromStdString(edited.author), &dialog);
+    author->setMaxLength(256);
+    form->addRow(tr("Author:"), author);
+    auto* description = new QTextEdit(
+        QString::fromStdString(edited.description), &dialog);
+    description->setAcceptRichText(false);
+    description->setMaximumHeight(90);
+    form->addRow(tr("Description:"), description);
+    auto* width = new QSpinBox(&dialog);
+    width->setRange(profile.minimumWidth, profile.maximumWidth);
+    width->setValue(settings.width);
+    width->setEnabled(allowDimensionEditing);
+    width->setSuffix(tr(" px"));
+    form->addRow(tr("World width:"), width);
+    auto* height = new QSpinBox(&dialog);
+    height->setRange(profile.minimumHeight, profile.maximumHeight);
+    height->setValue(settings.height);
+    height->setEnabled(allowDimensionEditing);
+    height->setSuffix(tr(" px"));
+    form->addRow(tr("World height:"), height);
+    auto* parallax = new QCheckBox(tr("Parallax background"), &dialog);
+    parallax->setChecked(edited.backgroundParallax);
+    form->addRow(QString(), parallax);
+    auto* scrollX = new QDoubleSpinBox(&dialog);
+    scrollX->setRange(0, 4);
+    scrollX->setDecimals(6);
+    scrollX->setValue(edited.backgroundScrollX);
+    form->addRow(tr("Background scroll X:"), scrollX);
+    auto* scrollY = new QDoubleSpinBox(&dialog);
+    scrollY->setRange(0, 4);
+    scrollY->setDecimals(6);
+    scrollY->setValue(edited.backgroundScrollY);
+    form->addRow(tr("Background scroll Y:"), scrollY);
+    auto* backgroundStatus = new QLabel(&dialog);
+    backgroundStatus->setWordWrap(true);
+    auto updateBackgroundStatus = [&] {
+        backgroundStatus->setText(
+            edited.background.empty()
+                ? tr("None (optional)")
+                : tr("%1 × %2, normalized sRGB RGBA8 presentation PNG. Canvas preview is optional and hidden by default.")
+                      .arg(edited.background.width)
+                      .arg(edited.background.height));
+    };
+    auto* backgroundRow = new QWidget(&dialog);
+    auto* backgroundLayout = new QHBoxLayout(backgroundRow);
+    backgroundLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundLayout->addWidget(backgroundStatus, 1);
+    auto* replaceBackground = new QPushButton(tr("Import / replace..."),
+                                               backgroundRow);
+    backgroundLayout->addWidget(replaceBackground);
+    auto* removeBackground = new QPushButton(tr("Remove"), backgroundRow);
+    backgroundLayout->addWidget(removeBackground);
+    form->addRow(tr("Background:"), backgroundRow);
+    connect(replaceBackground, &QPushButton::clicked, &dialog, [&] {
+        const QString filename = QFileDialog::getOpenFileName(
+            &dialog, tr("Import OverThrust background"), QString(),
+            tr("Background images (*.png *.PNG *.jpg *.JPG *.jpeg *.JPEG *.webp *.WEBP)"));
+        if (filename.isEmpty()) return;
+        OverThrustBackground imported;
+        QString importError;
+        if (!loadOverThrustBackground(filename,
+                                      static_cast<std::size_t>(width->value()),
+                                      static_cast<std::size_t>(height->value()),
+                                      imported, importError)) {
+            QMessageBox::critical(&dialog, tr("Background import failed"),
+                                  importError);
+            return;
+        }
+        edited.background = std::move(imported);
+        updateBackgroundStatus();
+    });
+    connect(removeBackground, &QPushButton::clicked, &dialog, [&] {
+        edited.background = {};
+        updateBackgroundStatus();
+    });
+    updateBackgroundStatus();
+    layout->addLayout(form);
+
+    auto* modes = new QGroupBox(tr("Allowed game modes"), &dialog);
+    auto* modesLayout = new QVBoxLayout(modes);
+    const std::array<std::pair<const char*, const char*>, 4> modeDefs{{
+        {"Sandbox", "core:sandbox"},
+        {"Free for all", "core:free_for_all"},
+        {"Team deathmatch", "core:team_deathmatch"},
+        {"Capture the flag", "core:capture_the_flag"},
+    }};
+    std::array<QCheckBox*, 4> modeChecks{};
+    for (std::size_t index = 0; index < modeDefs.size(); ++index) {
+        modeChecks[index] = new QCheckBox(tr(modeDefs[index].first), modes);
+        modeChecks[index]->setChecked(
+            std::find(edited.allowedGameModes.begin(),
+                      edited.allowedGameModes.end(), modeDefs[index].second) !=
+            edited.allowedGameModes.end());
+        modesLayout->addWidget(modeChecks[index]);
+    }
+    layout->addWidget(modes);
+    auto* note = new QLabel(
+        tr("Team modes additionally require 2–4 team-base objects and bindings before publication."),
+        &dialog);
+    note->setWordWrap(true);
+    layout->addWidget(note);
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted) return false;
+    if (static_cast<std::uint64_t>(width->value()) * height->value() >
+        profile.maximumCells) {
+        QMessageBox::critical(
+            this, tr("Invalid material dimensions"),
+            tr("OverThrust permits at most 4,194,304 cells."));
+        return false;
+    }
+    if (!edited.background.empty() &&
+        static_cast<std::uint64_t>(edited.background.width) * height->value() !=
+            static_cast<std::uint64_t>(edited.background.height) *
+                width->value()) {
+        QMessageBox::critical(
+            this, tr("Background aspect ratio changed"),
+            tr("Replace the background with one matching the new material-grid aspect ratio."));
+        return false;
+    }
+    edited.levelId = levelId->text().toStdString();
+    edited.displayName = displayName->text().toStdString();
+    edited.author = author->text().toStdString();
+    edited.description = description->toPlainText().left(4096).toStdString();
+    edited.backgroundParallax = parallax->isChecked();
+    edited.backgroundScrollX = scrollX->value();
+    edited.backgroundScrollY = scrollY->value();
+    edited.allowedGameModes.clear();
+    for (std::size_t index = 0; index < modeDefs.size(); ++index) {
+        if (modeChecks[index]->isChecked()) {
+            edited.allowedGameModes.emplace_back(modeDefs[index].second);
+        }
+    }
+    if (edited.allowedGameModes.empty()) {
+        QMessageBox::critical(
+            this, tr("Invalid OverThrust settings"),
+            tr("At least one game mode is required."));
+        return false;
+    }
+    settings.width = width->value();
+    settings.height = height->value();
+    settings.name = edited.displayName.empty() ? edited.levelId
+                                                : edited.displayName;
+    settings.backgroundMode = edited.background.empty()
+                                  ? BackgroundMode::None
+                                  : BackgroundMode::ExternalTrueColor;
+    *overthrustData_ = std::move(edited);
+    return true;
+}
+
 void MainWindow::editLevelSettings()
 {
-    if (creationSettings_.game != GameId::Wings) {
+    if (creationSettings_.game != GameId::Wings &&
+        creationSettings_.game != GameId::OverThrust) {
         return;
     }
     LevelCreationSettings edited = creationSettings_;
     edited.name = level_->name;
-    if (!promptForWingsSettings(edited)) {
+    const bool accepted = creationSettings_.game == GameId::Wings
+                              ? promptForWingsSettings(edited)
+                              : promptForOverThrustSettings(edited);
+    if (!accepted) {
         return;
     }
     creationSettings_ = edited;
     level_->name = edited.name;
-    configureWingsDocuments();
+    if (creationSettings_.game == GameId::Wings) {
+        configureProfileDocuments();
+    } else if (level_->width != static_cast<std::size_t>(edited.width) ||
+               level_->height != static_cast<std::size_t>(edited.height)) {
+        canvas_->forgetLevel(level_.get());
+        level_->resizePreservingContent(edited.width, edited.height);
+        canvas_->setLevel(level_.get());
+    }
     {
         const QSignalBlocker blocker(levelNameEdit_);
         levelNameEdit_->setText(QString::fromStdString(level_->name));
     }
     nonUndoModified_ = true;
     setModified(true);
+    updateOverThrustBackgroundPreview();
     updateWindowTitle();
 }
 
@@ -1771,7 +3149,7 @@ Level* MainWindow::activeLevel() const
     return level_.get();
 }
 
-void MainWindow::configureWingsDocuments()
+void MainWindow::configureProfileDocuments()
 {
     const bool wings = creationSettings_.game == GameId::Wings;
     documentTabs_->setVisible(wings);
@@ -1816,7 +3194,7 @@ void MainWindow::configureWingsDocuments()
                 static_cast<std::size_t>(height));
         }
     }
-    switchWingsDocument(documentTabs_->currentIndex());
+    switchProfileDocument(documentTabs_->currentIndex());
 }
 
 void MainWindow::configurePaletteForGame()
@@ -1826,6 +3204,10 @@ void MainWindow::configurePaletteForGame()
         return;
     }
     canvas_->setGame(creationSettings_.game);
+    publishAction_->setText(
+        creationSettings_.game == GameId::OverThrust
+            ? tr("&Publish OverThrust Level...")
+            : tr("&Publish LEV..."));
     const bool hasInternalLevelName =
         creationSettings_.game == GameId::VWing;
     levelNameLabel_->setVisible(hasInternalLevelName);
@@ -1848,7 +3230,19 @@ void MainWindow::configurePaletteForGame()
     const auto add = [this](const char* label, const PaletteGroup group) {
         paletteGroupCombo_->addItem(tr(label), static_cast<int>(group));
     };
-    if (creationSettings_.game == GameId::Wings) {
+    if (creationSettings_.game == GameId::OverThrust) {
+        add("All material and fly-through indices (0-255)",
+            PaletteGroup::AllUsable);
+        add("Empty (0)", PaletteGroup::Background);
+        add("Structural", PaletteGroup::Structural);
+        add("Organic", PaletteGroup::Organic);
+        add("Metal", PaletteGroup::Metal);
+        add("Granular", PaletteGroup::Granular);
+        add("Liquid", PaletteGroup::Liquid);
+        add("Gas", PaletteGroup::Gas);
+        add("Gameplay", PaletteGroup::Gameplay);
+        add("Fly-through colors (97-255)", PaletteGroup::FlyThrough);
+    } else if (creationSettings_.game == GameId::Wings) {
         add("All documented usable", PaletteGroup::AllUsable);
         add("Background (0)", PaletteGroup::Background);
         add("Water, bubbles and snow (16, 48-53)", PaletteGroup::Water);
@@ -1882,21 +3276,45 @@ void MainWindow::configurePaletteForGame()
         add("Turret colors (244-247; not placement)",
             PaletteGroup::Turrets);
     }
+    backgroundPreviewCheck_->setVisible(
+        creationSettings_.game == GameId::OverThrust);
     paletteWidget_->setIndices(
         paletteIndices(PaletteGroup::AllUsable, creationSettings_.game));
     const int defaultIndex = creationSettings_.game == GameId::Wings
                                  ? 128
-                                 : creationSettings_.game == GameId::Auts ? 7
-                                                                          : 56;
+                                 : creationSettings_.game == GameId::Auts
+                                       ? 7
+                                       : creationSettings_.game ==
+                                                 GameId::OverThrust
+                                             ? 1
+                                             : 56;
     const int secondaryIndex = creationSettings_.game == GameId::Auts
                                    ? 39
                                    : defaultIndex + 1;
     materialIndexSpinBox_->setValue(defaultIndex);
     secondaryIndexSpinBox_->setValue(secondaryIndex);
     updateMaterialDetails(defaultIndex);
+    updateOverThrustBackgroundPreview();
+    if (objectDock_ != nullptr) {
+        refreshObjectList();
+    }
 }
 
-void MainWindow::switchWingsDocument(const int index)
+void MainWindow::updateOverThrustBackgroundPreview()
+{
+    if (creationSettings_.game == GameId::OverThrust && overthrustData_ &&
+        !overthrustData_->background.empty() && backgroundPreviewCheck_ &&
+        backgroundPreviewCheck_->isChecked()) {
+        canvas_->setTrueColorBackground(
+            overthrustData_->background.rgba.data(),
+            static_cast<int>(overthrustData_->background.width),
+            static_cast<int>(overthrustData_->background.height));
+    } else {
+        canvas_->setTrueColorBackground(nullptr, 0, 0);
+    }
+}
+
+void MainWindow::switchProfileDocument(const int index)
 {
     if (creationSettings_.game != GameId::Wings || level_ == nullptr) {
         return;
@@ -2019,8 +3437,11 @@ bool MainWindow::writeProject(const std::filesystem::path& path)
     if (backgroundLevel_) {
         flattenLayers(*backgroundLevel_);
     }
+    if (overthrustData_) {
+        rebuildTeamModeSettings(*overthrustData_);
+    }
     saved = savePxlProject(path, *level_, backgroundLevel_.get(),
-                           creationSettings_, error);
+                           creationSettings_, overthrustData_.get(), error);
     if (!saved) {
         QMessageBox::critical(this, tr("Save failed"),
                               QString::fromStdString(error));
@@ -2037,6 +3458,41 @@ bool MainWindow::writeProject(const std::filesystem::path& path)
 bool MainWindow::publishLevel()
 {
     std::filesystem::path suggested = publishPath_;
+    if (creationSettings_.game == GameId::OverThrust) {
+        const std::string levelId =
+            overthrustData_ && !overthrustData_->levelId.empty()
+                ? overthrustData_->levelId
+                : "untitled";
+        std::string safeName = levelId;
+        std::replace_if(safeName.begin(), safeName.end(),
+                        [](const char value) {
+                            return !(std::isalnum(
+                                         static_cast<unsigned char>(value)) ||
+                                     value == '-' || value == '_' ||
+                                     value == '.');
+                        },
+                        '_');
+        if (suggested.empty()) {
+            suggested = std::filesystem::path(safeName + ".OLV");
+        }
+        QSettings settings;
+        const QString configuredDirectory =
+            exportDirectorySetting(settings, GameId::OverThrust);
+        if (!configuredDirectory.isEmpty() &&
+            QDir(configuredDirectory).exists()) {
+            suggested = toPath(configuredDirectory) / suggested.filename();
+        }
+        QString filename = QFileDialog::getSaveFileName(
+            this, tr("Publish OverThrust level package"),
+            toQString(suggested),
+            tr("OverThrust level packages (*.OLV *.olv)"));
+        if (filename.isEmpty()) return false;
+        if (!filename.endsWith(QStringLiteral(".olv"),
+                               Qt::CaseInsensitive)) {
+            filename += QStringLiteral(".OLV");
+        }
+        return writePublishedLevel(toPath(filename));
+    }
     if ((creationSettings_.game == GameId::Wings ||
          creationSettings_.game == GameId::Auts) &&
         suggested.empty()) {
@@ -2082,6 +3538,25 @@ bool MainWindow::publishLevel()
 bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
 {
     canvas_->commitSelection();
+    if (creationSettings_.game == GameId::OverThrust) {
+        if (!overthrustData_) {
+            QMessageBox::critical(this, tr("Publish failed"),
+                                  tr("OverThrust project data is missing."));
+            return false;
+        }
+        flattenLayers(*level_);
+        rebuildTeamModeSettings(*overthrustData_);
+        std::string error;
+        if (!publishOverThrustPackage(path, *level_, *overthrustData_, error)) {
+            QMessageBox::critical(this, tr("Publish failed"),
+                                  QString::fromStdString(error));
+            return false;
+        }
+        publishPath_ = path;
+        statusBar()->showMessage(tr("Published %1").arg(toQString(path)),
+                                 3000);
+        return true;
+    }
     if (creationSettings_.game == GameId::Wings) {
         flattenLayers(*level_);
         if (backgroundLevel_) {

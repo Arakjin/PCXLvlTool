@@ -10,6 +10,9 @@ constexpr bool isReservedPaletteIndex(const int index)
 
 constexpr bool isReservedPaletteIndex(const GameId game, const int index)
 {
+    if (game == GameId::OverThrust) {
+        return index < 0 || index > 255;
+    }
     if (game == GameId::Auts) {
         return false;
     }
@@ -45,6 +48,9 @@ constexpr bool isReservedColorChartNumber(const GameId game,
 
 constexpr bool isPaletteColorEditable(const GameId game, const int index)
 {
+    if (game == GameId::OverThrust) {
+        return index >= 0 && index <= 255;
+    }
     if (isReservedPaletteIndex(game, index) || game == GameId::Auts) {
         return false;
     }

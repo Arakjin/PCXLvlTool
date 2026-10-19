@@ -1,8 +1,9 @@
 # PCX Level Tool – käyttöohje
 
-PCX Level Tool on pikselintarkka kenttäeditori V-Wingille, Wingsille ja
-AUTSille. Ohjelma avaa tuettuja `.LEV`-kenttiä ja tallentaa monitasoisen työn
-muokattavana `.pxlp`-projektina.
+PCX Level Tool on pikselintarkka kenttäeditori V-Wingille, Wingsille, AUTSille
+ja OverThrustille. Ohjelma avaa tuettuja `.LEV`-, `.pcx`- ja
+`.pxlp`-tiedostoja ja tallentaa monitasoisen työn muokattavana
+`.pxlp`-projektina.
 
 > Säilytä alkuperäisestä `.LEV`-tiedostosta varmuuskopio. Testaa julkaistu
 > kenttä pelissä ennen sen jakamista muille.
@@ -16,7 +17,10 @@ luodessa ja kuvaa tuodessa aina oikea kohdepeli.
 
 - **File > New level** (`Ctrl+N`) kysyy pelin ja luo sille oikeankokoisen tyhjän
   kentän sekä oletuspaletin.
-- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän tai `.pxlp`-projektin.
+- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän, `.pcx`-kuvan tai
+  `.pxlp`-projektin. PCX-kuvalle valitaan yhteensopiva peliprofiili.
+- **File > Export current image as PCX** kirjoittaa aktiivisen indeksoidun
+  dokumentin suoraan PCX-kuvaksi täsmällisine indekseineen ja paletteineen.
 - V-Wingissä yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen.
   Sen enimmäispituus on 20 perusmerkkiä. Ääkkösiä ei hyväksytä ja nimi muutetaan
   tallennettaessa isoiksi kirjaimiksi. Wings ja AUTS eivät tallenna erillistä
@@ -34,8 +38,8 @@ luodessa ja kuvaa tuodessa aina oikea kohdepeli.
 ## Projektien ja LEV-tiedostojen oletushakemistot
 
 Valinnassa **Settings > Preferences** voi asettaa `.pxlp`-projekteille yhteisen
-oletushakemiston sekä V-Wingille, Wingsille ja AUTSille omat LEV-
-vientihakemistot. Polun voi kirjoittaa käsin tai valita **Browse**-painikkeella.
+oletushakemiston sekä jokaiselle peliprofiilille oman julkaisu-
+hakemiston. Polun voi kirjoittaa käsin tai valita **Browse**-painikkeella.
 **Default** palauttaa projektihakemiston oletusarvon ja **Clear** poistaa
 kyseisen pelin LEV-asetuksen.
 
@@ -167,9 +171,17 @@ eikä poistaa.
 Osoittimen sijainti ja sen alla olevan materiaalin numero näkyvät alapalkissa.
 
 Pelikohtaiset materiaalit, kokorajoitukset ja piirto-ohjeet löytyvät
-Help-valikon erillisistä V-Wing-, Wings- ja AUTS-ohjeista.
+Help-valikon erillisistä V-Wing-, Wings-, AUTS- ja OverThrust-ohjeista.
 
 ## Kentän julkaiseminen peliin
+
+OverThrustissa valitaan **File > Publish OverThrust Level**. Ohjelma luo
+`.OLV`-pakettihakemiston, jonka tiedostot ovat suoraan pelin/cookerin käyttämä
+julkaisu. Valinnainen taustakuva lisätään omana `background.png`-tiedostonaan.
+Julkaisu tarkistaa ensin materiaalit, mahdollisen taustan, objektit ja
+viittaukset eikä jätä virhetilanteessa osittaista hakemistoa.
+
+V-Wing-, Wings- ja AUTS-kentät julkaistaan seuraavasti:
 
 1. Jos haluat säilyttää tasot ja jatkaa kentän muokkaamista myöhemmin, tallenna
    työ ensin `.pxlp`-projektiksi. Tämä vaihe on valinnainen.

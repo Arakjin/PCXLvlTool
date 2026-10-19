@@ -22,6 +22,13 @@ enum class PaletteGroup {
     BurningWings,
     Docking,
     Other,
+    Structural,
+    Organic,
+    Metal,
+    Granular,
+    Liquid,
+    Gas,
+    Gameplay,
 };
 
 std::vector<std::uint8_t> paletteIndices(PaletteGroup group, GameId game);

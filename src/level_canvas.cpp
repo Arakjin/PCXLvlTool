@@ -27,6 +27,46 @@ namespace {
 
 constexpr auto kSelectionMimeType = "application/x-vwing-level-selection";
 
+const QImage& overthrustObjectImage(const std::string& type)
+{
+    static const QImage door(
+        QStringLiteral(":/icons/overthrust/canvas-door.png"));
+    static const QImage teleporter(
+        QStringLiteral(":/icons/overthrust/canvas-teleporter.png"));
+    static const QImage serviceOrb(
+        QStringLiteral(":/icons/overthrust/canvas-service-orb.png"));
+    static const QImage teamBase(
+        QStringLiteral(":/icons/overthrust/canvas-team-base.png"));
+    static const QImage empty;
+    if (type == "sliding_door") return door;
+    if (type == "teleporter") return teleporter;
+    if (type == "service_orb") return serviceOrb;
+    if (type == "team_base") return teamBase;
+    return empty;
+}
+
+QRectF fittedImageRect(const QRectF& bounds, const QImage& image,
+                       const double fillFraction = 0.86)
+{
+    if (image.isNull()) return bounds;
+    QSizeF size = image.size();
+    size.scale(bounds.size() * fillFraction, Qt::KeepAspectRatio);
+    return QRectF(bounds.center().x() - size.width() / 2.0,
+                  bounds.center().y() - size.height() / 2.0,
+                  size.width(), size.height());
+}
+
+QPointF rotatedPoint(const QPointF& point, const QPointF& center,
+                     const double degrees)
+{
+    const double radians = degrees * 3.14159265358979323846 / 180.0;
+    const double sine = std::sin(radians);
+    const double cosine = std::cos(radians);
+    const QPointF delta = point - center;
+    return center + QPointF(delta.x() * cosine - delta.y() * sine,
+                            delta.x() * sine + delta.y() * cosine);
+}
+
 template <typename Plot>
 void rasterBrush(const int centerX, const int centerY, const int thickness,
                  const BrushShape shape, const int canvasWidth,
@@ -336,6 +376,9 @@ void LevelCanvas::setLevel(Level* level)
     curveHandle_ = CurveHandle::None;
     polygonActive_ = false;
     polygonPoints_.clear();
+    teamBasePolygonActive_ = false;
+    teamBasePolygonObject_ = -1;
+    teamBasePolygonPoints_.clear();
     textDraftActive_ = false;
     movingTextBox_ = false;
     textDraft_.clear();
@@ -975,6 +1018,253 @@ void LevelCanvas::refreshImage()
     viewport()->update();
 }
 
+void LevelCanvas::setTrueColorBackground(const std::uint8_t* rgba,
+                                         const int width, const int height)
+{
+    if (rgba == nullptr || width <= 0 || height <= 0) {
+        trueColorBackground_ = QImage();
+    } else {
+        const QImage view(rgba, width, height, width * 4,
+                          QImage::Format_RGBA8888);
+        trueColorBackground_ = view.copy();
+    }
+    viewport()->update();
+}
+
+void LevelCanvas::setObjects(std::vector<OverThrustObject>* objects)
+{
+    objects_ = objects;
+    if (objects_ == nullptr || selectedObject_ >=
+                                   static_cast<int>(objects_->size())) {
+        selectedObject_ = -1;
+    }
+    viewport()->update();
+}
+
+void LevelCanvas::setObjectEditingEnabled(const bool enabled)
+{
+    objectEditingEnabled_ = enabled;
+    objectDragMode_ = ObjectDragMode::None;
+    if (!enabled) cancelTeamBasePolygon();
+    viewport()->update();
+}
+
+void LevelCanvas::setSelectedObject(const int index)
+{
+    selectedObject_ = objects_ != nullptr && index >= 0 &&
+                              index < static_cast<int>(objects_->size())
+                          ? index
+                          : -1;
+    viewport()->update();
+}
+
+void LevelCanvas::beginTeamBasePolygon(const int objectIndex)
+{
+    if (level_ == nullptr || objects_ == nullptr) return;
+    teamBasePolygonActive_ = true;
+    teamBasePolygonObject_ = objectIndex;
+    teamBasePolygonPoints_.clear();
+    setFocus(Qt::OtherFocusReason);
+    viewport()->setCursor(Qt::CrossCursor);
+    viewport()->update();
+}
+
+void LevelCanvas::commitTeamBasePolygon()
+{
+    if (!teamBasePolygonActive_) return;
+    if (teamBasePolygonPoints_.size() >= 3) {
+        emit teamBasePolygonRequested(teamBasePolygonPoints_,
+                                      teamBasePolygonObject_);
+    }
+    cancelTeamBasePolygon();
+}
+
+void LevelCanvas::cancelTeamBasePolygon()
+{
+    teamBasePolygonActive_ = false;
+    teamBasePolygonObject_ = -1;
+    teamBasePolygonPoints_.clear();
+    updateToolCursor();
+    viewport()->update();
+}
+
+void LevelCanvas::paintObjects(QPainter& painter) const
+{
+    if (objects_ == nullptr || game_ != GameId::OverThrust) return;
+    painter.save();
+    const auto objectCenter = [&](const std::size_t index) {
+        const OverThrustObject& object = (*objects_)[index];
+        const OverThrustTransform& transform =
+            objectDragMode_ != ObjectDragMode::None &&
+                    static_cast<int>(index) == selectedObject_
+                ? objectTransformPreview_
+                : object.transform;
+        return QPointF((transform.x + transform.width / 2.0) * zoom_,
+                       (transform.y + transform.height / 2.0) * zoom_);
+    };
+
+    QPen connectionPen(QColor(175, 120, 255, 220), 2.0, Qt::DotLine,
+                       Qt::RoundCap);
+    connectionPen.setCosmetic(true);
+    painter.setPen(connectionPen);
+    for (std::size_t index = 0; index < objects_->size(); ++index) {
+        const OverThrustObject& object = (*objects_)[index];
+        if (object.type != "teleporter" || object.targetObjectId.empty())
+            continue;
+        const auto target = std::find_if(
+            objects_->begin(), objects_->end(),
+            [&](const OverThrustObject& candidate) {
+                return candidate.type == "teleporter" &&
+                       candidate.id == object.targetObjectId;
+            });
+        if (target == objects_->end()) continue;
+        const auto targetIndex = static_cast<std::size_t>(
+            std::distance(objects_->begin(), target));
+        painter.drawLine(objectCenter(index), objectCenter(targetIndex));
+    }
+
+    for (std::size_t index = 0; index < objects_->size(); ++index) {
+        const OverThrustObject& object = (*objects_)[index];
+        const OverThrustTransform& transform =
+            objectDragMode_ != ObjectDragMode::None &&
+                    static_cast<int>(index) == selectedObject_
+                ? objectTransformPreview_
+                : object.transform;
+        const int x = transform.x;
+        const int y = transform.y;
+        const QRectF rectangle(x * zoom_, y * zoom_,
+                               transform.width * zoom_,
+                               transform.height * zoom_);
+        const bool selected = static_cast<int>(index) == selectedObject_;
+        if (object.type == "team_base" && object.areaPolygon.size() >= 3) {
+            const int moveX = x - object.transform.x;
+            const int moveY = y - object.transform.y;
+            QPolygonF polygon;
+            for (const OverThrustPoint& point : object.areaPolygon) {
+                polygon << QPointF((point.x + moveX) * zoom_,
+                                   (point.y + moveY) * zoom_);
+            }
+            painter.setPen(QPen(selected ? QColor(255, 255, 255)
+                                         : QColor(65, 145, 255),
+                                selected ? 2 : 1));
+            painter.setBrush(QColor(70, 130, 255, 85));
+            painter.drawPolygon(polygon);
+            const QImage& flag = overthrustObjectImage(object.type);
+            const double markerSize = std::clamp(
+                std::min(transform.width, transform.height) *
+                    zoom_ * 0.65,
+                12.0, 64.0);
+            const QPointF anchor(
+                (x + object.objectiveAnchorX) * zoom_,
+                (y + object.objectiveAnchorY) * zoom_);
+            const QRectF markerBounds(anchor.x() - markerSize / 2.0,
+                                      anchor.y() - markerSize / 2.0,
+                                      markerSize, markerSize);
+            painter.setOpacity(0.95);
+            painter.drawImage(fittedImageRect(markerBounds, flag, 1.0), flag);
+            painter.setOpacity(1.0);
+            continue;
+        }
+        if (object.type == "sliding_door" && selected) {
+            const double slideDistance = std::hypot(
+                object.openOffsetX, object.openOffsetY);
+            const double slideRadians = transform.rotationMillidegrees *
+                3.14159265358979323846 / 180000.0;
+            const double slideX = slideDistance * std::cos(slideRadians);
+            const double slideY = slideDistance * std::sin(slideRadians);
+            const QRectF ghost(
+                (x + slideX) * zoom_,
+                (y + slideY) * zoom_,
+                transform.width * zoom_,
+                transform.height * zoom_);
+            const QPointF ghostCenter = ghost.center();
+            QPen ghostPen(QColor(220, 240, 255, 190));
+            ghostPen.setStyle(Qt::DashLine);
+            painter.setPen(ghostPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawLine(rectangle.center(), ghost.center());
+            painter.save();
+            painter.translate(ghostCenter);
+            painter.rotate(transform.rotationMillidegrees / 1000.0);
+            painter.translate(-ghostCenter);
+            painter.setPen(ghostPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(ghost);
+            painter.restore();
+        }
+        const QPointF center = rectangle.center();
+        painter.save();
+        painter.translate(center);
+        painter.rotate(transform.rotationMillidegrees / 1000.0);
+        painter.translate(-center);
+        const QColor color =
+            object.type == "sliding_door"
+                ? QColor(210, 220, 235, 150)
+                : object.type == "teleporter"
+                      ? QColor(80, 160, 255, 150)
+                      : object.type == "service_orb"
+                            ? QColor(90, 240, 190, 150)
+                            : QColor(255, 210, 80, 150);
+        const QImage& icon = overthrustObjectImage(object.type);
+        if (object.type == "team_base") {
+            painter.fillRect(rectangle, QColor(70, 130, 255, 85));
+        } else if (icon.isNull()) {
+            painter.fillRect(rectangle, color);
+        }
+        if (!icon.isNull()) {
+            painter.setOpacity(0.92);
+            painter.drawImage(object.type == "sliding_door"
+                                  ? rectangle
+                                  : fittedImageRect(rectangle, icon),
+                              icon);
+            painter.setOpacity(1.0);
+        }
+        painter.setPen(QPen(selected ? QColor(255, 255, 255)
+                                     : QColor(20, 20, 20),
+                            selected ? 2 : 1));
+        painter.drawRect(rectangle);
+        if (selected) {
+            constexpr double handle = 7.0;
+            const auto drawHandle = [&](const QPointF& point) {
+                painter.fillRect(QRectF(point.x() - handle / 2,
+                                        point.y() - handle / 2,
+                                        handle, handle),
+                                 Qt::white);
+            };
+            drawHandle({rectangle.right(), rectangle.center().y()});
+            drawHandle({rectangle.center().x(), rectangle.bottom()});
+            drawHandle(rectangle.bottomRight());
+            const QPointF rotateHandle(rectangle.center().x(),
+                                       rectangle.top() - 15.0);
+            painter.drawLine(QPointF(rectangle.center().x(), rectangle.top()),
+                             rotateHandle);
+            painter.setBrush(Qt::white);
+            painter.drawEllipse(rotateHandle, handle / 2, handle / 2);
+        }
+        painter.restore();
+    }
+    if (teamBasePolygonActive_ && !teamBasePolygonPoints_.isEmpty()) {
+        QPolygonF preview;
+        for (const QPoint& point : teamBasePolygonPoints_) {
+            preview << QPointF(point.x() * zoom_, point.y() * zoom_);
+        }
+        if (hoverImagePoint_.x() >= 0 &&
+            teamBasePolygonPoints_.back() != hoverImagePoint_) {
+            preview << QPointF(hoverImagePoint_.x() * zoom_,
+                               hoverImagePoint_.y() * zoom_);
+        }
+        QPen pen(QColor(100, 180, 255), 2.0, Qt::DashLine);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        painter.setBrush(QColor(70, 130, 255, 55));
+        painter.drawPolygon(preview);
+        for (const QPointF& point : preview) {
+            painter.drawEllipse(point, 3.0, 3.0);
+        }
+    }
+    painter.restore();
+}
+
 void LevelCanvas::paintEvent(QPaintEvent*)
 {
     QPainter painter(viewport());
@@ -1031,14 +1321,23 @@ void LevelCanvas::paintEvent(QPaintEvent*)
     for (const RGB& color : level_->palette) {
         colors.append(qRgb(color.r, color.g, color.b));
     }
+    if (game_ == GameId::OverThrust && !trueColorBackground_.isNull()) {
+        colors[0] = qRgba(0, 0, 0, 0);
+    }
     image.setColorTable(colors);
 
     painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
     painter.translate(-horizontalScrollBar()->value(),
                       -verticalScrollBar()->value());
+    if (game_ == GameId::OverThrust && !trueColorBackground_.isNull()) {
+        painter.drawImage(QRectF(0, 0, level_->width * zoom_,
+                                 level_->height * zoom_),
+                          trueColorBackground_);
+    }
     painter.drawImage(QRectF(0, 0, level_->width * zoom_,
                              level_->height * zoom_),
                       image);
+    paintObjects(painter);
     paintShapePreview(painter);
     paintSelection(painter);
     paintBrushPreview(painter);
@@ -1056,6 +1355,111 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
         panning_ = true;
         lastPanPoint_ = event->position().toPoint();
         viewport()->setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
+
+    if (teamBasePolygonActive_ && level_ != nullptr) {
+        if (event->button() == Qt::RightButton) {
+            commitTeamBasePolygon();
+            event->accept();
+            return;
+        }
+        if (event->button() == Qt::LeftButton) {
+            const QPoint point = imagePoint(event->position());
+            if (point.x() >= 0 &&
+                (teamBasePolygonPoints_.isEmpty() ||
+                 teamBasePolygonPoints_.back() != point)) {
+                teamBasePolygonPoints_ << point;
+            }
+            viewport()->update();
+            event->accept();
+            return;
+        }
+    }
+
+    if (objectEditingEnabled_ && event->button() == Qt::RightButton) {
+        event->accept();
+        return;
+    }
+    if (objectEditingEnabled_ && event->button() == Qt::LeftButton &&
+        objects_ != nullptr && level_ != nullptr) {
+        const QPoint point = imagePoint(event->position());
+        const QPointF precisePoint(
+            (event->position().x() + horizontalScrollBar()->value()) / zoom_,
+            (event->position().y() + verticalScrollBar()->value()) / zoom_);
+        if (selectedObject_ >= 0 &&
+            selectedObject_ < static_cast<int>(objects_->size())) {
+            const OverThrustObject& selected =
+                (*objects_)[static_cast<std::size_t>(selectedObject_)];
+            if (selected.type != "team_base") {
+                const OverThrustTransform& transform = selected.transform;
+                const QPointF center(transform.x + transform.width / 2.0,
+                                     transform.y + transform.height / 2.0);
+                const double angle = transform.rotationMillidegrees / 1000.0;
+                const double handleRadius = std::max(1.5, 5.0 / zoom_);
+                const auto near = [&](const QPointF& unrotated) {
+                    const QPointF handle =
+                        rotatedPoint(unrotated, center, angle);
+                    const QPointF delta = precisePoint - handle;
+                    return delta.x() * delta.x() + delta.y() * delta.y() <=
+                           handleRadius * handleRadius;
+                };
+                ObjectDragMode handleMode = ObjectDragMode::None;
+                if (near(QPointF(transform.x + transform.width,
+                                 transform.y + transform.height)))
+                    handleMode = ObjectDragMode::ResizeBoth;
+                else if (near(QPointF(transform.x + transform.width,
+                                      center.y())))
+                    handleMode = ObjectDragMode::ResizeWidth;
+                else if (near(QPointF(center.x(),
+                                      transform.y + transform.height)))
+                    handleMode = ObjectDragMode::ResizeHeight;
+                else if (near(QPointF(center.x(),
+                                      transform.y - 15.0 / zoom_)))
+                    handleMode = ObjectDragMode::Rotate;
+                if (handleMode != ObjectDragMode::None) {
+                    objectDragMode_ = handleMode;
+                    objectMoveAnchor_ = point;
+                    objectTransformStart_ = transform;
+                    objectTransformPreview_ = transform;
+                    viewport()->setCursor(Qt::SizeAllCursor);
+                    event->accept();
+                    return;
+                }
+            }
+        }
+        int hit = -1;
+        for (std::size_t index = objects_->size(); index-- > 0;) {
+            const OverThrustObject& object = (*objects_)[index];
+            const OverThrustTransform& transform = object.transform;
+            bool contains = QRect(transform.x, transform.y, transform.width,
+                                  transform.height)
+                                .contains(point);
+            if (object.type == "team_base" &&
+                object.areaPolygon.size() >= 3) {
+                QPolygon polygon;
+                for (const OverThrustPoint& vertex : object.areaPolygon)
+                    polygon << QPoint(vertex.x, vertex.y);
+                contains = polygon.containsPoint(point, Qt::OddEvenFill);
+            }
+            if (contains) {
+                hit = static_cast<int>(index);
+                break;
+            }
+        }
+        selectedObject_ = hit;
+        emit objectSelectionChanged(hit);
+        if (hit >= 0) {
+            objectDragMode_ = ObjectDragMode::Move;
+            objectMoveAnchor_ = point;
+            const auto& transform = (*objects_)[static_cast<std::size_t>(hit)]
+                                        .transform;
+            objectTransformStart_ = transform;
+            objectTransformPreview_ = transform;
+            viewport()->setCursor(Qt::ClosedHandCursor);
+        }
+        viewport()->update();
         event->accept();
         return;
     }
@@ -1277,6 +1681,66 @@ void LevelCanvas::mouseMoveEvent(QMouseEvent* event)
     if (point.x() >= 0) {
         hoverImagePoint_ = point;
         reportPosition(point);
+        if (objectDragMode_ != ObjectDragMode::None &&
+            (event->buttons() & Qt::LeftButton) &&
+            selectedObject_ >= 0 && objects_ != nullptr) {
+            if (objectDragMode_ == ObjectDragMode::Move) {
+                const QPoint candidate{
+                    objectTransformStart_.x +
+                        point.x() - objectMoveAnchor_.x(),
+                    objectTransformStart_.y +
+                        point.y() - objectMoveAnchor_.y()};
+                objectTransformPreview_.x = std::clamp(
+                    candidate.x(), 0,
+                    static_cast<int>(level_->width) -
+                        objectTransformStart_.width);
+                objectTransformPreview_.y = std::clamp(
+                    candidate.y(), 0,
+                    static_cast<int>(level_->height) -
+                        objectTransformStart_.height);
+            } else if (objectDragMode_ == ObjectDragMode::Rotate) {
+                const double centerX = objectTransformStart_.x +
+                                       objectTransformStart_.width / 2.0;
+                const double centerY = objectTransformStart_.y +
+                                       objectTransformStart_.height / 2.0;
+                double degrees = std::atan2(point.y() - centerY,
+                                            point.x() - centerX) *
+                                     180.0 / 3.14159265358979323846 +
+                                 90.0;
+                while (degrees > 180.0) degrees -= 360.0;
+                while (degrees <= -180.0) degrees += 360.0;
+                objectTransformPreview_.rotationMillidegrees =
+                    static_cast<int>(std::round(degrees * 1000.0));
+            } else {
+                const QPointF center(
+                    objectTransformStart_.x +
+                        objectTransformStart_.width / 2.0,
+                    objectTransformStart_.y +
+                        objectTransformStart_.height / 2.0);
+                const QPointF local = rotatedPoint(
+                    QPointF(point), center,
+                    -objectTransformStart_.rotationMillidegrees / 1000.0);
+                if (objectDragMode_ == ObjectDragMode::ResizeWidth ||
+                    objectDragMode_ == ObjectDragMode::ResizeBoth) {
+                    objectTransformPreview_.width = std::clamp(
+                        static_cast<int>(std::round(local.x())) -
+                            objectTransformStart_.x,
+                        1, static_cast<int>(level_->width) -
+                               objectTransformStart_.x);
+                }
+                if (objectDragMode_ == ObjectDragMode::ResizeHeight ||
+                    objectDragMode_ == ObjectDragMode::ResizeBoth) {
+                    objectTransformPreview_.height = std::clamp(
+                        static_cast<int>(std::round(local.y())) -
+                            objectTransformStart_.y,
+                        1, static_cast<int>(level_->height) -
+                               objectTransformStart_.y);
+                }
+            }
+            viewport()->update();
+            event->accept();
+            return;
+        }
         if (movingTextBox_ && (event->buttons() & strokeButton_)) {
             setTextBoxPosition(textMoveStart_ + (point - textMoveAnchor_));
             viewport()->update();
@@ -1362,6 +1826,28 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
         updateToolCursor();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton &&
+        objectDragMode_ != ObjectDragMode::None) {
+        objectDragMode_ = ObjectDragMode::None;
+        viewport()->setCursor(Qt::CrossCursor);
+        const bool changed =
+            objectTransformPreview_.x != objectTransformStart_.x ||
+            objectTransformPreview_.y != objectTransformStart_.y ||
+            objectTransformPreview_.width != objectTransformStart_.width ||
+            objectTransformPreview_.height != objectTransformStart_.height ||
+            objectTransformPreview_.rotationMillidegrees !=
+                objectTransformStart_.rotationMillidegrees;
+        if (selectedObject_ >= 0 && changed) {
+            emit objectTransformRequested(
+                selectedObject_, objectTransformPreview_.x,
+                objectTransformPreview_.y, objectTransformPreview_.width,
+                objectTransformPreview_.height,
+                objectTransformPreview_.rotationMillidegrees);
+        }
+        viewport()->update();
         event->accept();
         return;
     }
@@ -1466,6 +1952,17 @@ void LevelCanvas::mouseReleaseEvent(QMouseEvent* event)
 
 void LevelCanvas::mouseDoubleClickEvent(QMouseEvent* event)
 {
+    if (teamBasePolygonActive_ && event->button() == Qt::LeftButton) {
+        const QPoint point = imagePoint(event->position());
+        if (point.x() >= 0 &&
+            (teamBasePolygonPoints_.isEmpty() ||
+             teamBasePolygonPoints_.back() != point)) {
+            teamBasePolygonPoints_ << point;
+        }
+        commitTeamBasePolygon();
+        event->accept();
+        return;
+    }
     if (event->button() == strokeButton_ &&
         drawTool_ == DrawTool::Polygon && polygonActive_) {
         const QPoint point = imagePoint(event->position());
@@ -1503,6 +2000,18 @@ void LevelCanvas::wheelEvent(QWheelEvent* event)
 
 void LevelCanvas::keyPressEvent(QKeyEvent* event)
 {
+    if (teamBasePolygonActive_) {
+        if (event->key() == Qt::Key_Escape) {
+            cancelTeamBasePolygon();
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            commitTeamBasePolygon();
+            event->accept();
+            return;
+        }
+    }
     if (event->key() == Qt::Key_Escape &&
         (textDraftActive_ ||
          (drawing_ && strokeTool_ == DrawTool::Text))) {

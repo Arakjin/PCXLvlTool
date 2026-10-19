@@ -20,6 +20,7 @@ int main()
     const GameProfile& vwing = gameProfile(GameId::VWing);
     const GameProfile& wings = gameProfile(GameId::Wings);
     const GameProfile& auts = gameProfile(GameId::Auts);
+    const GameProfile& overthrust = gameProfile(GameId::OverThrust);
     ok &= expect(vwing.defaultWidth == 640 && vwing.defaultHeight == 800,
                  "V-Wing profile dimensions");
     ok &= expect(hasFeature(wings.features,
@@ -35,5 +36,18 @@ int main()
                      auts.minimumHeight == 400 && auts.maximumHeight == 400 &&
                      gameProfileByKey("auts") == &auts,
                  "AUTS fixed-size profile");
+    ok &= expect(overthrust.defaultWidth == 400 &&
+                     overthrust.defaultHeight == 400 &&
+                     overthrust.maximumWidth == 4096 &&
+                     overthrust.maximumHeight == 4096 &&
+                     overthrust.maximumCells == 4194304ULL &&
+                     gameProfileByKey("overthrust") == &overthrust &&
+                     hasFeature(overthrust.features,
+                                GameFeature::ParallaxBackground) &&
+                     hasFeature(overthrust.features,
+                                GameFeature::ExternalTrueColorBackground) &&
+                     hasFeature(overthrust.features,
+                                GameFeature::PackagePublishing),
+                 "OverThrust authoring profile");
     return ok ? 0 : 1;
 }

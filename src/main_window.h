@@ -2,6 +2,7 @@
 
 #include "level.h"
 #include "game_profile.h"
+#include "overthrust_model.h"
 
 #include <QMainWindow>
 
@@ -10,10 +11,13 @@
 
 class QAction;
 class QCloseEvent;
+class QCheckBox;
+class QDockWidget;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
+class QPolygon;
 class QSpinBox;
 class QTabBar;
 class LevelCanvas;
@@ -38,6 +42,7 @@ private:
     void createToolBars();
     void createMaterialDock();
     void createLayerDock();
+    void createObjectDock();
     void createZoomToolBar();
     void editApplicationSettings();
     void showMarkdownDocument(const QString& title,
@@ -47,13 +52,17 @@ private:
     bool createNewLevel(bool checkUnsavedChanges);
     bool promptForWingsSettings(LevelCreationSettings& settings,
                                 bool allowDimensionEditing = true);
+    bool promptForOverThrustSettings(LevelCreationSettings& settings,
+                                     bool allowDimensionEditing = true);
     void editLevelSettings();
-    void switchWingsDocument(int index);
+    void switchProfileDocument(int index);
     Level* activeLevel() const;
-    void configureWingsDocuments();
+    void configureProfileDocuments();
     void configurePaletteForGame();
+    void updateOverThrustBackgroundPreview();
     void openLevel();
     void importImage();
+    void exportPcx();
     void installImportedLevel(std::unique_ptr<Level> imported,
                               const LevelCreationSettings& settings,
                               const QString& statusMessage);
@@ -65,6 +74,18 @@ private:
     bool writePublishedLevel(const std::filesystem::path& path);
     void uppercaseLevelName();
     void refreshLayerList();
+    void refreshObjectList();
+    void addOverThrustObject();
+    void addOverThrustObject(const std::string& type);
+    void editSelectedOverThrustObject();
+    void duplicateSelectedOverThrustObject();
+    void deleteSelectedOverThrustObject();
+    void redrawSelectedTeamBase();
+    void applyTeamBasePolygon(const QPolygon& polygon, int objectIndex);
+    bool editOverThrustObject(OverThrustObject& object, bool creating);
+    void applyObjectListChange(const QString& text,
+                               std::vector<OverThrustObject> before,
+                               std::vector<OverThrustObject> after);
     void editSelectedPaletteColor();
     void loadPalette();
     void savePalette();
@@ -74,6 +95,7 @@ private:
 
     std::unique_ptr<Level> level_;
     std::unique_ptr<Level> backgroundLevel_;
+    std::unique_ptr<OverThrustProjectData> overthrustData_;
     LevelCanvas* canvas_ = nullptr;
     PaletteWidget* paletteWidget_ = nullptr;
     PaletteIndexSpinBox* materialIndexSpinBox_ = nullptr;
@@ -85,7 +107,12 @@ private:
     QLabel* levelNameLabel_ = nullptr;
     QLineEdit* levelNameEdit_ = nullptr;
     QListWidget* layerListWidget_ = nullptr;
+    QListWidget* objectListWidget_ = nullptr;
+    QDockWidget* objectDock_ = nullptr;
+    QCheckBox* objectModeCheck_ = nullptr;
+    QCheckBox* backgroundPreviewCheck_ = nullptr;
     QAction* saveAction_ = nullptr;
+    QAction* publishAction_ = nullptr;
     QAction* levelSettingsAction_ = nullptr;
     QAction* levelNameSeparatorAction_ = nullptr;
     QTabBar* documentTabs_ = nullptr;

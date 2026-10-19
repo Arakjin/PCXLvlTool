@@ -49,3 +49,10 @@ Thumbs.db
 # Local game executables, data, converters, and reverse-engineering references
 /Wings/
 /AUTSCONV/
+
+# Local OverThrust implementation contracts and golden authoring package
+/level-format/
+/overthrust-authoring-v1/
+/overthrust-materials.md
+/overthrust.md
+/overthrust objects/

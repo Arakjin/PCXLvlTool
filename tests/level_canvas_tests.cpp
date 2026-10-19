@@ -998,6 +998,63 @@ int main(int argc, char *argv[])
     ok &= expect(dynamicLevel.pixels[850 * dynamicLevel.width + 700] == 77,
                  "variable-size canvas should draw beyond V-Wing's 640-pixel width");
 
+    Level objectLevel;
+    objectLevel.resize(64, 64);
+    LevelCanvas objectCanvas;
+    std::vector<OverThrustObject> objects;
+    objectCanvas.resize(320, 240);
+    objectCanvas.setLevel(&objectLevel);
+    objectCanvas.setGame(GameId::OverThrust);
+    objectCanvas.setObjects(&objects);
+    objectCanvas.setObjectEditingEnabled(true);
+    QPolygon requestedPolygon;
+    int requestedObject = -2;
+    QObject::connect(
+        &objectCanvas, &LevelCanvas::teamBasePolygonRequested,
+        [&](const QPolygon& polygon, const int objectIndex) {
+            requestedPolygon = polygon;
+            requestedObject = objectIndex;
+        });
+    objectCanvas.show();
+    application.processEvents();
+    objectCanvas.beginTeamBasePolygon();
+    click(objectCanvas.viewport(), {5.5, 5.5});
+    click(objectCanvas.viewport(), {25.5, 5.5});
+    click(objectCanvas.viewport(), {15.5, 20.5});
+    sendKey(objectCanvas.viewport(), Qt::Key_Return);
+    ok &= expect(requestedPolygon.size() == 3 && requestedObject == -1,
+                 "team-base polygon tool should emit the marked area");
+
+    OverThrustObject doorObject;
+    doorObject.id = "door";
+    doorObject.type = "sliding_door";
+    doorObject.transform = {20, 30, 20, 16, 0};
+    objects.push_back(doorObject);
+    objectCanvas.setObjects(&objects);
+    objectCanvas.setSelectedObject(0);
+    OverThrustTransform requestedTransform;
+    int transformRequests = 0;
+    QObject::connect(
+        &objectCanvas, &LevelCanvas::objectTransformRequested,
+        [&](const int, const int x, const int y, const int width,
+            const int height, const int rotation) {
+            requestedTransform = {x, y, width, height, rotation};
+            ++transformRequests;
+        });
+    drag(objectCanvas.viewport(), {40.0, 38.0}, {47.0, 38.0});
+    ok &= expect(transformRequests == 1 && requestedTransform.width == 27 &&
+                     requestedTransform.height == 16,
+                 "object width handle should resize without changing height");
+    drag(objectCanvas.viewport(), {30.0, 46.0}, {30.0, 52.0});
+    ok &= expect(transformRequests == 2 && requestedTransform.width == 20 &&
+                     requestedTransform.height == 22,
+                 "object height handle should resize without changing width");
+    drag(objectCanvas.viewport(), {30.0, 15.0}, {50.0, 38.0});
+    ok &= expect(transformRequests == 3 &&
+                     requestedTransform.rotationMillidegrees > 80000 &&
+                     requestedTransform.rotationMillidegrees < 100000,
+                 "object rotation handle should emit a visual rotation");
+
     ok &=
         expect(!QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_pen.png")).isNull() &&
                    !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_flood_fill.png"))
@@ -1010,6 +1067,8 @@ int main(int argc, char *argv[])
                    !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_text.png"))
                         .isNull() &&
                    !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_polygon.png"))
+                        .isNull() &&
+                   !QIcon(QStringLiteral(":/icons/overthrust/tool-team-base.png"))
                         .isNull(),
                "embedded toolbox icons should load from resources");
 

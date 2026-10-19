@@ -2,9 +2,12 @@
 
 #include "level.h"
 #include "game_profile.h"
+#include "overthrust_model.h"
 
 #include <QAbstractScrollArea>
+#include <QImage>
 #include <QPoint>
+#include <QPolygon>
 #include <QRect>
 #include <QString>
 #include <QUndoStack>
@@ -108,6 +111,12 @@ public:
     bool hasDirtyUndoStack() const;
     void markAllUndoStacksClean();
     void refreshImage();
+    void setTrueColorBackground(const std::uint8_t* rgba, int width,
+                                int height);
+    void setObjects(std::vector<OverThrustObject>* objects);
+    void setObjectEditingEnabled(bool enabled);
+    void setSelectedObject(int index);
+    void beginTeamBasePolygon(int objectIndex = -1);
 
 signals:
     void zoomChanged(double zoom);
@@ -119,6 +128,10 @@ signals:
     void pendingSelectionEditChanged(bool pending);
     void layersChanged();
     void undoCleanChanged(bool clean);
+    void objectSelectionChanged(int index);
+    void objectTransformRequested(int index, int x, int y, int width,
+                                  int height, int rotationMillidegrees);
+    void teamBasePolygonRequested(const QPolygon& polygon, int objectIndex);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -138,6 +151,14 @@ private:
         FirstControl,
         SecondControl,
         Editing,
+    };
+    enum class ObjectDragMode {
+        None,
+        Move,
+        ResizeWidth,
+        ResizeHeight,
+        ResizeBoth,
+        Rotate,
     };
 
     enum class CurveHandle {
@@ -203,6 +224,9 @@ private:
     QString commandText() const;
     void updateScrollBars();
     void reportPosition(const QPoint& point);
+    void paintObjects(QPainter& painter) const;
+    void commitTeamBasePolygon();
+    void cancelTeamBasePolygon();
 
     Level* level_ = nullptr;
     GameId game_ = GameId::VWing;
@@ -275,4 +299,15 @@ private:
     std::vector<PixelChange> strokeChanges_;
     std::size_t strokeLayerIndex_ = 0;
     std::unordered_map<std::size_t, std::size_t> strokeChangeIndices_;
+    QImage trueColorBackground_;
+    std::vector<OverThrustObject>* objects_ = nullptr;
+    bool objectEditingEnabled_ = false;
+    int selectedObject_ = -1;
+    ObjectDragMode objectDragMode_ = ObjectDragMode::None;
+    QPoint objectMoveAnchor_;
+    OverThrustTransform objectTransformStart_;
+    OverThrustTransform objectTransformPreview_;
+    bool teamBasePolygonActive_ = false;
+    int teamBasePolygonObject_ = -1;
+    QPolygon teamBasePolygonPoints_;
 };

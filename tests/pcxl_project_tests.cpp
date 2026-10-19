@@ -1,11 +1,15 @@
 #include "default_palette.h"
 #include "layer_model.h"
+#include "overthrust_profile.h"
 #include "pcxl_project_io.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -148,6 +152,105 @@ int main()
     ok &= expect(!savePxlProject(path, auts, nullptr, autsSettings, error),
                  "AUTS PXLP project should reject a non-game palette");
 
+    Level overthrust;
+    overthrust.resize(400, 400);
+    overthrust.name = "OverThrust test";
+    overthrust.palette = defaultOverThrustPalette();
+    initializeBackgroundLayer(overthrust);
+    overthrust.layers[0].pixels[42] = 69;
+    flattenLayers(overthrust);
+    LevelCreationSettings overthrustSettings;
+    overthrustSettings.game = GameId::OverThrust;
+    overthrustSettings.name = overthrust.name;
+    overthrustSettings.width = 400;
+    overthrustSettings.height = 400;
+    overthrustSettings.backgroundMode = BackgroundMode::ExternalTrueColor;
+    OverThrustProjectData overthrustData;
+    overthrustData.levelId = "test:round-trip";
+    overthrustData.displayName = "Round trip";
+    overthrustData.author = "PCX Level Tool";
+    overthrustData.description = "PXLP v3 data test";
+    overthrustData.backgroundParallax = true;
+    overthrustData.background.width = 2;
+    overthrustData.background.height = 2;
+    overthrustData.background.rgba = {
+        1, 2, 3, 255, 4, 5, 6, 255,
+        7, 8, 9, 255, 10, 11, 12, 255};
+    OverThrustObject door;
+    door.id = "door_1";
+    door.type = "sliding_door";
+    door.transform = {10, 20, 3, 8, 45000};
+    door.openOffsetY = -10;
+    door.materialId = "core:aluminium";
+    door.appearanceId = "appearance:door/aluminium";
+    door.unknownProperties.push_back({"future", "string", "retained"});
+    overthrustData.objects.push_back(door);
+    OverThrustObject teamBase;
+    teamBase.id = "team_base_1";
+    teamBase.type = "team_base";
+    teamBase.transform = {30, 40, 12, 9, 0};
+    teamBase.appearanceId = "appearance:team-base/default";
+    teamBase.baseProfileId = "core:team-base/heal-and-weapons";
+    teamBase.objectiveAnchorX = 5;
+    teamBase.objectiveAnchorY = 4;
+    teamBase.areaPolygon = {{30, 40}, {42, 41}, {39, 49}, {31, 47}};
+    overthrustData.objects.push_back(teamBase);
+    ok &= expect(savePxlProject(path, overthrust, nullptr,
+                               overthrustSettings, &overthrustData, error),
+                 "OverThrust PXLP project should save");
+    std::unique_ptr<OverThrustProjectData> loadedOverThrust;
+    loadedBackground.reset();
+    ok &= expect(loadPxlProject(path, loaded, loadedBackground, loadedSettings,
+                               loadedOverThrust, error),
+                 "OverThrust PXLP project should load");
+    ok &= expect(loadedSettings.game == GameId::OverThrust &&
+                     loaded.width == 400 && loaded.height == 400 &&
+                     loaded.layers[0].pixels[42] == 69 &&
+                     loadedOverThrust &&
+                     loadedOverThrust->levelId == "test:round-trip" &&
+                     loadedOverThrust->backgroundParallax &&
+                     loadedOverThrust->background.rgba ==
+                         overthrustData.background.rgba &&
+                     loadedOverThrust->objects.size() == 2 &&
+                     loadedOverThrust->objects[0].transform.rotationMillidegrees ==
+                         45000 &&
+                     loadedOverThrust->objects[0].unknownProperties.size() == 1 &&
+                     loadedOverThrust->objects[1].areaPolygon ==
+                         teamBase.areaPolygon,
+                 "OverThrust PXLP v3 data should round-trip");
+
+    // Corrupt the first object's serialized X coordinate without disturbing
+    // the surrounding framing. The bounded v2 reader must reject it before
+    // exposing a partially loaded project.
+    std::ifstream projectInput(path, std::ios::binary);
+    std::vector<char> projectBytes(
+        (std::istreambuf_iterator<char>(projectInput)),
+        std::istreambuf_iterator<char>());
+    const std::string objectType = "sliding_door";
+    const auto typePosition = std::search(projectBytes.begin(),
+                                          projectBytes.end(),
+                                          objectType.begin(), objectType.end());
+    const auto malformedPath =
+        std::filesystem::current_path() / "project-malformed.pxlp";
+    if (typePosition != projectBytes.end() &&
+        std::distance(typePosition, projectBytes.end()) >=
+            static_cast<std::ptrdiff_t>(objectType.size() + 4)) {
+        auto xPosition = typePosition +
+                         static_cast<std::ptrdiff_t>(objectType.size());
+        std::fill_n(xPosition, 4, static_cast<char>(0xff)); // x = -1
+        std::ofstream malformedOutput(malformedPath, std::ios::binary);
+        malformedOutput.write(projectBytes.data(),
+                              static_cast<std::streamsize>(projectBytes.size()));
+        malformedOutput.close();
+        loadedOverThrust.reset();
+        ok &= expect(!loadPxlProject(malformedPath, loaded, loadedBackground,
+                                    loadedSettings, loadedOverThrust, error),
+                     "malformed OverThrust object bounds should be rejected");
+    } else {
+        ok &= expect(false, "serialized OverThrust object should be locatable");
+    }
+
     std::filesystem::remove(path, ignored);
+    std::filesystem::remove(malformedPath, ignored);
     return ok ? 0 : 1;
 }

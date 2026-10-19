@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <exception>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -32,6 +33,15 @@ bool savePcx(const std::filesystem::path& path, const Level& level,
     error.clear();
 
     try {
+        constexpr std::size_t maximumU16 =
+            std::numeric_limits<std::uint16_t>::max();
+        const std::size_t bytesPerLine = (level.width + 1U) & ~std::size_t{1U};
+        if (level.width == 0 || level.height == 0 ||
+            level.width > maximumU16 || level.height > maximumU16 ||
+            bytesPerLine > maximumU16 ||
+            level.pixels.size() != level.pixelCount()) {
+            throw std::runtime_error("invalid PCX image dimensions or pixels");
+        }
         std::ofstream output(path, std::ios::binary);
         if (!output) {
             throw std::runtime_error("could not create output file");
@@ -43,33 +53,41 @@ bool savePcx(const std::filesystem::path& path, const Level& level,
         header[2] = 1;
         header[3] = 8;
         putLittleEndian16(header, 8,
-                          static_cast<std::uint16_t>(Level::Width - 1));
+                          static_cast<std::uint16_t>(level.width - 1));
         putLittleEndian16(header, 10,
-                          static_cast<std::uint16_t>(Level::Height - 1));
+                          static_cast<std::uint16_t>(level.height - 1));
         putLittleEndian16(header, 12,
-                          static_cast<std::uint16_t>(Level::Width));
+                          static_cast<std::uint16_t>(level.width));
         putLittleEndian16(header, 14,
-                          static_cast<std::uint16_t>(Level::Height));
+                          static_cast<std::uint16_t>(level.height));
         header[65] = 1;
         putLittleEndian16(header, 66,
-                          static_cast<std::uint16_t>(Level::Width));
+                          static_cast<std::uint16_t>(bytesPerLine));
         putLittleEndian16(header, 68, 1);
         putLittleEndian16(header, 70,
-                          static_cast<std::uint16_t>(Level::Width));
+                          static_cast<std::uint16_t>(level.width));
         putLittleEndian16(header, 72,
-                          static_cast<std::uint16_t>(Level::Height));
+                          static_cast<std::uint16_t>(level.height));
 
         output.write(reinterpret_cast<const char*>(header.data()),
                      static_cast<std::streamsize>(header.size()));
 
-        for (std::size_t y = 0; y < Level::Height; ++y) {
-            const std::size_t rowStart = y * Level::Width;
+        for (std::size_t y = 0; y < level.height; ++y) {
+            const std::size_t rowStart = y * level.width;
             std::size_t x = 0;
-            while (x < Level::Width) {
-                const std::uint8_t value = level.pixels[rowStart + x];
+            while (x < bytesPerLine) {
+                const std::uint8_t value =
+                    x < level.width ? level.pixels[rowStart + x] : 0;
                 std::size_t length = 1;
-                while (x + length < Level::Width && length < 63 &&
-                       level.pixels[rowStart + x + length] == value) {
+                while (x + length < bytesPerLine && length < 63) {
+                    const std::size_t nextX = x + length;
+                    const std::uint8_t nextValue =
+                        nextX < level.width
+                            ? level.pixels[rowStart + nextX]
+                            : 0;
+                    if (nextValue != value) {
+                        break;
+                    }
                     ++length;
                 }
                 writeRun(output, value, length);

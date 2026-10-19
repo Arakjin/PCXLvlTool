@@ -1,5 +1,7 @@
 #include "palette_groups.h"
 
+#include "overthrust_profile.h"
+
 namespace {
 
 void appendRange(std::vector<std::uint8_t>& indices, const int first,
@@ -17,6 +19,28 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group,
 {
     std::vector<std::uint8_t> indices;
     indices.reserve(256);
+    if (game == GameId::OverThrust) {
+        const char* category = nullptr;
+        switch (group) {
+        case PaletteGroup::AllUsable: break;
+        case PaletteGroup::Background: category = "empty"; break;
+        case PaletteGroup::FlyThrough: category = "fly_through"; break;
+        case PaletteGroup::Structural: category = "structural"; break;
+        case PaletteGroup::Organic: category = "organic"; break;
+        case PaletteGroup::Metal: category = "metal"; break;
+        case PaletteGroup::Granular: category = "granular"; break;
+        case PaletteGroup::Liquid: category = "liquid"; break;
+        case PaletteGroup::Gas: category = "gas"; break;
+        case PaletteGroup::Gameplay: category = "gameplay"; break;
+        default: return indices;
+        }
+        for (const OverThrustMaterial& material : overthrustMaterials()) {
+            if (category == nullptr || material.category == category) {
+                indices.push_back(material.index);
+            }
+        }
+        return indices;
+    }
     if (game == GameId::Auts) {
         switch (group) {
         case PaletteGroup::AllUsable:
@@ -139,6 +163,13 @@ std::vector<std::uint8_t> paletteIndices(const PaletteGroup group,
     case PaletteGroup::BurningWings:
     case PaletteGroup::Docking:
     case PaletteGroup::Other:
+    case PaletteGroup::Structural:
+    case PaletteGroup::Organic:
+    case PaletteGroup::Metal:
+    case PaletteGroup::Granular:
+    case PaletteGroup::Liquid:
+    case PaletteGroup::Gas:
+    case PaletteGroup::Gameplay:
         break;
     }
     return indices;
