@@ -5,6 +5,7 @@
 #include "overthrust_model.h"
 
 #include <QAbstractScrollArea>
+#include <QByteArray>
 #include <QImage>
 #include <QPoint>
 #include <QPolygon>
@@ -109,6 +110,7 @@ public:
     bool addLayer();
     bool deleteActiveLayer();
     bool duplicateActiveLayer();
+    bool mergeActiveLayerDown();
     bool moveActiveLayer(int direction);
     void setActiveLayer(int index);
     void setLayerVisible(int index, bool visible);
@@ -305,6 +307,7 @@ private:
     std::vector<std::uint8_t> selectionMask_;
     std::vector<std::uint8_t> selectionPixels_;
     std::vector<std::uint8_t> selectionOpacity_;
+    QByteArray selectionClipboard_;
     std::vector<QPoint> freehandSelectionPoints_;
     QUndoStack fallbackUndoStack_;
     QUndoStack* undoStack_ = &fallbackUndoStack_;

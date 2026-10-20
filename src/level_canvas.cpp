@@ -758,6 +758,7 @@ void LevelCanvas::copySelection()
                << static_cast<quint8>(selectionPixels_[index])
                << static_cast<quint8>(selectionOpacity_[index]);
     }
+    selectionClipboard_ = payload;
     auto* mimeData = new QMimeData();
     mimeData->setData(QString::fromLatin1(kSelectionMimeType), payload);
     QApplication::clipboard()->setMimeData(mimeData);
@@ -768,12 +769,17 @@ void LevelCanvas::pasteSelection()
     if (level_ == nullptr) {
         return;
     }
+    const QString mimeType = QString::fromLatin1(kSelectionMimeType);
     const QMimeData* mimeData = QApplication::clipboard()->mimeData();
-    if (!mimeData->hasFormat(QString::fromLatin1(kSelectionMimeType))) {
+    QByteArray payload;
+    if (mimeData != nullptr && mimeData->hasFormat(mimeType)) {
+        payload = mimeData->data(mimeType);
+    } else {
+        payload = selectionClipboard_;
+    }
+    if (payload.isEmpty()) {
         return;
     }
-    QByteArray payload =
-        mimeData->data(QString::fromLatin1(kSelectionMimeType));
     QDataStream stream(&payload, QIODevice::ReadOnly);
     stream.setVersion(QDataStream::Qt_6_2);
     quint32 width = 0;
@@ -915,6 +921,39 @@ bool LevelCanvas::duplicateActiveLayer()
     inserted->pixels = source.pixels;
     inserted->mask = source.mask;
     ++level_->activeLayer;
+    undoStack_->clear();
+    flattenLayers(*level_);
+    emit layersChanged();
+    viewport()->update();
+    return true;
+}
+
+bool LevelCanvas::mergeActiveLayerDown()
+{
+    if (level_ == nullptr || level_->activeLayer == 0) {
+        return false;
+    }
+    const std::size_t sourceIndex = level_->activeLayer;
+    const std::size_t destinationIndex = sourceIndex - 1;
+    const Level::Layer& initialSource = level_->layers[sourceIndex];
+    const Level::Layer& initialDestination = level_->layers[destinationIndex];
+    if (!initialSource.visible || !initialDestination.visible ||
+        initialSource.locked || initialDestination.locked) {
+        return false;
+    }
+    commitSelection();
+    Level::Layer& source = level_->layers[sourceIndex];
+    Level::Layer& destination = level_->layers[destinationIndex];
+    for (std::size_t offset = 0; offset < level_->pixelCount(); ++offset) {
+        if (source.mask[offset] == 0) {
+            continue;
+        }
+        destination.pixels[offset] = source.pixels[offset];
+        destination.mask[offset] = 1;
+    }
+    level_->layers.erase(level_->layers.begin() +
+                         static_cast<std::ptrdiff_t>(sourceIndex));
+    level_->activeLayer = destinationIndex;
     undoStack_->clear();
     flattenLayers(*level_);
     emit layersChanged();
@@ -3154,8 +3193,23 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
         (selectionActive_ && !selectionContains(point.x(), point.y()))) {
         return;
     }
-    const std::uint8_t target = pixelAt(point.x(), point.y());
-    if (target == index) {
+    const auto activeValueAt = [&](const int x, const int y) {
+        if (selectionContains(x, y)) {
+            const int localX = x - selectionPosition_.x();
+            const int localY = y - selectionPosition_.y();
+            const std::size_t localOffset =
+                static_cast<std::size_t>(localY) * selectionBounds_.width() +
+                localX;
+            return std::pair{selectionPixels_[localOffset],
+                             selectionOpacity_[localOffset]};
+        }
+        const std::size_t offset = static_cast<std::size_t>(y) * level_->width +
+                                   static_cast<std::size_t>(x);
+        const Level::Layer& layer = level_->layers[level_->activeLayer];
+        return std::pair{layer.pixels[offset], layer.mask[offset]};
+    };
+    const auto target = activeValueAt(point.x(), point.y());
+    if (target.first == index && target.second == 1) {
         return;
     }
 
@@ -3184,7 +3238,7 @@ void LevelCanvas::floodFill(const QPoint& point, const std::uint8_t index)
                 static_cast<std::size_t>(neighbour.y()) * level_->width +
                 neighbour.x();
             if (visited[neighbourOffset] == 0 &&
-                pixelAt(neighbour.x(), neighbour.y()) == target) {
+                activeValueAt(neighbour.x(), neighbour.y()) == target) {
                 visited[neighbourOffset] = 1;
                 setPixel(neighbour.x(), neighbour.y(), index);
                 pending.push_back(neighbour);

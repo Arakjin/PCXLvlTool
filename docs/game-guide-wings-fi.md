@@ -50,6 +50,7 @@ Background-välilehden ja laskee sille Wingsin vaatiman koon.
 Varsinainen kenttä ja parallax-tausta käyttävät samaa palettia, tallentuvat
 samaan `.pxlp`-projektiin ja julkaistaan samaan Wings-LEV-tiedostoon. Varatut
 indeksit pysyvät poissa palettivalikosta myös Background-välilehdellä.
+Pikselivalinnan voi kopioida ja liittää kentän ja taustan välillä.
 
 Testaa sekä tavallinen että parallaxia käyttävä julkaisu Wingsissä. Tarkista
 kentän rajat, tukikohdat, vesi, materiaalien tuhoutuminen sekä sää- ja

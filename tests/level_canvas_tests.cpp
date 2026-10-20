@@ -2,6 +2,7 @@
 #include "palette_widget.h"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QFont>
 #include <QIcon>
 #include <QImage>
@@ -962,6 +963,28 @@ int main(int argc, char *argv[])
                  "hidden layers should not contribute to compositing");
     layerCanvas.setLayerVisible(2, true);
 
+    for (int y = 130; y <= 134; ++y) {
+        for (int x = 130; x <= 134; ++x) {
+            const bool border = x == 130 || x == 134 || y == 130 || y == 134;
+            if (border) {
+                layerLevel->layers[1].pixels[offset(x, y)] = 20;
+                layerLevel->layers[1].mask[offset(x, y)] = 1;
+            }
+        }
+    }
+    layerLevel->layers[0].pixels[offset(131, 132)] = 10;
+    layerLevel->layers[0].pixels[offset(133, 132)] = 11;
+    layerCanvas.refreshImage();
+    layerCanvas.setSelectedIndex(40);
+    layerCanvas.setDrawTool(DrawTool::FloodFill);
+    click(layerCanvas.viewport(), {131.5, 132.5});
+    ok &= expect(layerLevel->layers[1].pixels[offset(131, 132)] == 40 &&
+                     layerLevel->layers[1].pixels[offset(133, 132)] == 40 &&
+                     layerLevel->layers[1].mask[offset(133, 132)] == 1 &&
+                     layerLevel->layers[1].pixels[offset(130, 132)] == 20,
+                 "flood fill should use only the active layer for its region "
+                 "boundary");
+
     layerCanvas.setSelectedIndex(40);
     layerCanvas.setDrawTool(DrawTool::Pencil);
     click(layerCanvas.viewport(), {110.5, 110.5});
@@ -990,6 +1013,28 @@ int main(int argc, char *argv[])
                      layerLevel->layers.front().visible &&
                      layerLevel->layers.front().name == "Background",
                  "Background should stay visible, named, bottom, and undeletable");
+
+    Level mergeLevel;
+    mergeLevel.pixels.fill(0);
+    mergeLevel.pixels[offset(10, 10)] = 10;
+    mergeLevel.pixels[offset(11, 10)] = 11;
+    LevelCanvas mergeCanvas;
+    mergeCanvas.setLevel(&mergeLevel);
+    ok &= expect(mergeCanvas.addLayer(),
+                 "merge test should create an upper layer");
+    mergeLevel.layers[1].pixels[offset(10, 10)] = 20;
+    mergeLevel.layers[1].mask[offset(10, 10)] = 1;
+    mergeLevel.layers[1].pixels[offset(11, 10)] = 30;
+    mergeLevel.layers[1].mask[offset(11, 10)] = 0;
+    mergeCanvas.refreshImage();
+    ok &= expect(mergeCanvas.mergeActiveLayerDown() &&
+                     mergeCanvas.layerCount() == 1 &&
+                     mergeCanvas.activeLayerIndex() == 0 &&
+                     mergeLevel.layers[0].pixels[offset(10, 10)] == 20 &&
+                     mergeLevel.layers[0].pixels[offset(11, 10)] == 11 &&
+                     mergeLevel.pixels[offset(10, 10)] == 20,
+                 "merge down should composite the active layer into the one "
+                 "below and remove it");
 
     PaletteWidget palette;
     palette.setLevel(&level);
@@ -1122,6 +1167,23 @@ int main(int argc, char *argv[])
                      requestedTransform.rotationMillidegrees > 80000 &&
                      requestedTransform.rotationMillidegrees < 100000,
                  "object rotation handle should emit a visual rotation");
+
+    Level clipboardSource;
+    clipboardSource.resize(4, 4);
+    Level clipboardDestination;
+    clipboardDestination.resize(4, 4);
+    LevelCanvas clipboardCanvas;
+    clipboardCanvas.setLevel(&clipboardSource);
+    clipboardSource.layers[0].pixels[5] = 77;
+    clipboardCanvas.selectAll();
+    clipboardCanvas.copySelection();
+    clipboardCanvas.commitSelection();
+    QApplication::clipboard()->clear();
+    clipboardCanvas.setLevel(&clipboardDestination);
+    clipboardCanvas.pasteSelection();
+    clipboardCanvas.commitSelection();
+    ok &= expect(clipboardDestination.layers[0].pixels[5] == 77,
+                 "selection clipboard should survive switching documents");
 
     ok &=
         expect(!QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_pen.png")).isNull() &&

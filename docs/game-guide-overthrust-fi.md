@@ -1,10 +1,12 @@
 # OverThrust-kentät
 
-OverThrust-kenttäprojektissa on yksi indeksoitu materiaalikuva, valinnainen
-RGBA-taustakuva ja rasterista riippumattomat peliobjektit. Muokattava projekti
-tallennetaan `.pxlp`-tiedostoksi. **Publish OverThrust Level…** luo
-`<level-id>.OLV`-pakettihakemiston, jossa ovat `manifest.json`, `materials.pcx` ja
-`objects.json`. Jos taustakuva on tuotu, mukana on myös `background.png`.
+OverThrust-kenttäprojektissa on indeksoitu materiaalikuva, erillinen
+indeksoitu piirrettävä tausta, valinnainen RGBA-esitystausta ja rasterista
+riippumattomat peliobjektit. Muokattava projekti tallennetaan
+`.pxlp`-tiedostoksi. **Publish OverThrust Level…** luo
+`<level-id>.OLV`-pakettihakemiston, jossa ovat `manifest.json`, `materials.pcx`,
+`background.pcx` ja `objects.json`. Jos esitystausta on tuotu, mukana on lisäksi
+`background.png`.
 
 Kentän leveys ja korkeus annetaan suoraan pikseleinä. Esimerkiksi 400 × 400
 tarkoittaa editorissa 400 × 400 pikselin maailmaa. PCX Level Tool ei muuta
@@ -74,16 +76,28 @@ vapaasti, mutta niiden RGB-väri ei muuta niitä kiinteäksi materiaaliksi.
 
 ## Taustakuva
 
-Taustakuva ei ole pakollinen. Taustaksi voi tuoda PNG-, JPEG- tai staattisen
-WebP-kuvan. Sen kuvasuhteen on
-oltava täsmälleen sama kuin materiaaliruudukon. Tuonnissa kuva muunnetaan
+Editorin **PCX Background** -välilehdellä piirretään `background.pcx`. Se on
+aina käytössä ja täsmälleen kentän kokoinen. Sillä on materiaalikuvasta täysin
+erillinen, vapaasti muokattava 256 värin paletti. Tätä taustaa ei vieritetä
+eikä parallaksoida. Sen avulla voi piirtää esimerkiksi veden alta näkyvän
+kuvituksen vaikuttamatta `materials.pcx`-soluihin. Pikselivalinnan voi kopioida
+Materials- ja PCX Background -välilehtien välillä; liitetyt indeksit käyttävät
+kohdevälilehden omaa palettia.
+
+Valinnainen esitystausta voidaan tuoda PNG-, JPEG- tai staattisesta
+WebP-kuvasta. Kuvan ei tarvitse käyttää samaa kuvasuhdetta tai pikselikokoa kuin
+materiaaliruudukko. Tuonnissa kuva muunnetaan
 sRGB RGBA8 -muotoon ja tallennetaan projektiin, joten alkuperäistä tiedostoa ei
 tarvita myöhemmin. Julkaistu `background.png` kirjoitetaan aina samalla
 kanonisella tavalla. Tuotu PNG on esitystausta eikä piirtoalusta. Sen
 esikatselu on oletuksena piilotettu; **Show imported PNG background behind
-materials** näyttää sen tarvittaessa materiaalien takana. **Parallax
-background** määrittää yksinkertaisella valinnalla, vieriikö tausta
-parallaksina. Background scroll X/Y -arvot säätävät vierinnän nopeutta.
+materials** näyttää sen tarvittaessa materiaalien takana. **Parallax imported
+PNG** määrittää, vieriikö vain tämä esitystausta parallaksina. PNG scroll
+X/Y -arvot säätävät sen vierinnän nopeutta.
+
+Asetusikkunan **Image limits** näyttää vain kentälle lasketun taustakuvan
+enimmäiskoon, esimerkiksi **Maximum size: 1600 x 1600 px**. Pienemmät kuvat
+ja eri kuvasuhteet sallitaan.
 
 ## Objektit
 

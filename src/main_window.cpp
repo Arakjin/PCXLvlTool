@@ -297,9 +297,8 @@ bool loadOverThrustBackground(const QString& filename,
                               QString& error)
 {
     const QFileInfo fileInfo(filename);
-    if (!fileInfo.exists() || fileInfo.size() < 1 ||
-        fileInfo.size() > 64LL * 1024LL * 1024LL) {
-        error = QObject::tr("Background source must be between 1 byte and 64 MiB.");
+    if (!fileInfo.exists() || fileInfo.size() < 1) {
+        error = QObject::tr("Background source is missing or empty.");
         return false;
     }
     QImageReader reader(filename);
@@ -328,14 +327,13 @@ bool loadOverThrustBackground(const QString& filename,
         return false;
     }
     const QSize decodedSize = reader.size();
-    if (!decodedSize.isValid() || decodedSize.width() > 8192 ||
-        decodedSize.height() > 8192 ||
-        static_cast<quint64>(decodedSize.width()) * decodedSize.height() >
-            33554432ULL ||
-        static_cast<quint64>(decodedSize.width()) * materialHeight !=
-            static_cast<quint64>(decodedSize.height()) * materialWidth) {
+    if (!decodedSize.isValid() ||
+        !overthrustBackgroundDimensionsAllowed(
+            static_cast<std::size_t>(decodedSize.width()),
+            static_cast<std::size_t>(decodedSize.height()), materialWidth,
+            materialHeight)) {
         error = QObject::tr(
-            "Background dimensions exceed limits or do not match the material-grid aspect ratio.");
+            "Background pixel dimensions are outside the allowed range for this world size.");
         return false;
     }
     QImage image = reader.read();
@@ -387,6 +385,19 @@ bool loadOverThrustBackground(const QString& filename,
         return false;
     }
     return true;
+}
+
+QString overthrustBackgroundRequirements(const std::size_t materialWidth,
+                                         const std::size_t materialHeight)
+{
+    if (materialWidth == 0 || materialHeight == 0) return {};
+    const std::size_t maximumWidth =
+        overthrustMaximumBackgroundDimension(materialWidth);
+    const std::size_t maximumHeight =
+        overthrustMaximumBackgroundDimension(materialHeight);
+    return QObject::tr("Maximum size: %1 x %2 px")
+        .arg(maximumWidth)
+        .arg(maximumHeight);
 }
 
 void rebuildTeamModeSettings(OverThrustProjectData& data)
@@ -923,6 +934,7 @@ void MainWindow::createActions()
     deleteAction->setShortcut(QKeySequence::Delete);
     connect(deleteAction, &QAction::triggered, this, [this] {
         if (creationSettings_.game == GameId::OverThrust &&
+            documentTabs_->currentIndex() == 0 &&
             objectModeCheck_ != nullptr && objectModeCheck_->isChecked()) {
             deleteSelectedOverThrustObject();
         } else {
@@ -1613,9 +1625,11 @@ void MainWindow::createLayerDock()
     auto* firstRow = new QHBoxLayout();
     auto* addButton = new QPushButton(tr("Add"), contents);
     auto* duplicateButton = new QPushButton(tr("Duplicate"), contents);
+    auto* mergeButton = new QPushButton(tr("Merge down"), contents);
     auto* deleteButton = new QPushButton(tr("Delete"), contents);
     firstRow->addWidget(addButton);
     firstRow->addWidget(duplicateButton);
+    firstRow->addWidget(mergeButton);
     firstRow->addWidget(deleteButton);
     layout->addLayout(firstRow);
 
@@ -1669,6 +1683,16 @@ void MainWindow::createLayerDock()
         } else {
             statusBar()->showMessage(tr("The layer could not be duplicated"),
                                      3000);
+        }
+    });
+    connect(mergeButton, &QPushButton::clicked, this, [this] {
+        if (canvas_->mergeActiveLayerDown()) {
+            nonUndoModified_ = true;
+            setModified(true);
+        } else {
+            statusBar()->showMessage(
+                tr("Select a visible, unlocked upper layer above another visible, unlocked layer"),
+                4000);
         }
     });
     connect(deleteButton, &QPushButton::clicked, this, [this] {
@@ -1838,7 +1862,8 @@ void MainWindow::createObjectDock()
 void MainWindow::refreshObjectList()
 {
     const bool enabled = creationSettings_.game == GameId::OverThrust &&
-                         overthrustData_ != nullptr;
+                         overthrustData_ != nullptr &&
+                         documentTabs_->currentIndex() == 0;
     objectDock_->setVisible(enabled);
     canvas_->setObjectEditingEnabled(enabled && objectModeCheck_->isChecked());
     canvas_->setObjects(enabled ? &overthrustData_->objects : nullptr);
@@ -2453,8 +2478,7 @@ void MainWindow::openLevel()
                 loadedSettings.width = static_cast<int>(loaded->width);
                 loadedSettings.height = static_cast<int>(loaded->height);
                 if (loadedSettings.game == GameId::OverThrust) {
-                    loadedSettings.backgroundMode =
-                        BackgroundMode::ExternalTrueColor;
+                    loadedSettings.backgroundMode = BackgroundMode::None;
                     loadedOverThrust =
                         std::make_unique<OverThrustProjectData>();
                     loadedOverThrust->levelId = loaded->name;
@@ -2508,11 +2532,8 @@ void MainWindow::openLevel()
             ? tr("OverThrust level &settings...")
             : tr("Wings level &settings..."));
     documentTabs_->setCurrentIndex(0);
-    documentTabs_->setVisible(creationSettings_.game == GameId::Wings);
     configurePaletteForGame();
-    if (creationSettings_.game == GameId::Wings) {
-        configureProfileDocuments();
-    }
+    configureProfileDocuments();
     projectPath_ = isProject ? path : std::filesystem::path{};
     publishPath_ = isProject || isPcx ? std::filesystem::path{} : path;
     canvas_->setLevel(level_.get());
@@ -2983,6 +3004,7 @@ bool MainWindow::promptForOverThrustSettings(
     dialog.setWindowTitle(tr("OverThrust level settings"));
     auto* layout = new QVBoxLayout(&dialog);
     auto* form = new QFormLayout();
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     auto* displayName = new QLineEdit(
         QString::fromStdString(edited.displayName), &dialog);
     displayName->setMaxLength(256);
@@ -3007,19 +3029,19 @@ bool MainWindow::promptForOverThrustSettings(
     height->setEnabled(allowDimensionEditing);
     height->setSuffix(tr(" px"));
     form->addRow(tr("World height:"), height);
-    auto* parallax = new QCheckBox(tr("Parallax background"), &dialog);
+    auto* parallax = new QCheckBox(tr("Parallax imported PNG"), &dialog);
     parallax->setChecked(edited.backgroundParallax);
     form->addRow(QString(), parallax);
     auto* scrollX = new QDoubleSpinBox(&dialog);
     scrollX->setRange(0, 4);
     scrollX->setDecimals(6);
     scrollX->setValue(edited.backgroundScrollX);
-    form->addRow(tr("Background scroll X:"), scrollX);
+    form->addRow(tr("PNG scroll X:"), scrollX);
     auto* scrollY = new QDoubleSpinBox(&dialog);
     scrollY->setRange(0, 4);
     scrollY->setDecimals(6);
     scrollY->setValue(edited.backgroundScrollY);
-    form->addRow(tr("Background scroll Y:"), scrollY);
+    form->addRow(tr("PNG scroll Y:"), scrollY);
     auto* backgroundStatus = new QLabel(&dialog);
     backgroundStatus->setWordWrap(true);
     auto updateBackgroundStatus = [&] {
@@ -3039,7 +3061,20 @@ bool MainWindow::promptForOverThrustSettings(
     backgroundLayout->addWidget(replaceBackground);
     auto* removeBackground = new QPushButton(tr("Remove"), backgroundRow);
     backgroundLayout->addWidget(removeBackground);
-    form->addRow(tr("Background:"), backgroundRow);
+    form->addRow(tr("Imported PNG:"), backgroundRow);
+    auto* backgroundRequirements = new QLabel(&dialog);
+    backgroundRequirements->setWordWrap(false);
+    backgroundRequirements->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    const auto updateBackgroundRequirements = [&] {
+        backgroundRequirements->setText(overthrustBackgroundRequirements(
+            static_cast<std::size_t>(width->value()),
+            static_cast<std::size_t>(height->value())));
+    };
+    form->addRow(tr("Image limits:"), backgroundRequirements);
+    connect(width, &QSpinBox::valueChanged, &dialog,
+            [&](int) { updateBackgroundRequirements(); });
+    connect(height, &QSpinBox::valueChanged, &dialog,
+            [&](int) { updateBackgroundRequirements(); });
     connect(replaceBackground, &QPushButton::clicked, &dialog, [&] {
         const QString filename = QFileDialog::getOpenFileName(
             &dialog, tr("Import OverThrust background"), QString(),
@@ -3052,7 +3087,10 @@ bool MainWindow::promptForOverThrustSettings(
                                       static_cast<std::size_t>(height->value()),
                                       imported, importError)) {
             QMessageBox::critical(&dialog, tr("Background import failed"),
-                                  importError);
+                                  importError + QStringLiteral("\n\n") +
+                                      overthrustBackgroundRequirements(
+                                          static_cast<std::size_t>(width->value()),
+                                          static_cast<std::size_t>(height->value())));
             return;
         }
         edited.background = std::move(imported);
@@ -3062,6 +3100,7 @@ bool MainWindow::promptForOverThrustSettings(
         edited.background = {};
         updateBackgroundStatus();
     });
+    updateBackgroundRequirements();
     updateBackgroundStatus();
     layout->addLayout(form);
 
@@ -3120,12 +3159,13 @@ bool MainWindow::promptForOverThrustSettings(
         return false;
     }
     if (!edited.background.empty() &&
-        static_cast<std::uint64_t>(edited.background.width) * height->value() !=
-            static_cast<std::uint64_t>(edited.background.height) *
-                width->value()) {
+        !overthrustBackgroundDimensionsAllowed(
+            edited.background.width, edited.background.height,
+            static_cast<std::size_t>(width->value()),
+            static_cast<std::size_t>(height->value()))) {
         QMessageBox::critical(
-            this, tr("Background aspect ratio changed"),
-            tr("Replace the background with one matching the new material-grid aspect ratio."));
+            this, tr("Background dimensions no longer fit"),
+            tr("Replace the background with one within the pixel-size limits for the new world dimensions."));
         return false;
     }
     edited.displayName = displayName->text().trimmed().toStdString();
@@ -3176,14 +3216,7 @@ void MainWindow::editLevelSettings()
     }
     creationSettings_ = edited;
     level_->name = edited.name;
-    if (creationSettings_.game == GameId::Wings) {
-        configureProfileDocuments();
-    } else if (level_->width != static_cast<std::size_t>(edited.width) ||
-               level_->height != static_cast<std::size_t>(edited.height)) {
-        canvas_->forgetLevel(level_.get());
-        level_->resizePreservingContent(edited.width, edited.height);
-        canvas_->setLevel(level_.get());
-    }
+    configureProfileDocuments();
     {
         const QSignalBlocker blocker(levelNameEdit_);
         levelNameEdit_->setText(QString::fromStdString(level_->name));
@@ -3196,7 +3229,9 @@ void MainWindow::editLevelSettings()
 
 Level* MainWindow::activeLevel() const
 {
-    if (creationSettings_.game == GameId::Wings && backgroundLevel_ &&
+    if ((creationSettings_.game == GameId::Wings ||
+         creationSettings_.game == GameId::OverThrust) &&
+        backgroundLevel_ &&
         documentTabs_ != nullptr && documentTabs_->currentIndex() == 1) {
         return backgroundLevel_.get();
     }
@@ -3206,8 +3241,12 @@ Level* MainWindow::activeLevel() const
 void MainWindow::configureProfileDocuments()
 {
     const bool wings = creationSettings_.game == GameId::Wings;
-    documentTabs_->setVisible(wings);
-    if (!wings) {
+    const bool overthrust = creationSettings_.game == GameId::OverThrust;
+    documentTabs_->setVisible(wings || overthrust);
+    documentTabs_->setTabText(0, overthrust ? tr("Materials") : tr("Level"));
+    documentTabs_->setTabText(
+        1, overthrust ? tr("PCX Background") : tr("Background"));
+    if (!wings && !overthrust) {
         backgroundLevel_.reset();
         return;
     }
@@ -3220,7 +3259,7 @@ void MainWindow::configureProfileDocuments()
             static_cast<std::size_t>(creationSettings_.height));
     }
 
-    const bool hasBackground =
+    const bool hasBackground = overthrust ||
         creationSettings_.backgroundMode != BackgroundMode::None;
     documentTabs_->setTabEnabled(1, hasBackground);
     if (!hasBackground) {
@@ -3230,7 +3269,8 @@ void MainWindow::configureProfileDocuments()
     } else {
         int width = creationSettings_.width;
         int height = creationSettings_.height;
-        if (creationSettings_.backgroundMode == BackgroundMode::Parallax) {
+        if (wings &&
+            creationSettings_.backgroundMode == BackgroundMode::Parallax) {
             const auto size = wingsParallaxSize(width, height);
             width = size.first;
             height = size.second;
@@ -3238,8 +3278,11 @@ void MainWindow::configureProfileDocuments()
         if (!backgroundLevel_) {
             backgroundLevel_ = std::make_unique<Level>();
             backgroundLevel_->name = "Background";
+            backgroundLevel_->palette = level_->palette;
         }
-        backgroundLevel_->palette = level_->palette;
+        if (wings) {
+            backgroundLevel_->palette = level_->palette;
+        }
         if (backgroundLevel_->width != static_cast<std::size_t>(width) ||
             backgroundLevel_->height != static_cast<std::size_t>(height)) {
             canvas_->forgetLevel(backgroundLevel_.get());
@@ -3247,6 +3290,7 @@ void MainWindow::configureProfileDocuments()
                 static_cast<std::size_t>(width),
                 static_cast<std::size_t>(height));
         }
+        initializeBackgroundLayer(*backgroundLevel_);
     }
     switchProfileDocument(documentTabs_->currentIndex());
 }
@@ -3284,7 +3328,12 @@ void MainWindow::configurePaletteForGame()
     const auto add = [this](const char* label, const PaletteGroup group) {
         paletteGroupCombo_->addItem(tr(label), static_cast<int>(group));
     };
-    if (creationSettings_.game == GameId::OverThrust) {
+    const bool overthrustBackground =
+        creationSettings_.game == GameId::OverThrust &&
+        documentTabs_->currentIndex() == 1;
+    if (overthrustBackground) {
+        add("All background colors (0-255)", PaletteGroup::AllUsable);
+    } else if (creationSettings_.game == GameId::OverThrust) {
         add("All material and fly-through indices (0-255)",
             PaletteGroup::AllUsable);
         add("Empty (0)", PaletteGroup::Background);
@@ -3331,7 +3380,8 @@ void MainWindow::configurePaletteForGame()
             PaletteGroup::Turrets);
     }
     backgroundPreviewCheck_->setVisible(
-        creationSettings_.game == GameId::OverThrust);
+        creationSettings_.game == GameId::OverThrust &&
+        documentTabs_->currentIndex() == 0);
     paletteWidget_->setIndices(
         paletteIndices(PaletteGroup::AllUsable, creationSettings_.game));
     const int defaultIndex = creationSettings_.game == GameId::Wings
@@ -3356,7 +3406,8 @@ void MainWindow::configurePaletteForGame()
 
 void MainWindow::updateOverThrustBackgroundPreview()
 {
-    if (creationSettings_.game == GameId::OverThrust && overthrustData_ &&
+    if (creationSettings_.game == GameId::OverThrust &&
+        documentTabs_->currentIndex() == 0 && overthrustData_ &&
         !overthrustData_->background.empty() && backgroundPreviewCheck_ &&
         backgroundPreviewCheck_->isChecked()) {
         canvas_->setTrueColorBackground(
@@ -3370,7 +3421,9 @@ void MainWindow::updateOverThrustBackgroundPreview()
 
 void MainWindow::switchProfileDocument(const int index)
 {
-    if (creationSettings_.game != GameId::Wings || level_ == nullptr) {
+    if ((creationSettings_.game != GameId::Wings &&
+         creationSettings_.game != GameId::OverThrust) ||
+        level_ == nullptr) {
         return;
     }
     canvas_->commitSelection();
@@ -3381,12 +3434,15 @@ void MainWindow::switchProfileDocument(const int index)
     configurePaletteForGame();
     refreshLayerList();
     setModified(nonUndoModified_ || canvas_->hasDirtyUndoStack());
+    const bool overthrust = creationSettings_.game == GameId::OverThrust;
     statusBar()->showMessage(
         index == 1
-            ? tr("Editing Wings background: %1 x %2")
+            ? (overthrust ? tr("Editing OverThrust PCX background: %1 x %2")
+                              : tr("Editing Wings background: %1 x %2"))
                   .arg(document->width)
                   .arg(document->height)
-            : tr("Editing Wings level: %1 x %2")
+            : (overthrust ? tr("Editing OverThrust materials: %1 x %2")
+                              : tr("Editing Wings level: %1 x %2"))
                   .arg(document->width)
                   .arg(document->height),
         3000);
@@ -3394,28 +3450,48 @@ void MainWindow::switchProfileDocument(const int index)
 
 void MainWindow::updateMaterialDetails(const int index)
 {
-    const RGB& color = level_->palette[static_cast<std::size_t>(index)];
+    const bool overthrustBackground =
+        creationSettings_.game == GameId::OverThrust &&
+        documentTabs_->currentIndex() == 1;
+    const RGB& color =
+        activeLevel()->palette[static_cast<std::size_t>(index)];
     const QString hex =
         QStringLiteral("#%1%2%3")
             .arg(static_cast<int>(color.r), 2, 16, QLatin1Char('0'))
             .arg(static_cast<int>(color.g), 2, 16, QLatin1Char('0'))
             .arg(static_cast<int>(color.b), 2, 16, QLatin1Char('0'))
             .toUpper();
-    materialDetailsLabel_->setText(tr("Material index %1 / file index %2\n"
-                                      "RGB: %3, %4, %5   %6\n%7")
-                                       .arg(colorChartNumber(index))
-                                       .arg(index)
-                                       .arg(static_cast<int>(color.r))
-                                       .arg(static_cast<int>(color.g))
-                                       .arg(static_cast<int>(color.b))
-                                       .arg(hex)
-                                       .arg(materialDescription(
-                                           creationSettings_.game, index)));
-    const bool editable =
+    QString details;
+    if (overthrustBackground) {
+        details = tr("Background color index %1 / file index %2\n"
+                     "RGB: %3, %4, %5   %6")
+                      .arg(colorChartNumber(index))
+                      .arg(index)
+                      .arg(static_cast<int>(color.r))
+                      .arg(static_cast<int>(color.g))
+                      .arg(static_cast<int>(color.b))
+                      .arg(hex);
+    } else {
+        details = tr("Material index %1 / file index %2\n"
+                     "RGB: %3, %4, %5   %6\n%7")
+                      .arg(colorChartNumber(index))
+                      .arg(index)
+                      .arg(static_cast<int>(color.r))
+                      .arg(static_cast<int>(color.g))
+                      .arg(static_cast<int>(color.b))
+                      .arg(hex)
+                      .arg(materialDescription(creationSettings_.game,
+                                               index));
+    }
+    materialDetailsLabel_->setText(details);
+    const bool editable = overthrustBackground ||
         isPaletteColorEditable(creationSettings_.game, index);
     editColorButton_->setEnabled(editable);
     if (editable) {
-        editColorButton_->setToolTip(tr("Change this palette color globally"));
+        editColorButton_->setToolTip(
+            overthrustBackground
+                ? tr("Change this color only in the PCX background palette")
+                : tr("Change this palette color globally"));
     } else if (creationSettings_.game == GameId::Auts) {
         editColorButton_->setToolTip(tr("AUTS uses a fixed game palette"));
     } else {
@@ -3599,9 +3675,16 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
             return false;
         }
         flattenLayers(*level_);
+        if (!backgroundLevel_) {
+            QMessageBox::critical(this, tr("Publish failed"),
+                                  tr("OverThrust PCX background is missing."));
+            return false;
+        }
+        flattenLayers(*backgroundLevel_);
         rebuildTeamModeSettings(*overthrustData_);
         std::string error;
-        if (!publishOverThrustPackage(path, *level_, *overthrustData_, error)) {
+        if (!publishOverThrustPackage(path, *level_, *backgroundLevel_,
+                                      *overthrustData_, error)) {
             QMessageBox::critical(this, tr("Publish failed"),
                                   QString::fromStdString(error));
             return false;
@@ -3695,13 +3778,20 @@ void MainWindow::editSelectedPaletteColor()
 {
     const int index = paletteIndexFromColorChart(
         materialIndexSpinBox_->value());
-    if (!isPaletteColorEditable(creationSettings_.game, index)) {
+    const bool overthrustBackground =
+        creationSettings_.game == GameId::OverThrust &&
+        documentTabs_->currentIndex() == 1;
+    if (!overthrustBackground &&
+        !isPaletteColorEditable(creationSettings_.game, index)) {
         return;
     }
-    const RGB& current = level_->palette[static_cast<std::size_t>(index)];
+    const RGB& current =
+        activeLevel()->palette[static_cast<std::size_t>(index)];
     const QColor selected =
         QColorDialog::getColor(QColor(current.r, current.g, current.b), this,
-                               tr("Material index %1 (file index %2)")
+                               (overthrustBackground
+                                    ? tr("Background color index %1 (file index %2)")
+                                    : tr("Material index %1 (file index %2)"))
                                    .arg(colorChartNumber(index))
                                    .arg(index));
     if (!selected.isValid()) {
@@ -3759,7 +3849,7 @@ void MainWindow::savePalette()
     }
 
     std::string error;
-    if (!saveJascPalette(toPath(filename), level_->palette, error)) {
+    if (!saveJascPalette(toPath(filename), activeLevel()->palette, error)) {
         QMessageBox::critical(this, tr("Palette save failed"),
                               QString::fromStdString(error));
         return;

@@ -1,4 +1,5 @@
 #include "game_profile.h"
+#include "overthrust_profile.h"
 
 #include <iostream>
 
@@ -49,5 +50,13 @@ int main()
                      hasFeature(overthrust.features,
                                 GameFeature::PackagePublishing),
                  "OverThrust authoring profile");
+    ok &= expect(overthrustBackgroundDimensionsAllowed(1, 1600, 400, 400) &&
+                     overthrustBackgroundDimensionsAllowed(1600, 1, 400,
+                                                            400) &&
+                     !overthrustBackgroundDimensionsAllowed(0, 400, 400,
+                                                             400) &&
+                     !overthrustBackgroundDimensionsAllowed(400, 1601, 400,
+                                                             400),
+                 "OverThrust backgrounds allow any positive size through the current maximum");
     return ok ? 0 : 1;
 }

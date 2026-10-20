@@ -48,6 +48,12 @@ int main()
     for (std::size_t index = 0; index < level.pixels.size(); ++index) {
         level.pixels[index] = static_cast<std::uint8_t>(index % 4);
     }
+    Level background;
+    background.resize(4, 4);
+    background.palette = defaultOverThrustPalette();
+    background.palette[1] = {12, 34, 56};
+    background.pixels = Level::PixelBuffer(16);
+    background.pixels[5] = 1;
 
     OverThrustProjectData data;
     data.displayName = "Package test";
@@ -56,38 +62,50 @@ int main()
     data.description = "Deterministic package test";
     data.backgroundParallax = true;
     data.allowedGameModes = {"core:sandbox"};
-    data.background.width = 4;
-    data.background.height = 4;
-    data.background.rgba.resize(4 * 4 * 4);
+    data.background.width = 8;
+    data.background.height = 3;
+    data.background.rgba.resize(8 * 3 * 4);
     for (std::size_t index = 0; index < data.background.rgba.size(); ++index) {
         data.background.rgba[index] = static_cast<std::uint8_t>(index * 7);
     }
 
     std::string error;
-    ok &= expect(publishOverThrustPackage(first, level, data, error),
+    ok &= expect(publishOverThrustPackage(first, level, background, data, error),
                  "first package should publish");
-    ok &= expect(publishOverThrustPackage(second, level, data, error),
+    ok &= expect(publishOverThrustPackage(second, level, background, data, error),
                  "second package should publish");
     const std::vector<std::string> names{
-        "manifest.json", "materials.pcx", "background.png", "objects.json"};
+        "manifest.json", "materials.pcx", "background.pcx", "background.png",
+        "objects.json"};
     std::size_t fileCount = 0;
     for (const auto& entry : std::filesystem::directory_iterator(first)) {
         if (entry.is_regular_file()) ++fileCount;
     }
-    ok &= expect(fileCount == 4, "package should contain exactly four files");
+    ok &= expect(fileCount == 5, "package should contain exactly five files");
     for (const std::string& name : names) {
         ok &= expect(readBytes(first / name) == readBytes(second / name),
                      "publishing twice should produce identical bytes");
     }
     const auto manifestBytes = readBytes(first / "manifest.json");
     const std::string manifestText(manifestBytes.begin(), manifestBytes.end());
-    ok &= expect(manifestText.find("\"profile_id\": \"overthrust:authoring-v4\"") !=
+    ok &= expect(manifestText.find("\"profile_id\": \"overthrust:authoring-v5\"") !=
                          std::string::npos &&
                      manifestText.find("\"level_id\": \"Package test\"") !=
                          std::string::npos &&
                      manifestText.find("capture_the_flag_player_count") ==
                          std::string::npos &&
                      manifestText.find("\"parallax\": true") !=
+                         std::string::npos &&
+                     manifestText.find("\"presentation_background\"") !=
+                         std::string::npos &&
+                     manifestText.find("\"file\": \"background.pcx\"") !=
+                         std::string::npos &&
+                     manifestText.find("\"parallax\": false") !=
+                         std::string::npos &&
+                     manifestText.find(
+                         "\"presentation_background_scroll_factor\"") !=
+                         std::string::npos &&
+                     manifestText.find("\"background_scroll_factor\"") ==
                          std::string::npos &&
                      manifestText.find("minimum_players") == std::string::npos &&
                      manifestText.find("maximum_players") == std::string::npos &&
@@ -107,13 +125,18 @@ int main()
                      loaded.width == 4 && loaded.height == 4 &&
                      loaded.pixels == level.pixels,
                  "published PCX should preserve exact indices");
+    ok &= expect(loadPcx(first / "background.pcx", loaded, error) &&
+                     loaded.width == 4 && loaded.height == 4 &&
+                     loaded.pixels == background.pixels &&
+                     loaded.palette == background.palette,
+                 "background PCX should preserve its independent palette and indices");
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::vector<std::uint8_t> rgba;
     ok &= expect(decodeCanonicalRgbaPng(readBytes(first / "background.png"),
                                         width, height, rgba, error) &&
-                     width == 4 && height == 4 && rgba == data.background.rgba,
-                 "canonical PNG should round-trip exact RGBA bytes");
+                     width == 8 && height == 3 && rgba == data.background.rgba,
+                 "different-aspect background PNG should round-trip exact RGBA bytes");
 
     OverThrustProjectData noBackground = data;
     noBackground.background = {};
@@ -121,10 +144,12 @@ int main()
         std::filesystem::current_path() / "no-background.OLV";
     std::filesystem::remove_all(noBackgroundPackage, ignored);
     ok &= expect(publishOverThrustPackage(noBackgroundPackage, level,
-                                          noBackground, error) &&
+                                          background, noBackground, error) &&
                      !std::filesystem::exists(noBackgroundPackage /
-                                              "background.png"),
-                 "background should be optional when publishing");
+                                              "background.png") &&
+                     std::filesystem::exists(noBackgroundPackage /
+                                             "background.pcx"),
+                 "presentation PNG should be optional while the PCX background is always published");
 
     OverThrustObject teamBase;
     teamBase.id = "team_base_1";
@@ -143,7 +168,8 @@ int main()
     const auto polygonPackage =
         std::filesystem::current_path() / "polygon.OLV";
     std::filesystem::remove_all(polygonPackage, ignored);
-    ok &= expect(publishOverThrustPackage(polygonPackage, level, data, error),
+    ok &= expect(publishOverThrustPackage(polygonPackage, level, background,
+                                          data, error),
                  "polygonal team base should publish");
     const auto objectsBytes = readBytes(polygonPackage / "objects.json");
     const std::string objectsText(objectsBytes.begin(), objectsBytes.end());
@@ -178,7 +204,8 @@ int main()
     const auto capturePackage =
         std::filesystem::current_path() / "capture-the-flag.OLV";
     std::filesystem::remove_all(capturePackage, ignored);
-    ok &= expect(publishOverThrustPackage(capturePackage, level, data, error),
+    ok &= expect(publishOverThrustPackage(capturePackage, level, background,
+                                          data, error),
                  "capture-the-flag package should publish");
     const auto captureManifestBytes =
         readBytes(capturePackage / "manifest.json");
@@ -204,14 +231,15 @@ int main()
         std::filesystem::current_path() / "fly-through.OLV";
     std::filesystem::remove_all(flyThroughPackage, ignored);
     std::filesystem::remove_all(noBackgroundPackage, ignored);
-    ok &= expect(publishOverThrustPackage(flyThroughPackage, level, data,
-                                          error),
+    ok &= expect(publishOverThrustPackage(flyThroughPackage, level,
+                                          background, data, error),
                  "fly-through color 255 should publish");
     level.pixels[0] = 0;
     const auto expectInvalid = [&](const char* label) {
         std::filesystem::remove_all(invalid, ignored);
         const bool rejected =
-            !publishOverThrustPackage(invalid, level, data, error) &&
+            !publishOverThrustPackage(invalid, level, background, data,
+                                      error) &&
             !std::filesystem::exists(invalid);
         ok &= expect(rejected, label);
     };

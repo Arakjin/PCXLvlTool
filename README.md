@@ -48,15 +48,17 @@ The current milestone supports:
   the current indexed document directly as deterministic PCX
 - authoring OverThrust material grids with expanded rock, bedrock, soil, and
   rubble appearances plus editable fly-through colors through index 255,
-  category filters, an optional normalized true-color background with a
+  category filters, an always-on world-sized indexed background with its own
+  fully editable palette, an optional normalized true-color background with a
   parallax flag and preview, typed level
   settings, and non-rasterized sliding gates, teleporters, service orbs, and polygonal
   independently placed capture flags and polygonal team-base areas
 - publishing deterministic `.OLV` level-package directories containing
-  `manifest.json`, `materials.pcx`, `objects.json`, and optional
-  `background.png`
-- PXLP v2 persistence for embedded OverThrust backgrounds and object records,
-  while retaining PXLP v1 loading for existing projects
+  `manifest.json`, `materials.pcx`, `background.pcx`, `objects.json`, and
+  optional `background.png`
+- PXLP v3 persistence for OverThrust's independently paletted background PCX,
+  embedded presentation background, and object records, while retaining older
+  project loading
 - saving and reopening Wings work, including parallax layers and settings, as
   `.pxlp` projects
 - creating, opening, editing, and publishing fixed-size 320 x 400 AUTS levels
@@ -114,6 +116,10 @@ The current milestone supports:
   commits a floating selection, `Esc` cancels it, and `Ctrl+A` selects the full
   canvas
 - stroke-based undo and redo (`Ctrl+Z` and `Ctrl+Shift+Z`)
+- merge-down support for compositing a visible, unlocked layer into the layer
+  immediately below it
+- flood fill region matching based strictly on the active layer rather than
+  the flattened canvas
 - a clickable 256-color palette viewer with exact index, RGB, hexadecimal, and
   documented V-Wing material information; left click selects the primary index
   and right click selects the secondary index, which also works for drawing

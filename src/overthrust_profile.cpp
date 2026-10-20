@@ -1,5 +1,6 @@
 #include "overthrust_profile.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -171,4 +172,20 @@ std::array<RGB, 256> defaultOverThrustPalette()
         palette[material.index] = material.preview;
     }
     return palette;
+}
+
+bool overthrustBackgroundDimensionsAllowed(const std::size_t imageWidth,
+                                           const std::size_t imageHeight,
+                                           const std::size_t worldWidth,
+                                           const std::size_t worldHeight)
+{
+    if (imageWidth == 0 || imageHeight == 0 || worldWidth == 0 ||
+        worldHeight == 0 ||
+        imageWidth > OverThrustMaximumBackgroundSide ||
+        imageHeight > OverThrustMaximumBackgroundSide ||
+        imageWidth > OverThrustMaximumBackgroundPixels / imageHeight) {
+        return false;
+    }
+    return imageWidth <= overthrustMaximumBackgroundDimension(worldWidth) &&
+           imageHeight <= overthrustMaximumBackgroundDimension(worldHeight);
 }

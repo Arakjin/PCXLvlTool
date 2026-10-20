@@ -143,7 +143,8 @@ tasolta. Muiden näkyvien tasojen sisältö ei vaikuta valintaan.
 Valittuun alueeseen voi piirtää ennen sen hyväksymistä. **Move selection**
 siirtää valintaa, `Delete` poistaa sen, `Ctrl+C` kopioi ja `Ctrl+V` liittää.
 `Ctrl+A` valitsee koko kentän. `Enter` hyväksyy kelluvan valinnan ja `Esc`
-peruuttaa sen.
+peruuttaa sen. Kopioitu valinta säilyy vaihdettaessa Level-/Materials- ja
+Background-välilehtien välillä.
 
 ## Tasot
 
@@ -152,6 +153,8 @@ päällimmäiseksi. Tyhjät pikselit näyttävät alemmat tasot läpi.
 
 - **Add** lisää uuden tason.
 - **Duplicate** kopioi aktiivisen tason.
+- **Merge down** yhdistää aktiivisen tason sitä alempaan tasoon ja poistaa
+  aktiivisen tason. Molempien tasojen täytyy olla näkyviä ja lukitsemattomia.
 - **Up/Down** muuttaa tasojen järjestystä.
 - **Rename** nimeää tason.
 - **Lock** estää tason muokkaamisen.
@@ -159,6 +162,10 @@ päällimmäiseksi. Tyhjät pikselit näyttävät alemmat tasot läpi.
 
 Background on aina alin ja näkyvä taso. Sitä ei voi siirtää, nimetä uudelleen
 eikä poistaa.
+
+**Flood fill** määrittää täytettävän yhtenäisen alueen vain aktiivisen tason
+materiaalien ja läpinäkyvyyden perusteella. Alempien tai ylempien tasojen
+näkyvä sisältö ei muodosta täytölle rajoja.
 
 ## Näkymä ja pikanäppäimet
 
@@ -181,8 +188,9 @@ Help-valikon erillisistä V-Wing-, Wings-, AUTS- ja OverThrust-ohjeista.
 
 OverThrustissa valitaan **File > Publish OverThrust Level**. Ohjelma luo
 `.OLV`-pakettihakemiston, jonka tiedostot ovat suoraan pelin/cookerin käyttämä
-julkaisu. Valinnainen taustakuva lisätään omana `background.png`-tiedostonaan.
-Julkaisu tarkistaa ensin materiaalit, mahdollisen taustan, objektit ja
+julkaisu. Aina käytössä oleva piirrettävä tausta julkaistaan
+`background.pcx`-tiedostona. Valinnainen esitystausta lisätään erillisenä
+`background.png`-tiedostona. Julkaisu tarkistaa ensin materiaalit, taustat, objektit ja
 viittaukset eikä jätä virhetilanteessa osittaista hakemistoa.
 
 V-Wing-, Wings- ja AUTS-kentät julkaistaan seuraavasti:

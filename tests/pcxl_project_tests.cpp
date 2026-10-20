@@ -159,6 +159,14 @@ int main()
     initializeBackgroundLayer(overthrust);
     overthrust.layers[0].pixels[42] = 69;
     flattenLayers(overthrust);
+    Level overthrustBackground;
+    overthrustBackground.resize(400, 400);
+    overthrustBackground.name = "Background";
+    overthrustBackground.palette = defaultOverThrustPalette();
+    overthrustBackground.palette[12] = {1, 99, 201};
+    initializeBackgroundLayer(overthrustBackground);
+    overthrustBackground.layers[0].pixels[314] = 12;
+    flattenLayers(overthrustBackground);
     LevelCreationSettings overthrustSettings;
     overthrustSettings.game = GameId::OverThrust;
     overthrustSettings.name = overthrust.name;
@@ -200,7 +208,7 @@ int main()
     captureFlag.transform = {35, 44, 8, 8, 0};
     captureFlag.teamSlot = 1;
     overthrustData.objects.push_back(captureFlag);
-    ok &= expect(savePxlProject(path, overthrust, nullptr,
+    ok &= expect(savePxlProject(path, overthrust, &overthrustBackground,
                                overthrustSettings, &overthrustData, error),
                  "OverThrust PXLP project should save");
     std::unique_ptr<OverThrustProjectData> loadedOverThrust;
@@ -211,6 +219,12 @@ int main()
     ok &= expect(loadedSettings.game == GameId::OverThrust &&
                      loaded.width == 400 && loaded.height == 400 &&
                      loaded.layers[0].pixels[42] == 69 &&
+                     loadedBackground &&
+                     loadedBackground->width == 400 &&
+                     loadedBackground->height == 400 &&
+                     loadedBackground->layers[0].pixels[314] == 12 &&
+                     loadedBackground->palette[12] == RGB{1, 99, 201} &&
+                     loadedBackground->palette != loaded.palette &&
                      loadedOverThrust &&
                      loadedOverThrust->levelId == "Round trip" &&
                      loadedOverThrust->displayName == "Round trip" &&
@@ -226,10 +240,10 @@ int main()
                          teamBase.areaPolygon &&
                      loadedOverThrust->objects[2].type == "capture_flag" &&
                      loadedOverThrust->objects[2].transform.x == 35,
-                 "OverThrust PXLP v4 data should round-trip");
+                 "OverThrust PXLP v3 documents and v4 data should round-trip");
 
     // Corrupt the first object's serialized X coordinate without disturbing
-    // the surrounding framing. The bounded v2 reader must reject it before
+    // the surrounding framing. The bounded reader must reject it before
     // exposing a partially loaded project.
     std::ifstream projectInput(path, std::ios::binary);
     std::vector<char> projectBytes(

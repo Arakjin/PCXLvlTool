@@ -210,12 +210,19 @@ void validateTeamBasePolygon(const OverThrustObject& object,
     }
 }
 
-void validate(const Level& level, const OverThrustProjectData& data)
+void validate(const Level& level, const Level& background,
+              const OverThrustProjectData& data)
 {
     if (level.width == 0 || level.height == 0 || level.width > 4096 ||
         level.height > 4096 || level.width > kMaximumCells / level.height ||
         level.pixels.size() != level.pixelCount()) {
         throw std::runtime_error("material grid exceeds OverThrust limits");
+    }
+    if (background.width != level.width ||
+        background.height != level.height ||
+        background.pixels.size() != background.pixelCount()) {
+        throw std::runtime_error(
+            "background PCX must match the material grid dimensions");
     }
     for (const std::uint8_t index : level.pixels) {
         if (overthrustMaterial(index) == nullptr) {
@@ -250,10 +257,11 @@ void validate(const Level& level, const OverThrustProjectData& data)
             "capture-the-flag player count must be between 2 and 4");
     }
     if (!data.background.empty() &&
-        static_cast<std::uint64_t>(data.background.width) * level.height !=
-        static_cast<std::uint64_t>(data.background.height) * level.width) {
+        !overthrustBackgroundDimensionsAllowed(
+            data.background.width, data.background.height, level.width,
+            level.height)) {
         throw std::runtime_error(
-            "background and material grid aspect ratios differ");
+            "background dimensions are outside the allowed range for the world size");
     }
 
     std::set<std::string> channels;
@@ -544,8 +552,8 @@ std::string manifestJson(const Level& level,
 {
     std::ostringstream output;
     output << "{\n"
-           << "  \"schema_version\": 4,\n"
-           << "  \"profile_id\": \"overthrust:authoring-v4\",\n"
+           << "  \"schema_version\": 5,\n"
+           << "  \"profile_id\": \"overthrust:authoring-v5\",\n"
            << "  \"registry_id\": \"overthrust:authoring-registry-v2\",\n"
            << "  \"level_id\": " << jsonString(data.displayName) << ",\n"
            << "  \"display_name\": " << jsonString(data.displayName) << ",\n"
@@ -555,9 +563,17 @@ std::string manifestJson(const Level& level,
            << ", \"height\": " << level.height << " },\n"
            << "  \"coordinates\": { \"origin\": \"top_left\", \"positive_x\": \"right\", \"positive_y\": \"down\" },\n"
            << "  \"rasters\": {\n"
-           << "    \"materials\": \"materials.pcx\"";
+           << "    \"materials\": \"materials.pcx\",\n"
+           << "    \"background\": {\n"
+           << "      \"file\": \"background.pcx\",\n"
+           << "      \"media_type\": \"image/vnd.zsoft.pcx\",\n"
+           << "      \"mapping\": \"world_bounds\",\n"
+           << "      \"parallax\": false,\n"
+           << "      \"pixel_dimensions\": { \"width\": " << level.width
+           << ", \"height\": " << level.height << " }\n"
+           << "    }";
     if (!data.background.empty()) {
-        output << ",\n    \"background\": {\n"
+        output << ",\n    \"presentation_background\": {\n"
                << "      \"file\": \"background.png\",\n"
                << "      \"media_type\": \"image/png\",\n"
                << "      \"mapping\": \"world_bounds\",\n"
@@ -573,7 +589,7 @@ std::string manifestJson(const Level& level,
     output << "\n  },\n"
            << "  \"objects\": \"objects.json\",\n"
            << "  \"settings\": {\n"
-           << "    \"background_scroll_factor\": { \"x\": "
+           << "    \"presentation_background_scroll_factor\": { \"x\": "
            << decimal(data.backgroundScrollX) << ", \"y\": "
            << decimal(data.backgroundScrollY) << " },\n";
     const bool captureTheFlag = std::find(
@@ -640,13 +656,14 @@ std::string manifestJson(const Level& level,
 
 bool publishOverThrustPackage(const std::filesystem::path& directory,
                               const Level& materials,
+                              const Level& background,
                               const OverThrustProjectData& data,
                               std::string& error)
 {
     error.clear();
     std::filesystem::path staging;
     try {
-        validate(materials, data);
+        validate(materials, background, data);
         std::vector<std::uint8_t> png;
         if (!data.background.empty() &&
             !encodeCanonicalRgbaPng(data.background.width,
@@ -674,6 +691,13 @@ bool publishOverThrustPackage(const std::filesystem::path& directory,
         if (std::filesystem::file_size(staging / "materials.pcx") >
             kMaximumPcxBytes) {
             throw std::runtime_error("published material PCX is too large");
+        }
+        if (!savePcx(staging / "background.pcx", background, pcxError)) {
+            throw std::runtime_error(pcxError);
+        }
+        if (std::filesystem::file_size(staging / "background.pcx") >
+            kMaximumPcxBytes) {
+            throw std::runtime_error("published background PCX is too large");
         }
         if (!data.background.empty()) {
             writeFile(staging / "background.png", png);

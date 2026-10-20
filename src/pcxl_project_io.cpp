@@ -19,6 +19,7 @@ namespace {
 constexpr std::array<char, 8> kMagic{{'P', 'X', 'L', 'P', 'R', 'J', '1', 0}};
 constexpr std::uint32_t kVersion1 = 1;
 constexpr std::uint32_t kVersion2 = 2;
+constexpr std::uint32_t kVersion3 = 3;
 constexpr std::uint32_t kMaximumStringLength = 4096;
 constexpr std::uint32_t kMaximumDimension = 4096;
 constexpr std::uint32_t kMaximumSettings = 128;
@@ -641,6 +642,7 @@ bool savePxlProject(const std::filesystem::path& path, const Level& level,
         }
         const bool parallax =
             settings.backgroundMode == BackgroundMode::Parallax;
+        const bool isOverThrust = settings.game == GameId::OverThrust;
         if (parallax) {
             const auto size = wingsParallaxSize(settings.width, settings.height);
             if (settings.game != GameId::Wings || background == nullptr ||
@@ -648,11 +650,17 @@ bool savePxlProject(const std::filesystem::path& path, const Level& level,
                 background->height != std::size_t(size.second)) {
                 throw std::runtime_error("invalid PXLP parallax document");
             }
+        } else if (isOverThrust) {
+            if (background == nullptr ||
+                background->width != level.width ||
+                background->height != level.height) {
+                throw std::runtime_error(
+                    "invalid PXLP OverThrust background document");
+            }
         } else if (background != nullptr) {
             throw std::runtime_error(
                 "PXLP project has an unexpected background document");
         }
-        const bool isOverThrust = settings.game == GameId::OverThrust;
         if (isOverThrust != (overthrust != nullptr)) {
             throw std::runtime_error(
                 "PXLP OverThrust project data is missing or unexpected");
@@ -663,7 +671,7 @@ bool savePxlProject(const std::filesystem::path& path, const Level& level,
             throw std::runtime_error("could not create PXLP project");
         }
         output.write(kMagic.data(), static_cast<std::streamsize>(kMagic.size()));
-        writeU32(output, isOverThrust ? kVersion2 : kVersion1);
+        writeU32(output, isOverThrust ? kVersion3 : kVersion1);
         writeString(output, profile.key);
         writeU32(output, 10); // Tagged settings; new keys can be added later.
         writeSetting(output, "name", settings.name);
@@ -683,9 +691,16 @@ bool savePxlProject(const std::filesystem::path& path, const Level& level,
             output.put(static_cast<char>(color.g));
             output.put(static_cast<char>(color.b));
         }
-        writeU32(output, parallax ? 2U : 1U);
+        if (isOverThrust) {
+            for (const RGB& color : background->palette) {
+                output.put(static_cast<char>(color.r));
+                output.put(static_cast<char>(color.g));
+                output.put(static_cast<char>(color.b));
+            }
+        }
+        writeU32(output, (parallax || isOverThrust) ? 2U : 1U);
         writeDocument(output, isOverThrust ? "materials" : "level", level);
-        if (parallax) {
+        if (parallax || isOverThrust) {
             writeDocument(output, "background", *background);
         }
         if (isOverThrust) {
@@ -726,7 +741,9 @@ bool loadPxlProject(const std::filesystem::path& path, Level& level,
         std::array<char, kMagic.size()> magic{};
         requireRead(input, magic.data(), magic.size());
         const std::uint32_t version = readU32(input);
-        if (magic != kMagic || (version != kVersion1 && version != kVersion2)) {
+        if (magic != kMagic ||
+            (version != kVersion1 && version != kVersion2 &&
+             version != kVersion3)) {
             throw std::runtime_error("unrecognized PXLP project format");
         }
         const std::string gameKey = readString(input);
@@ -800,6 +817,23 @@ bool loadPxlProject(const std::filesystem::path& path, Level& level,
             throw std::runtime_error(
                 "AUTS PXLP project does not use the fixed game palette");
         }
+        std::array<RGB, 256> backgroundPalette = palette;
+        if (version == kVersion3) {
+            for (RGB& color : backgroundPalette) {
+                const int red = input.get();
+                const int green = input.get();
+                const int blue = input.get();
+                if (red == std::char_traits<char>::eof() ||
+                    green == std::char_traits<char>::eof() ||
+                    blue == std::char_traits<char>::eof()) {
+                    throw std::runtime_error(
+                        "unexpected end of PXLP background palette");
+                }
+                color = {static_cast<std::uint8_t>(red),
+                         static_cast<std::uint8_t>(green),
+                         static_cast<std::uint8_t>(blue)};
+            }
+        }
         const std::uint32_t documentCount = readU32(input);
         if (documentCount == 0 || documentCount > 8) {
             throw std::runtime_error("invalid PXLP document count");
@@ -808,9 +842,11 @@ bool loadPxlProject(const std::filesystem::path& path, Level& level,
         std::unique_ptr<Level> loadedBackground;
         for (std::uint32_t index = 0; index < documentCount; ++index) {
             auto [role, document] = readDocument(input);
-            document->palette = palette;
+            document->palette = role == "background" && version == kVersion3
+                ? backgroundPalette
+                : palette;
             if ((role == "level" ||
-                 (version == kVersion2 && role == "materials")) &&
+                 (version >= kVersion2 && role == "materials")) &&
                 !loadedLevel) {
                 loadedLevel = std::move(document);
             } else if (role == "background" && !loadedBackground) {
@@ -833,14 +869,26 @@ bool loadPxlProject(const std::filesystem::path& path, Level& level,
                 loadedBackground->height != std::size_t(expected.second)) {
                 throw std::runtime_error("PXLP parallax dimensions mismatch");
             }
+        } else if (loadedSettings.game == GameId::OverThrust) {
+            if (version == kVersion3 &&
+                (!loadedBackground ||
+                 loadedBackground->width != loadedLevel->width ||
+                 loadedBackground->height != loadedLevel->height)) {
+                throw std::runtime_error(
+                    "PXLP OverThrust background dimensions mismatch");
+            }
+            if (version == kVersion2 && loadedBackground) {
+                throw std::runtime_error(
+                    "unexpected PXLP v2 background document");
+            }
         } else if (loadedBackground) {
             throw std::runtime_error("unexpected PXLP background document");
         }
         std::unique_ptr<OverThrustProjectData> loadedOverThrust;
-        if (version == kVersion2) {
-            if (loadedSettings.game != GameId::OverThrust ||
-                loadedBackground) {
-                throw std::runtime_error("invalid PXLP v2 profile documents");
+        if (version == kVersion2 || version == kVersion3) {
+            if (loadedSettings.game != GameId::OverThrust) {
+                throw std::runtime_error(
+                    "invalid PXLP OverThrust profile documents");
             }
             loadedOverThrust = readOverThrustData(input);
             loadedSettings.backgroundMode =
@@ -848,7 +896,7 @@ bool loadPxlProject(const std::filesystem::path& path, Level& level,
                     ? BackgroundMode::None
                     : BackgroundMode::ExternalTrueColor;
         } else if (loadedSettings.game == GameId::OverThrust) {
-            throw std::runtime_error("OverThrust requires PXLP v2");
+            throw std::runtime_error("OverThrust requires PXLP v2 or newer");
         }
         if (input.peek() != std::char_traits<char>::eof()) {
             throw std::runtime_error("unexpected data after PXLP project");

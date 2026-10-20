@@ -8,6 +8,7 @@
 
 bool publishOverThrustPackage(const std::filesystem::path& directory,
                               const Level& materials,
+                              const Level& background,
                               const OverThrustProjectData& data,
                               std::string& error);
 

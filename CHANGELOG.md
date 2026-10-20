@@ -4,6 +4,18 @@ All notable changes to PCX Level Tool are documented in this file.
 
 ## Unreleased
 
+- Keep copied pixel selections available while switching between the main and
+  background documents in Wings and OverThrust.
+- Add an always-enabled, world-sized OverThrust `background.pcx` editing tab
+  with an independent, fully editable 256-color palette. Keep parallax and
+  scrolling exclusive to the optional imported `background.png`, publish both
+  assets distinctly in manifest schema v5, and persist the extra document and
+  palette in PXLP v3.
+- Show only the dynamically calculated maximum OverThrust background
+  dimensions in level settings, allow any smaller positive dimensions and
+  differing aspect ratios, and remove the source byte-size limit.
+- Add Merge down for visible, unlocked layers and make flood fill determine
+  its region strictly from the active layer's indices and opacity mask.
 - Add an active-layer magic-wand selection tool with connected-area and
   all-matching-material modes.
 - Add the OverThrust authoring profile with its material registry,
@@ -26,14 +38,15 @@ All notable changes to PCX Level Tool are documented in this file.
 - Add direct object move, separate width/height resize, corner resize, and
   rotation handles while retaining numeric properties for precision.
 - Publish deterministic `.OLV` level-package directories containing canonical
-  `manifest.json`, `materials.pcx`, and `objects.json` files, plus
-  `background.png` when an optional presentation background is supplied.
+  `manifest.json`, `materials.pcx`, `background.pcx`, and `objects.json` files,
+  plus `background.png` when an optional presentation background is supplied.
 - Simplify OverThrust settings by removing level player-count, spawn-policy,
   and boundary-policy fields; author world dimensions and object measurements
   directly in pixels without editor-side cell conversion; and add a background
   parallax flag alongside the existing scroll factors.
-- Add PXLP v2 persistence with a backward-readable OverThrust data v4 section
-  for optional embedded backgrounds, settings, and forward-compatible object
+- Add PXLP v3 persistence with separate material and background documents and
+  palettes, plus a backward-readable OverThrust data v4 section for optional
+  embedded presentation backgrounds, settings, and forward-compatible object
   records while retaining older project loading.
 - Replace separate OverThrust level ID and display-name inputs with one level
   name used for both, show the capture-the-flag player count only when that
