@@ -47,6 +47,7 @@ enum class DrawTool {
     SelectRectangle,
     SelectEllipse,
     SelectFreehand,
+    MagicWand,
     MoveSelection,
     BezierCurve,
 };
@@ -60,6 +61,11 @@ enum class ShapeMode {
 enum class BrushShape {
     Square,
     Circle,
+};
+
+enum class MaterialSelectionMode {
+    Connected,
+    AllMatching,
 };
 
 class LevelCanvas final : public QAbstractScrollArea {
@@ -83,6 +89,8 @@ public:
     int rectangleCornerRadius() const;
     void setShapeMode(ShapeMode mode);
     ShapeMode shapeMode() const;
+    void setMaterialSelectionMode(MaterialSelectionMode mode);
+    MaterialSelectionMode materialSelectionMode() const;
     void setTextFontFamily(const QString& family);
     void setTextPixelSize(int size);
     void setPaletteColor(std::uint8_t index, RGB color);
@@ -132,6 +140,7 @@ signals:
     void objectTransformRequested(int index, int x, int y, int width,
                                   int height, int rotationMillidegrees);
     void teamBasePolygonRequested(const QPolygon& polygon, int objectIndex);
+    void teamBasePolygonActiveChanged(bool active);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -204,6 +213,8 @@ private:
     void paintBrushPreview(QPainter& painter) const;
     void paintSelection(QPainter& painter) const;
     void createSelection();
+    void selectMatchingMaterial(const QPoint& point);
+    void applySelectionCandidate(std::vector<std::uint8_t> candidate);
     void clearSelection();
     void setSelectionPosition(const QPoint& position);
     bool isSelectionTool(DrawTool tool) const;
@@ -251,6 +262,8 @@ private:
     int rectangleCornerRadius_ = 0;
     int strokeCornerRadius_ = 0;
     ShapeMode shapeMode_ = ShapeMode::Outline;
+    MaterialSelectionMode materialSelectionMode_ =
+        MaterialSelectionMode::Connected;
     ShapeMode strokeShapeMode_ = ShapeMode::Outline;
     SelectionCombineMode strokeSelectionCombineMode_ =
         SelectionCombineMode::Replace;

@@ -68,13 +68,15 @@ struct OverThrustObject {
     std::vector<std::string> services;
     OverThrustAccess access;
 
-    // Team-base fields.
+    // Team-base and capture-flag fields.
     int teamSlot = 1;
     std::string baseProfileId;
+    // Retained for backward-compatible PXLP reads; current team bases use a
+    // separate capture_flag object instead of an embedded objective anchor.
     int objectiveAnchorX = 0;
     int objectiveAnchorY = 0;
     // Absolute world-pixel boundary. Its interior is the authoritative team
-    // base area; the common transform only places the flag/objective marker.
+    // base area.
     std::vector<OverThrustPoint> areaPolygon;
 
     // Retained when a newer PXLP producer adds fields unknown to this build.
@@ -98,13 +100,14 @@ struct OverThrustTeamModeSetting {
 };
 
 struct OverThrustProjectData {
-    std::string levelId = "untitled";
+    std::string levelId = "Untitled";
     std::string displayName = "Untitled";
     std::string author;
     std::string description;
     bool backgroundParallax = false;
     double backgroundScrollX = 1.0;
     double backgroundScrollY = 1.0;
+    int captureTheFlagPlayers = 2;
     std::vector<std::string> allowedGameModes{"core:sandbox"};
     std::vector<OverThrustTeamModeSetting> teamModeSettings;
     OverThrustBackground background;

@@ -129,7 +129,11 @@ toimivan sijoitus- tai luontimerkkinä.
 
 ## Valinnat
 
-Käytettävissä ovat suorakulmainen, elliptinen ja vapaamuotoinen valinta.
+Käytettävissä ovat suorakulmainen, elliptinen ja vapaamuotoinen valinta sekä
+**Magic wand** -taikasauva. Taikasauva valitsee napsautetun materiaalin vain
+aktiiviselta tasolta. Asetuspalkin **Connected only** valitsee yhden yhtenäisen
+alueen ja **All same material** kaikki saman materiaalin esiintymät aktiiviselta
+tasolta. Muiden näkyvien tasojen sisältö ei vaikuta valintaan.
 
 - tavallinen valinta korvaa aiemman valinnan
 - `Shift` lisää alueen aiempaan valintaan

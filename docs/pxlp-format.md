@@ -25,13 +25,13 @@ plus bounded typed sections for:
   flag, decoded dimensions, SHA-256 content hash, and optional source filename;
 - level identity and typed profile settings;
 - declared activation channels;
-- sliding doors, teleporters, service orbs, and team bases with a shared
-  world-pixel transform; team bases additionally retain an absolute
+- sliding doors, teleporters, service orbs, capture flags, and team bases with
+  a shared world-pixel transform; team bases additionally retain an absolute
   world-pixel polygon defining their gameplay area;
 - team-mode base bindings; and
 - tagged unknown object properties retained for forward compatibility.
 
 Unknown object types or properties survive editable-project round trips, but
-they prevent publication under `overthrust:authoring-v3`. Background source
+they prevent publication under `overthrust:authoring-v4`. Background source
 paths are not needed after import: saving and publishing use the embedded
 normalized pixels.

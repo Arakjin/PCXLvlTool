@@ -12,6 +12,10 @@ mittoja soluiksi tai maailmanyksiköiksi; peli tekee tarvitsemansa muunnoksen.
 Myös objektien sijainnit, koot, siirtymät, säteet ja nopeudet kirjoitetaan
 pikseleinä.
 
+Kentällä on yksi **Level name** -nimi. Sama arvo kirjoitetaan julkaisun
+näyttönimeksi ja tunnisteeksi. Pelaajamäärä kysytään vain, jos **Capture the
+flag** on valittu; muissa pelimuodoissa kenttä ei sisällä pelaajamääräasetusta.
+
 ## Materiaalit
 
 Paletti-indeksit 0–96 sisältävät materiaalit. Kivellä, peruskalliolla, maalla
@@ -83,11 +87,13 @@ parallaksina. Background scroll X/Y -arvot säätävät vierinnän nopeutta.
 
 ## Objektit
 
-Objects-paneelissa luodaan liukuportteja, teleportteja, huoltopalloja ja
-joukkueiden tukikohtia omilla pikapainikkeillaan. Valitse **Edit objects on
+Objects-paneelissa luodaan liukuportteja, teleportteja, huoltopalloja,
+joukkueiden lippuja ja tukikohtia omilla pikapainikkeillaan. Tukikohta merkitään helposti
+löytyvällä **Mark team-base area…** -painikkeella. Valitse **Edit objects on
 canvas**, jotta objektia voi siirtää vetämällä. Valitun objektin sivukahvoilla
 muutetaan leveyttä tai korkeutta, kulmakahvalla molempia ja pyöreällä kahvalla
-kiertoa. Properties-painikkeen numeroarvot jäävät tarkkaa säätöä varten. Oven
+kiertoa. `Escape` poistaa objektin valinnan. Properties-painikkeen numeroarvot
+jäävät tarkkaa säätöä varten. Oven
 leveyttä ja korkeutta voi muuttaa erikseen. Portti liukuu oman pitkän sivunsa
 suuntaisesti kuvakkeessa olevan nuolen osoittamaan suuntaan. Valitun portin
 katkoviivahaamu näyttää sen avoimen sijainnin, ja **Slide distance along
@@ -103,13 +109,21 @@ molempiin suuntiin.
 Joukkuetilat käyttävät joukkuepaikkoihin 1–4 sidottuja team base -objekteja.
 Team base luodaan merkitsemällä alueen monikulmion kulmat. Monikulmio
 päätetään kaksoisnapsautuksella, hiiren oikealla painikkeella tai Enterillä;
-Escape peruu luonnoksen. **Redraw area** korvaa valitun tukikohdan alueen.
-Lipun kuvake näyttää tavoiteankkurin, eikä rajaa tukikohdan aluetta.
+Escape peruu luonnoksen. Luotu tukikohta poistuu valinnasta automaattisesti.
+Jokainen napsautettu kulmapiste tallennetaan järjestyksessä julkaistun
+`objects.json`-tiedoston `area_polygon_pixels`-taulukkoon. **Redraw area**
+korvaa valitun tukikohdan alueen.
+Capture the flag käyttää tukikohdasta erillistä **capture flag** -objektia.
+Luo kullekin joukkueelle oma lippu, valitse sama team slot kuin tukikohdalla ja
+siirrä lippu haluttuun paikkaan vetämällä. Lippua ei johdeta tukikohdan
+monikulmiosta. Julkaisussa CTF-joukkueen sidonta sisältää sekä
+`base_object_id`- että `flag_object_id`-tunnisteen.
 
 ## Julkaisun tarkistukset
 
 Julkaisu estetään muun muassa, jos materiaalikoodi ei kuulu välille 0–255,
 objektit ovat kentän ulkopuolella, tunnisteita on kahteen kertaan,
 teleportin kohde puuttuu, tukikohdan monikulmio leikkaa itsensä tai valittu
-joukkuetila ei sisällä vähintään kahta kelvollista tukikohtaa. Virhe ei jätä
+joukkuetila ei sisällä vähintään kahta kelvollista tukikohtaa. CTF-julkaisu
+estetään myös, jos joltain sidotulta joukkueelta puuttuu erillinen lippu. Virhe ei jätä
 osittaista `.OLV`-pakettihakemistoa.

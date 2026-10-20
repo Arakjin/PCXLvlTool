@@ -253,8 +253,7 @@ std::pair<std::string, std::unique_ptr<Level>> readDocument(std::istream& input)
 void writeOverThrustData(std::ostream& output,
                          const OverThrustProjectData& data)
 {
-    writeString(output, "overthrust-data-v3");
-    writeString(output, data.levelId);
+    writeString(output, "overthrust-data-v4");
     writeString(output, data.displayName);
     writeString(output, data.author);
     writeString(output, data.description);
@@ -262,6 +261,7 @@ void writeOverThrustData(std::ostream& output,
     writeDouble(output, data.backgroundScrollX);
     writeDouble(output, data.backgroundScrollY);
     writeStringList(output, data.allowedGameModes);
+    writeI32(output, data.captureTheFlagPlayers);
 
     writeBool(output, !data.background.empty());
     if (!data.background.empty()) {
@@ -389,14 +389,22 @@ std::unique_ptr<OverThrustProjectData> readOverThrustData(std::istream& input)
 {
     const std::string sectionVersion = readString(input);
     const bool hasAreaPolygons = sectionVersion == "overthrust-data-v2" ||
-                                 sectionVersion == "overthrust-data-v3";
-    const bool hasParallaxFlag = sectionVersion == "overthrust-data-v3";
+                                 sectionVersion == "overthrust-data-v3" ||
+                                 sectionVersion == "overthrust-data-v4";
+    const bool hasParallaxFlag = sectionVersion == "overthrust-data-v3" ||
+                                 sectionVersion == "overthrust-data-v4";
+    const bool hasUnifiedName = sectionVersion == "overthrust-data-v4";
     if (!hasAreaPolygons && sectionVersion != "overthrust-data-v1") {
         throw std::runtime_error("unsupported PXLP OverThrust data section");
     }
     auto data = std::make_unique<OverThrustProjectData>();
-    data->levelId = readString(input);
-    data->displayName = readString(input);
+    if (hasUnifiedName) {
+        data->displayName = readString(input);
+        data->levelId = data->displayName;
+    } else {
+        data->levelId = readString(input);
+        data->displayName = readString(input);
+    }
     data->author = readString(input);
     data->description = readString(input);
     int legacyMinimumPlayers = 1;
@@ -410,14 +418,20 @@ std::unique_ptr<OverThrustProjectData> readOverThrustData(std::istream& input)
     data->backgroundScrollX = readDouble(input);
     data->backgroundScrollY = readDouble(input);
     data->allowedGameModes = readStringList(input);
-    if (data->levelId.empty() || data->levelId.size() > 256 ||
-        data->displayName.empty() || data->displayName.size() > 256 ||
+    if (hasUnifiedName) {
+        data->captureTheFlagPlayers = readI32(input);
+    } else {
+        data->levelId = data->displayName;
+    }
+    if (data->displayName.empty() || data->displayName.size() > 256 ||
         data->author.size() > 256 || data->description.size() > 4096 ||
         legacyMinimumPlayers < 1 || legacyMinimumPlayers > 4 ||
         legacyMaximumPlayers < 1 || legacyMaximumPlayers > 4 ||
         legacyMinimumPlayers > legacyMaximumPlayers ||
         data->backgroundScrollX < 0 || data->backgroundScrollX > 4 ||
         data->backgroundScrollY < 0 || data->backgroundScrollY > 4 ||
+        data->captureTheFlagPlayers < 2 ||
+        data->captureTheFlagPlayers > 4 ||
         data->allowedGameModes.empty()) {
         throw std::runtime_error("invalid PXLP OverThrust settings");
     }

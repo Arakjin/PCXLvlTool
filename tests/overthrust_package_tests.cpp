@@ -50,8 +50,8 @@ int main()
     }
 
     OverThrustProjectData data;
-    data.levelId = "test:package";
     data.displayName = "Package test";
+    data.levelId = data.displayName;
     data.author = "PCX Level Tool";
     data.description = "Deterministic package test";
     data.backgroundParallax = true;
@@ -81,7 +81,11 @@ int main()
     }
     const auto manifestBytes = readBytes(first / "manifest.json");
     const std::string manifestText(manifestBytes.begin(), manifestBytes.end());
-    ok &= expect(manifestText.find("\"profile_id\": \"overthrust:authoring-v3\"") !=
+    ok &= expect(manifestText.find("\"profile_id\": \"overthrust:authoring-v4\"") !=
+                         std::string::npos &&
+                     manifestText.find("\"level_id\": \"Package test\"") !=
+                         std::string::npos &&
+                     manifestText.find("capture_the_flag_player_count") ==
                          std::string::npos &&
                      manifestText.find("\"parallax\": true") !=
                          std::string::npos &&
@@ -97,7 +101,7 @@ int main()
                          std::string::npos &&
                      manifestText.find("\"material_id\": \"core:acidic_gas\"") !=
                          std::string::npos,
-                 "manifest should publish simplified v3 settings and the complete registry");
+                 "manifest should publish simplified v4 settings and the complete registry");
     Level loaded;
     ok &= expect(loadPcx(first / "materials.pcx", loaded, error) &&
                      loaded.width == 4 && loaded.height == 4 &&
@@ -129,10 +133,13 @@ int main()
     teamBase.appearanceId = "appearance:team-base/default";
     teamBase.teamSlot = 1;
     teamBase.baseProfileId = "core:team-base/heal-and-weapons";
-    teamBase.objectiveAnchorX = 1;
-    teamBase.objectiveAnchorY = 1;
     teamBase.areaPolygon = {{0, 0}, {4, 0}, {3, 4}, {0, 3}};
-    data.objects = {teamBase};
+    OverThrustObject captureFlag;
+    captureFlag.id = "capture_flag_1";
+    captureFlag.type = "capture_flag";
+    captureFlag.transform = {1, 1, 1, 1, 0};
+    captureFlag.teamSlot = 1;
+    data.objects = {teamBase, captureFlag};
     const auto polygonPackage =
         std::filesystem::current_path() / "polygon.OLV";
     std::filesystem::remove_all(polygonPackage, ignored);
@@ -140,14 +147,55 @@ int main()
                  "polygonal team base should publish");
     const auto objectsBytes = readBytes(polygonPackage / "objects.json");
     const std::string objectsText(objectsBytes.begin(), objectsBytes.end());
-    ok &= expect(objectsText.find("\"schema_version\": 3") !=
+    ok &= expect(objectsText.find("\"schema_version\": 4") !=
                          std::string::npos &&
                      objectsText.find("\"area_polygon_pixels\"") !=
                          std::string::npos &&
+                     objectsText.find(
+                         "\"area_polygon_pixels\": [{ \"x\": 0, \"y\": 0 }, "
+                         "{ \"x\": 4, \"y\": 0 }, { \"x\": 3, \"y\": 4 }, "
+                         "{ \"x\": 0, \"y\": 3 }]") != std::string::npos &&
                      objectsText.find("\"position_pixels\"") !=
+                         std::string::npos &&
+                     objectsText.find("\"type\": \"capture_flag\"") !=
+                         std::string::npos &&
+                     objectsText.find("objective_anchor_offset_pixels") ==
                          std::string::npos &&
                      objectsText.find("position_cells") == std::string::npos,
                  "published objects should use the pixel-coordinate schema");
+    OverThrustObject secondBase = teamBase;
+    secondBase.id = "team_base_2";
+    secondBase.teamSlot = 2;
+    OverThrustObject secondFlag = captureFlag;
+    secondFlag.id = "capture_flag_2";
+    secondFlag.teamSlot = 2;
+    secondFlag.transform = {2, 2, 1, 1, 0};
+    data.objects = {teamBase, secondBase, captureFlag, secondFlag};
+    data.allowedGameModes = {"core:capture_the_flag"};
+    data.captureTheFlagPlayers = 3;
+    data.teamModeSettings = {
+        {"core:capture_the_flag", {{1, teamBase.id}, {2, secondBase.id}}}};
+    const auto capturePackage =
+        std::filesystem::current_path() / "capture-the-flag.OLV";
+    std::filesystem::remove_all(capturePackage, ignored);
+    ok &= expect(publishOverThrustPackage(capturePackage, level, data, error),
+                 "capture-the-flag package should publish");
+    const auto captureManifestBytes =
+        readBytes(capturePackage / "manifest.json");
+    const std::string captureManifest(captureManifestBytes.begin(),
+                                      captureManifestBytes.end());
+    ok &= expect(captureManifest.find(
+                     "\"capture_the_flag_player_count\": 3") !=
+                     std::string::npos &&
+                     captureManifest.find(
+                         "\"flag_object_id\": \"capture_flag_1\"") !=
+                         std::string::npos &&
+                     captureManifest.find(
+                         "\"flag_object_id\": \"capture_flag_2\"") !=
+                         std::string::npos,
+                 "capture-the-flag manifest should bind each team's separate flag");
+    data.allowedGameModes = {"core:sandbox"};
+    data.teamModeSettings.clear();
     data.objects.clear();
 
     const auto invalid = std::filesystem::current_path() / "invalid.OLV";
@@ -200,12 +248,17 @@ int main()
     data.objects = {door};
     expectInvalid("inaccessible player slot should be rejected");
     data.objects.clear();
+    data.allowedGameModes = {"core:capture_the_flag"};
+    data.teamModeSettings = {
+        {"core:capture_the_flag", {{1, teamBase.id}, {2, secondBase.id}}}};
+    data.objects = {teamBase, secondBase};
+    expectInvalid("capture-the-flag teams without flag objects should be rejected");
+    data.allowedGameModes = {"core:sandbox"};
+    data.teamModeSettings.clear();
     teamBase.areaPolygon.clear();
     data.objects = {teamBase};
     expectInvalid("team base without a polygon should be rejected");
     teamBase.areaPolygon = {{0, 0}, {4, 4}, {0, 4}, {4, 0}};
-    teamBase.objectiveAnchorX = 0;
-    teamBase.objectiveAnchorY = 0;
     data.objects = {teamBase};
     expectInvalid("self-intersecting team-base polygon should be rejected");
     data.objects.clear();
@@ -239,6 +292,7 @@ int main()
     std::filesystem::remove_all(first, ignored);
     std::filesystem::remove_all(second, ignored);
     std::filesystem::remove_all(polygonPackage, ignored);
+    std::filesystem::remove_all(capturePackage, ignored);
     std::filesystem::remove_all(flyThroughPackage, ignored);
     return ok ? 0 : 1;
 }

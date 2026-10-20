@@ -707,6 +707,8 @@ QIcon toolIcon(const DrawTool tool)
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_elliptical_selection.png"));
     case DrawTool::SelectFreehand:
         return QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_free_form_selection.png"));
+    case DrawTool::MagicWand:
+        return QIcon(QStringLiteral(":/icons/icons/magic-wand.svg"));
     case DrawTool::MoveSelection:
         return QIcon(QStringLiteral(":/icons/icons/hand-move.svg"));
     case DrawTool::BezierCurve:
@@ -817,6 +819,10 @@ MainWindow::MainWindow(QWidget* parent)
             });
     connect(canvas_, &LevelCanvas::teamBasePolygonRequested, this,
             &MainWindow::applyTeamBasePolygon);
+    connect(canvas_, &LevelCanvas::teamBasePolygonActiveChanged, this,
+            [this](const bool active) {
+                if (!active) statusBar()->clearMessage();
+            });
     connect(documentTabs_, &QTabBar::currentChanged, this,
             &MainWindow::switchProfileDocument);
 
@@ -1122,7 +1128,7 @@ void MainWindow::createToolBars()
     addToolBar(Qt::TopToolBarArea, toolBar);
     auto* toolGroup = new QButtonGroup(toolBar);
     toolGroup->setExclusive(true);
-    const std::array<std::pair<const char*, DrawTool>, 15> tools{{
+    const std::array<std::pair<const char*, DrawTool>, 16> tools{{
         {"Pencil", DrawTool::Pencil},
         {"Eraser", DrawTool::Eraser},
         {"Spray", DrawTool::Spray},
@@ -1137,6 +1143,7 @@ void MainWindow::createToolBars()
         {"Rectangle select", DrawTool::SelectRectangle},
         {"Ellipse select", DrawTool::SelectEllipse},
         {"Freehand select", DrawTool::SelectFreehand},
+        {"Magic wand", DrawTool::MagicWand},
         {"Move selection", DrawTool::MoveSelection},
     }};
     for (const auto& [label, tool] : tools) {
@@ -1166,6 +1173,11 @@ void MainWindow::createToolBars()
             button->setToolTip(
                 tr("Bezier curve: hold Shift to constrain only the initial "
                    "line; control-point adjustments remain free"));
+        } else if (tool == DrawTool::MagicWand) {
+            button->setToolTip(
+                tr("Magic wand: select matching material on the active "
+                   "layer; Shift adds, Ctrl subtracts, and Shift+Ctrl "
+                   "intersects"));
         } else if (tool == DrawTool::SelectRectangle ||
                    tool == DrawTool::SelectEllipse ||
                    tool == DrawTool::SelectFreehand) {
@@ -1210,6 +1222,19 @@ void MainWindow::createToolBars()
         tr("Pencil and eraser footprint shown under the pointer"));
     optionsBar->addWidget(brushShapeCombo);
     optionsBar->addSeparator();
+    optionsBar->addWidget(new QLabel(tr("Match: "), optionsBar));
+    auto* materialSelectionCombo = new QComboBox(optionsBar);
+    materialSelectionCombo->addItem(
+        tr("Connected only"),
+        static_cast<int>(MaterialSelectionMode::Connected));
+    materialSelectionCombo->addItem(
+        tr("All same material"),
+        static_cast<int>(MaterialSelectionMode::AllMatching));
+    materialSelectionCombo->setToolTip(
+        tr("Magic wand matching within the active layer"));
+    materialSelectionCombo->setEnabled(false);
+    optionsBar->addWidget(materialSelectionCombo);
+    optionsBar->addSeparator();
     optionsBar->addWidget(new QLabel(tr("Shape: "), optionsBar));
     auto* shapeModeCombo = new QComboBox(optionsBar);
     shapeModeCombo->addItem(tr("Outline"), static_cast<int>(ShapeMode::Outline));
@@ -1245,8 +1270,8 @@ void MainWindow::createToolBars()
     connect(
         toolGroup, &QButtonGroup::idClicked, this,
         [this, activeToolLabel, thicknessSpinBox, cornerRadiusCombo,
-         brushShapeCombo, shapeModeCombo, fontCombo, textSizeSpinBox,
-         tools](const int id) {
+         brushShapeCombo, materialSelectionCombo, shapeModeCombo, fontCombo,
+         textSizeSpinBox, tools](const int id) {
             const auto selectedTool = static_cast<DrawTool>(id);
             canvas_->setDrawTool(selectedTool);
             for (const auto& [label, tool] : tools) {
@@ -1275,6 +1300,16 @@ void MainWindow::createToolBars()
                 brushShapeCombo->setCurrentIndex(brushShapeCombo->findData(
                     static_cast<int>(canvas_->brushShape(selectedTool))));
             }
+            const bool supportsMaterialSelection =
+                selectedTool == DrawTool::MagicWand;
+            materialSelectionCombo->setEnabled(supportsMaterialSelection);
+            if (supportsMaterialSelection) {
+                const QSignalBlocker materialSelectionBlocker(
+                    materialSelectionCombo);
+                materialSelectionCombo->setCurrentIndex(
+                    materialSelectionCombo->findData(static_cast<int>(
+                        canvas_->materialSelectionMode())));
+            }
             const bool supportsCorners = selectedTool == DrawTool::Rectangle;
             cornerRadiusCombo->setEnabled(supportsCorners);
             if (supportsCorners) {
@@ -1300,6 +1335,12 @@ void MainWindow::createToolBars()
                     static_cast<DrawTool>(toolGroup->checkedId()),
                     static_cast<BrushShape>(
                         brushShapeCombo->itemData(index).toInt()));
+            });
+    connect(materialSelectionCombo, &QComboBox::currentIndexChanged, this,
+            [this, materialSelectionCombo](const int index) {
+                canvas_->setMaterialSelectionMode(
+                    static_cast<MaterialSelectionMode>(
+                        materialSelectionCombo->itemData(index).toInt()));
             });
     connect(cornerRadiusCombo, &QComboBox::currentIndexChanged, this,
             [this, cornerRadiusCombo](const int index) {
@@ -1737,10 +1778,16 @@ void MainWindow::createObjectDock()
                   tr("Create teleporter"), "teleporter");
     addObjectTool(QStringLiteral(":/icons/overthrust/tool-service-orb.png"),
                   tr("Create service orb"), "service_orb");
-    addObjectTool(QStringLiteral(":/icons/overthrust/tool-team-base.png"),
-                  tr("Create team base"), "team_base");
+    addObjectTool(QStringLiteral(":/icons/overthrust/tool-flag.png"),
+                  tr("Create capture flag"), "capture_flag");
     tools->addStretch();
     layout->addLayout(tools);
+    auto* markTeamBase = new QPushButton(
+        QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_polygon.png")),
+        tr("Mark team-base area..."), contents);
+    markTeamBase->setToolTip(
+        tr("Draw a polygon that defines one team's base area."));
+    layout->addWidget(markTeamBase);
     objectListWidget_ = new QListWidget(contents);
     objectListWidget_->setSelectionMode(QAbstractItemView::SingleSelection);
     layout->addWidget(objectListWidget_, 1);
@@ -1766,6 +1813,8 @@ void MainWindow::createObjectDock()
     objectDock_->setVisible(false);
     connect(add, &QPushButton::clicked, this,
             [this] { addOverThrustObject(); });
+    connect(markTeamBase, &QPushButton::clicked, this,
+            [this] { addOverThrustObject("team_base"); });
     connect(edit, &QPushButton::clicked, this,
             &MainWindow::editSelectedOverThrustObject);
     connect(duplicate, &QPushButton::clicked, this,
@@ -1822,7 +1871,9 @@ void MainWindow::refreshObjectList()
         else if (object.type == "service_orb")
             iconPath = QStringLiteral(":/icons/overthrust/tool-service-orb.png");
         else if (object.type == "team_base")
-            iconPath = QStringLiteral(":/icons/overthrust/tool-team-base.png");
+            iconPath = QStringLiteral(":/icons/icons/kolourpaint/tool_polygon.png");
+        else if (object.type == "capture_flag")
+            iconPath = QStringLiteral(":/icons/overthrust/tool-flag.png");
         const QString typeLabel =
             object.type == "sliding_door"
                 ? tr("sliding gate")
@@ -1835,10 +1886,13 @@ void MainWindow::refreshObjectList()
             objectListWidget_);
         item->setToolTip(QString::fromStdString(object.id));
     }
-    if (!overthrustData_->objects.empty()) {
-        objectListWidget_->setCurrentRow(std::clamp(
-            selected, 0, static_cast<int>(overthrustData_->objects.size()) - 1));
-    }
+    const int restoredSelection =
+        selected >= 0 && !overthrustData_->objects.empty()
+            ? std::min(selected,
+                       static_cast<int>(overthrustData_->objects.size()) - 1)
+            : -1;
+    objectListWidget_->setCurrentRow(restoredSelection);
+    canvas_->setSelectedObject(restoredSelection);
     canvas_->refreshImage();
 }
 
@@ -1859,7 +1913,8 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
     const bool knownType = object.type == "sliding_door" ||
                            object.type == "teleporter" ||
                            object.type == "service_orb" ||
-                           object.type == "team_base";
+                           object.type == "team_base" ||
+                           object.type == "capture_flag";
     if (!knownType) {
         QMessageBox::information(
             this, tr("Unknown object type"),
@@ -1931,8 +1986,6 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
     QComboBox* velocity = nullptr;
     QComboBox* serviceProfile = nullptr;
     QSpinBox* teamSlot = nullptr;
-    QSpinBox* anchorX = nullptr;
-    QSpinBox* anchorY = nullptr;
     QComboBox* accessMode = nullptr;
     QLineEdit* accessSlots = nullptr;
     if (object.type == "sliding_door") {
@@ -2012,16 +2065,15 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
                         "appearance:service-orb/private"});
         form->addRow(tr("Interaction radius (px):"), radius);
         form->addRow(tr("Service profile:"), serviceProfile);
-    } else {
+    } else if (object.type == "team_base") {
         teamSlot = integer(1, 4, object.teamSlot);
-        anchorX = integer(0, 4096, object.objectiveAnchorX);
-        anchorY = integer(0, 4096, object.objectiveAnchorY);
         addAppearances({"appearance:team-base/default"});
         form->addRow(tr("Team slot:"), teamSlot);
-        form->addRow(tr("Objective anchor X:"), anchorX);
-        form->addRow(tr("Objective anchor Y:"), anchorY);
+    } else {
+        teamSlot = integer(1, 4, object.teamSlot);
+        form->addRow(tr("Team slot:"), teamSlot);
     }
-    if (object.type != "team_base") {
+    if (object.type != "team_base" && object.type != "capture_flag") {
         accessMode = new QComboBox(&dialog);
         accessMode->addItems({QStringLiteral("everyone"),
                               QStringLiteral("player_slots")});
@@ -2036,7 +2088,9 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
         form->addRow(tr("Access:"), accessMode);
         form->addRow(tr("Player slots:"), accessSlots);
     }
-    form->addRow(tr("Appearance:"), appearance);
+    if (object.type != "capture_flag") {
+        form->addRow(tr("Appearance:"), appearance);
+    }
     layout->addLayout(form);
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
@@ -2072,7 +2126,9 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
     object.transform = {x->value(), y->value(), width->value(),
                         height->value(),
                         static_cast<int>(std::round(rotation->value() * 1000))};
-    object.appearanceId = appearance->currentText().toStdString();
+    if (object.type != "capture_flag") {
+        object.appearanceId = appearance->currentText().toStdString();
+    }
     if (slideDistance) {
         const double radians = object.transform.rotationMillidegrees *
             3.14159265358979323846 / 180000.0;
@@ -2100,9 +2156,9 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
     }
     if (teamSlot) {
         object.teamSlot = teamSlot->value();
-        object.baseProfileId = "core:team-base/heal-and-weapons";
-        object.objectiveAnchorX = anchorX->value();
-        object.objectiveAnchorY = anchorY->value();
+        if (object.type == "team_base") {
+            object.baseProfileId = "core:team-base/heal-and-weapons";
+        }
     }
     if (accessMode) {
         object.access.everyone = accessMode->currentIndex() == 0;
@@ -2121,7 +2177,8 @@ void MainWindow::addOverThrustObject()
 {
     if (!overthrustData_) return;
     const QStringList types{tr("Sliding gate"), tr("Teleporter"),
-                            tr("Service orb"), tr("Team base")};
+                            tr("Service orb"), tr("Capture flag"),
+                            tr("Team base")};
     bool accepted = false;
     const QString selected = QInputDialog::getItem(
         this, tr("Create object"), tr("Object type:"), types, 0, false,
@@ -2131,6 +2188,7 @@ void MainWindow::addOverThrustObject()
     addOverThrustObject(type == 0   ? "sliding_door"
                         : type == 1 ? "teleporter"
                         : type == 2 ? "service_orb"
+                        : type == 3 ? "capture_flag"
                                     : "team_base");
 }
 
@@ -2170,6 +2228,8 @@ void MainWindow::addOverThrustObject(const std::string& type)
         object.serviceProfileId = "core:heal-only";
         object.services = {"heal"};
         object.appearanceId = "appearance:service-orb/default";
+    } else if (object.type == "capture_flag") {
+        object.teamSlot = 1;
     }
     auto before = overthrustData_->objects;
     auto after = before;
@@ -2221,24 +2281,6 @@ void MainWindow::applyTeamBasePolygon(const QPolygon& polygon,
                              tr("The polygon must enclose a non-zero area."));
         return;
     }
-    QPoint anchor = bounds.center();
-    if (!polygon.containsPoint(anchor, Qt::OddEvenFill)) {
-        bool found = false;
-        for (int y = bounds.top(); y <= bounds.bottom() && !found; ++y) {
-            for (int x = bounds.left(); x <= bounds.right(); ++x) {
-                if (polygon.containsPoint({x, y}, Qt::OddEvenFill)) {
-                    anchor = {x, y};
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            QMessageBox::warning(this, tr("Invalid team-base area"),
-                                 tr("The polygon must enclose a non-zero area."));
-            return;
-        }
-    }
     const auto assignPolygon = [&](OverThrustObject& object) {
         object.areaPolygon.clear();
         object.areaPolygon.reserve(static_cast<std::size_t>(polygon.size()));
@@ -2246,8 +2288,6 @@ void MainWindow::applyTeamBasePolygon(const QPolygon& polygon,
             object.areaPolygon.push_back({point.x(), point.y()});
         object.transform = {bounds.left(), bounds.top(), bounds.width(),
                             bounds.height(), 0};
-        object.objectiveAnchorX = anchor.x() - bounds.left();
-        object.objectiveAnchorY = anchor.y() - bounds.top();
     };
 
     auto before = overthrustData_->objects;
@@ -2277,8 +2317,9 @@ void MainWindow::applyTeamBasePolygon(const QPolygon& polygon,
     after.push_back(std::move(object));
     applyObjectListChange(tr("Create team base"), std::move(before),
                           std::move(after));
-    objectListWidget_->setCurrentRow(
-        static_cast<int>(overthrustData_->objects.size()) - 1);
+    objectListWidget_->setCurrentRow(-1);
+    objectListWidget_->clearSelection();
+    canvas_->setSelectedObject(-1);
 }
 
 void MainWindow::editSelectedOverThrustObject()
@@ -2942,17 +2983,10 @@ bool MainWindow::promptForOverThrustSettings(
     dialog.setWindowTitle(tr("OverThrust level settings"));
     auto* layout = new QVBoxLayout(&dialog);
     auto* form = new QFormLayout();
-    auto* levelId = new QLineEdit(QString::fromStdString(edited.levelId),
-                                  &dialog);
-    levelId->setMaxLength(256);
-    levelId->setValidator(new QRegularExpressionValidator(
-        QRegularExpression(QStringLiteral("[A-Za-z0-9][A-Za-z0-9:._/-]{0,255}")),
-        levelId));
-    form->addRow(tr("Level ID:"), levelId);
     auto* displayName = new QLineEdit(
         QString::fromStdString(edited.displayName), &dialog);
     displayName->setMaxLength(256);
-    form->addRow(tr("Display name:"), displayName);
+    form->addRow(tr("Level name:"), displayName);
     auto* author = new QLineEdit(QString::fromStdString(edited.author), &dialog);
     author->setMaxLength(256);
     form->addRow(tr("Author:"), author);
@@ -3048,9 +3082,27 @@ bool MainWindow::promptForOverThrustSettings(
             edited.allowedGameModes.end());
         modesLayout->addWidget(modeChecks[index]);
     }
+    auto* capturePlayersRow = new QWidget(modes);
+    auto* capturePlayersLayout = new QHBoxLayout(capturePlayersRow);
+    capturePlayersLayout->setContentsMargins(20, 0, 0, 0);
+    auto* capturePlayersLabel = new QLabel(tr("Player count:"),
+                                           capturePlayersRow);
+    auto* capturePlayers = new QSpinBox(capturePlayersRow);
+    capturePlayers->setRange(2, 4);
+    capturePlayers->setValue(edited.captureTheFlagPlayers);
+    capturePlayersLayout->addWidget(capturePlayersLabel);
+    capturePlayersLayout->addWidget(capturePlayers);
+    capturePlayersLayout->addStretch();
+    modesLayout->addWidget(capturePlayersRow);
+    const auto updateCapturePlayers = [=] {
+        capturePlayersRow->setVisible(modeChecks[3]->isChecked());
+    };
+    connect(modeChecks[3], &QCheckBox::toggled, &dialog,
+            [=](bool) { updateCapturePlayers(); });
+    updateCapturePlayers();
     layout->addWidget(modes);
     auto* note = new QLabel(
-        tr("Team modes additionally require 2–4 team-base objects and bindings before publication."),
+        tr("Team modes require 2–4 team-base objects and bindings. Capture the flag also requires one separately placed flag for every team."),
         &dialog);
     note->setWordWrap(true);
     layout->addWidget(note);
@@ -3076,29 +3128,31 @@ bool MainWindow::promptForOverThrustSettings(
             tr("Replace the background with one matching the new material-grid aspect ratio."));
         return false;
     }
-    edited.levelId = levelId->text().toStdString();
-    edited.displayName = displayName->text().toStdString();
+    edited.displayName = displayName->text().trimmed().toStdString();
+    edited.levelId = edited.displayName;
     edited.author = author->text().toStdString();
     edited.description = description->toPlainText().left(4096).toStdString();
     edited.backgroundParallax = parallax->isChecked();
     edited.backgroundScrollX = scrollX->value();
     edited.backgroundScrollY = scrollY->value();
+    edited.captureTheFlagPlayers = capturePlayers->value();
     edited.allowedGameModes.clear();
     for (std::size_t index = 0; index < modeDefs.size(); ++index) {
         if (modeChecks[index]->isChecked()) {
             edited.allowedGameModes.emplace_back(modeDefs[index].second);
         }
     }
-    if (edited.allowedGameModes.empty()) {
+    if (edited.displayName.empty() || edited.allowedGameModes.empty()) {
         QMessageBox::critical(
             this, tr("Invalid OverThrust settings"),
-            tr("At least one game mode is required."));
+            edited.displayName.empty()
+                ? tr("Level name is required.")
+                : tr("At least one game mode is required."));
         return false;
     }
     settings.width = width->value();
     settings.height = height->value();
-    settings.name = edited.displayName.empty() ? edited.levelId
-                                                : edited.displayName;
+    settings.name = edited.displayName;
     settings.backgroundMode = edited.background.empty()
                                   ? BackgroundMode::None
                                   : BackgroundMode::ExternalTrueColor;
@@ -3459,11 +3513,11 @@ bool MainWindow::publishLevel()
 {
     std::filesystem::path suggested = publishPath_;
     if (creationSettings_.game == GameId::OverThrust) {
-        const std::string levelId =
-            overthrustData_ && !overthrustData_->levelId.empty()
-                ? overthrustData_->levelId
+        const std::string levelName =
+            overthrustData_ && !overthrustData_->displayName.empty()
+                ? overthrustData_->displayName
                 : "untitled";
-        std::string safeName = levelId;
+        std::string safeName = levelName;
         std::replace_if(safeName.begin(), safeName.end(),
                         [](const char value) {
                             return !(std::isalnum(

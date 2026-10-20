@@ -166,11 +166,12 @@ int main()
     overthrustSettings.height = 400;
     overthrustSettings.backgroundMode = BackgroundMode::ExternalTrueColor;
     OverThrustProjectData overthrustData;
-    overthrustData.levelId = "test:round-trip";
     overthrustData.displayName = "Round trip";
+    overthrustData.levelId = overthrustData.displayName;
     overthrustData.author = "PCX Level Tool";
-    overthrustData.description = "PXLP v3 data test";
+    overthrustData.description = "PXLP v4 data test";
     overthrustData.backgroundParallax = true;
+    overthrustData.captureTheFlagPlayers = 3;
     overthrustData.background.width = 2;
     overthrustData.background.height = 2;
     overthrustData.background.rgba = {
@@ -191,10 +192,14 @@ int main()
     teamBase.transform = {30, 40, 12, 9, 0};
     teamBase.appearanceId = "appearance:team-base/default";
     teamBase.baseProfileId = "core:team-base/heal-and-weapons";
-    teamBase.objectiveAnchorX = 5;
-    teamBase.objectiveAnchorY = 4;
     teamBase.areaPolygon = {{30, 40}, {42, 41}, {39, 49}, {31, 47}};
     overthrustData.objects.push_back(teamBase);
+    OverThrustObject captureFlag;
+    captureFlag.id = "capture_flag_1";
+    captureFlag.type = "capture_flag";
+    captureFlag.transform = {35, 44, 8, 8, 0};
+    captureFlag.teamSlot = 1;
+    overthrustData.objects.push_back(captureFlag);
     ok &= expect(savePxlProject(path, overthrust, nullptr,
                                overthrustSettings, &overthrustData, error),
                  "OverThrust PXLP project should save");
@@ -207,17 +212,21 @@ int main()
                      loaded.width == 400 && loaded.height == 400 &&
                      loaded.layers[0].pixels[42] == 69 &&
                      loadedOverThrust &&
-                     loadedOverThrust->levelId == "test:round-trip" &&
+                     loadedOverThrust->levelId == "Round trip" &&
+                     loadedOverThrust->displayName == "Round trip" &&
+                     loadedOverThrust->captureTheFlagPlayers == 3 &&
                      loadedOverThrust->backgroundParallax &&
                      loadedOverThrust->background.rgba ==
                          overthrustData.background.rgba &&
-                     loadedOverThrust->objects.size() == 2 &&
+                     loadedOverThrust->objects.size() == 3 &&
                      loadedOverThrust->objects[0].transform.rotationMillidegrees ==
                          45000 &&
                      loadedOverThrust->objects[0].unknownProperties.size() == 1 &&
                      loadedOverThrust->objects[1].areaPolygon ==
-                         teamBase.areaPolygon,
-                 "OverThrust PXLP v3 data should round-trip");
+                         teamBase.areaPolygon &&
+                     loadedOverThrust->objects[2].type == "capture_flag" &&
+                     loadedOverThrust->objects[2].transform.x == 35,
+                 "OverThrust PXLP v4 data should round-trip");
 
     // Corrupt the first object's serialized X coordinate without disturbing
     // the surrounding framing. The bounded v2 reader must reject it before

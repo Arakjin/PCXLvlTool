@@ -168,25 +168,6 @@ bool segmentsIntersect(const OverThrustPoint& a,
            (cdB == 0 && pointOnSegment(b, c, d));
 }
 
-bool pointInPolygon(const OverThrustPoint& point,
-                    const std::vector<OverThrustPoint>& polygon)
-{
-    bool inside = false;
-    for (std::size_t current = 0, previous = polygon.size() - 1;
-         current < polygon.size(); previous = current++) {
-        const OverThrustPoint& a = polygon[previous];
-        const OverThrustPoint& b = polygon[current];
-        if (pointOnSegment(point, a, b)) return true;
-        if ((a.y > point.y) != (b.y > point.y)) {
-            const double crossingX = a.x +
-                static_cast<double>(point.y - a.y) * (b.x - a.x) /
-                    (b.y - a.y);
-            if (crossingX > point.x) inside = !inside;
-        }
-    }
-    return inside;
-}
-
 void validateTeamBasePolygon(const OverThrustObject& object,
                              const std::size_t levelWidth,
                              const std::size_t levelHeight)
@@ -227,13 +208,6 @@ void validateTeamBasePolygon(const OverThrustObject& object,
             }
         }
     }
-    const OverThrustPoint anchor{
-        object.transform.x + object.objectiveAnchorX,
-        object.transform.y + object.objectiveAnchorY};
-    if (!pointInPolygon(anchor, polygon)) {
-        throw std::runtime_error(
-            "team base objective anchor is outside its polygon");
-    }
 }
 
 void validate(const Level& level, const OverThrustProjectData& data)
@@ -248,8 +222,8 @@ void validate(const Level& level, const OverThrustProjectData& data)
             throw std::runtime_error("material grid uses an unmapped index");
         }
     }
-    if (!validId(data.levelId) || data.displayName.empty() ||
-        data.displayName.size() > 256 || data.author.empty() ||
+    if (data.displayName.empty() || data.displayName.size() > 256 ||
+        data.levelId != data.displayName || data.author.empty() ||
         data.author.size() > 256 || data.description.size() > 4096) {
         throw std::runtime_error("level identity fields are invalid");
     }
@@ -269,6 +243,12 @@ void validate(const Level& level, const OverThrustProjectData& data)
     if (selectedModes.empty()) {
         throw std::runtime_error("at least one game mode is required");
     }
+    if (selectedModes.count("core:capture_the_flag") &&
+        (data.captureTheFlagPlayers < 2 ||
+         data.captureTheFlagPlayers > 4)) {
+        throw std::runtime_error(
+            "capture-the-flag player count must be between 2 and 4");
+    }
     if (!data.background.empty() &&
         static_cast<std::uint64_t>(data.background.width) * level.height !=
         static_cast<std::uint64_t>(data.background.height) * level.width) {
@@ -287,6 +267,7 @@ void validate(const Level& level, const OverThrustProjectData& data)
     std::set<std::string> teleporterIds;
     std::set<std::string> teamBaseIds;
     std::set<int> teamBaseSlots;
+    std::set<int> captureFlagSlots;
     for (const OverThrustObject& object : data.objects) {
         if (!validId(object.id) || !objectIds.insert(object.id).second) {
             throw std::runtime_error("invalid or duplicate object ID");
@@ -373,14 +354,16 @@ void validate(const Level& level, const OverThrustProjectData& data)
                 object.baseProfileId !=
                     "core:team-base/heal-and-weapons" ||
                 object.appearanceId != "appearance:team-base/default" ||
-                object.objectiveAnchorX < 0 || object.objectiveAnchorY < 0 ||
-                object.objectiveAnchorX > object.transform.width ||
-                object.objectiveAnchorY > object.transform.height ||
                 !teamBaseSlots.insert(object.teamSlot).second) {
                 throw std::runtime_error("team base properties are invalid");
             }
             validateTeamBasePolygon(object, level.width, level.height);
             teamBaseIds.insert(object.id);
+        } else if (object.type == "capture_flag") {
+            if (object.teamSlot < 1 || object.teamSlot > 4 ||
+                !captureFlagSlots.insert(object.teamSlot).second) {
+                throw std::runtime_error("capture flag properties are invalid");
+            }
         } else {
             throw std::runtime_error(
                 "unknown object type blocks this profile revision");
@@ -409,6 +392,11 @@ void validate(const Level& level, const OverThrustProjectData& data)
                 !slots.insert(team.teamSlot).second ||
                 !teamBaseIds.count(team.baseObjectId)) {
                 throw std::runtime_error("team binding is invalid");
+            }
+            if (mode.gameModeId == "core:capture_the_flag" &&
+                !captureFlagSlots.count(team.teamSlot)) {
+                throw std::runtime_error(
+                    "capture-the-flag team is missing its flag object");
             }
         }
     }
@@ -459,7 +447,7 @@ std::string accessJson(const OverThrustAccess& access)
 std::string objectsJson(const OverThrustProjectData& data)
 {
     std::ostringstream output;
-    output << "{\n  \"schema_version\": 3,\n"
+    output << "{\n  \"schema_version\": 4,\n"
               "  \"coordinate_space\": \"world_pixels_top_left\",\n"
               "  \"channels\": [";
     for (std::size_t index = 0; index < data.channels.size(); ++index) {
@@ -528,6 +516,8 @@ std::string objectsJson(const OverThrustProjectData& data)
             output << "],\n      \"access\": " << accessJson(object.access)
                    << ",\n      \"appearance_id\": "
                    << jsonString(object.appearanceId) << '\n';
+        } else if (object.type == "capture_flag") {
+            output << "      \"team_slot\": " << object.teamSlot << '\n';
         } else {
             output << "      \"team_slot\": " << object.teamSlot
                    << ",\n      \"base_profile_id\": "
@@ -539,10 +529,7 @@ std::string objectsJson(const OverThrustProjectData& data)
                 output << (point == 0 ? "" : ", ") << "{ \"x\": "
                        << value.x << ", \"y\": " << value.y << " }";
             }
-            output << "],\n      \"objective_anchor_offset_pixels\": { \"x\": "
-                   << object.objectiveAnchorX << ", \"y\": "
-                   << object.objectiveAnchorY
-                   << " },\n      \"appearance_id\": "
+            output << "],\n      \"appearance_id\": "
                    << jsonString(object.appearanceId) << '\n';
         }
         output << "    }";
@@ -557,10 +544,10 @@ std::string manifestJson(const Level& level,
 {
     std::ostringstream output;
     output << "{\n"
-           << "  \"schema_version\": 3,\n"
-           << "  \"profile_id\": \"overthrust:authoring-v3\",\n"
+           << "  \"schema_version\": 4,\n"
+           << "  \"profile_id\": \"overthrust:authoring-v4\",\n"
            << "  \"registry_id\": \"overthrust:authoring-registry-v2\",\n"
-           << "  \"level_id\": " << jsonString(data.levelId) << ",\n"
+           << "  \"level_id\": " << jsonString(data.displayName) << ",\n"
            << "  \"display_name\": " << jsonString(data.displayName) << ",\n"
            << "  \"author\": " << jsonString(data.author) << ",\n"
            << "  \"description\": " << jsonString(data.description) << ",\n"
@@ -588,8 +575,15 @@ std::string manifestJson(const Level& level,
            << "  \"settings\": {\n"
            << "    \"background_scroll_factor\": { \"x\": "
            << decimal(data.backgroundScrollX) << ", \"y\": "
-           << decimal(data.backgroundScrollY) << " },\n"
-           << "    \"allowed_game_modes\": [";
+           << decimal(data.backgroundScrollY) << " },\n";
+    const bool captureTheFlag = std::find(
+        data.allowedGameModes.begin(), data.allowedGameModes.end(),
+        "core:capture_the_flag") != data.allowedGameModes.end();
+    if (captureTheFlag) {
+        output << "    \"capture_the_flag_player_count\": "
+               << data.captureTheFlagPlayers << ",\n";
+    }
+    output << "    \"allowed_game_modes\": [";
     for (std::size_t index = 0; index < data.allowedGameModes.size(); ++index) {
         output << (index == 0 ? "" : ", ")
                << jsonString(data.allowedGameModes[index]);
@@ -604,7 +598,20 @@ std::string manifestJson(const Level& level,
             output << (team == 0 ? "" : ", ")
                    << "{ \"team_slot\": " << mode.teams[team].teamSlot
                    << ", \"base_object_id\": "
-                   << jsonString(mode.teams[team].baseObjectId) << " }";
+                   << jsonString(mode.teams[team].baseObjectId);
+            if (mode.gameModeId == "core:capture_the_flag") {
+                const auto flag = std::find_if(
+                    data.objects.begin(), data.objects.end(),
+                    [&](const OverThrustObject& object) {
+                        return object.type == "capture_flag" &&
+                               object.teamSlot == mode.teams[team].teamSlot;
+                    });
+                if (flag != data.objects.end()) {
+                    output << ", \"flag_object_id\": "
+                           << jsonString(flag->id);
+                }
+            }
+            output << " }";
         }
         output << "]\n      }";
     }

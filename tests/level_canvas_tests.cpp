@@ -732,6 +732,57 @@ int main(int argc, char *argv[])
 
     canvas.setLevel(nullptr);
     clearLevel(level);
+    level.pixels[offset(10, 10)] = 77;
+    level.pixels[offset(11, 10)] = 77;
+    level.pixels[offset(10, 11)] = 77;
+    level.pixels[offset(20, 20)] = 77;
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::MagicWand);
+    canvas.setMaterialSelectionMode(MaterialSelectionMode::Connected);
+    click(viewport, {10.5, 10.5});
+    canvas.deleteSelection();
+    ok &= expect(level.pixels[offset(10, 10)] == 0 &&
+                     level.pixels[offset(11, 10)] == 0 &&
+                     level.pixels[offset(10, 11)] == 0 &&
+                     level.pixels[offset(20, 20)] == 77,
+                 "connected magic wand should leave disjoint matching "
+                 "material unselected");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    level.pixels[offset(30, 30)] = 77;
+    level.pixels[offset(40, 40)] = 77;
+    canvas.setLevel(&level);
+    canvas.setDrawTool(DrawTool::MagicWand);
+    canvas.setMaterialSelectionMode(MaterialSelectionMode::AllMatching);
+    click(viewport, {30.5, 30.5});
+    canvas.deleteSelection();
+    ok &= expect(level.pixels[offset(30, 30)] == 0 &&
+                     level.pixels[offset(40, 40)] == 0,
+                 "all-material magic wand should select disconnected matches");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
+    level.pixels[offset(50, 50)] = 77;
+    canvas.setLevel(&level);
+    ok &= expect(canvas.addLayer(),
+                 "active-layer magic wand test should create an upper layer");
+    level.layers[1].pixels[offset(60, 60)] = 77;
+    level.layers[1].pixels[offset(70, 70)] = 77;
+    level.layers[1].mask[offset(60, 60)] = 1;
+    level.layers[1].mask[offset(70, 70)] = 1;
+    canvas.setDrawTool(DrawTool::MagicWand);
+    canvas.setMaterialSelectionMode(MaterialSelectionMode::AllMatching);
+    click(viewport, {60.5, 60.5});
+    canvas.deleteSelection();
+    ok &= expect(level.layers[1].mask[offset(60, 60)] == 0 &&
+                     level.layers[1].mask[offset(70, 70)] == 0 &&
+                     level.layers[0].pixels[offset(50, 50)] == 77 &&
+                     level.layers[0].mask[offset(50, 50)] == 1,
+                 "magic wand should select and edit only the active layer");
+
+    canvas.setLevel(nullptr);
+    clearLevel(level);
     for (int y = 10; y <= 11; ++y) {
         for (int x = 10; x <= 11; ++x) {
             level.pixels[offset(x, y)] = 77;
@@ -1025,12 +1076,29 @@ int main(int argc, char *argv[])
     ok &= expect(requestedPolygon.size() == 3 && requestedObject == -1,
                  "team-base polygon tool should emit the marked area");
 
+    requestedPolygon.clear();
+    objectCanvas.beginTeamBasePolygon();
+    click(objectCanvas.viewport(), {8.5, 8.5});
+    click(objectCanvas.viewport(), {28.5, 8.5});
+    sendKey(objectCanvas.viewport(), Qt::Key_Escape);
+    sendKey(objectCanvas.viewport(), Qt::Key_Return);
+    ok &= expect(requestedPolygon.isEmpty(),
+                 "Escape should cancel team-base creation and discard its "
+                 "vertices");
+
     OverThrustObject doorObject;
     doorObject.id = "door";
     doorObject.type = "sliding_door";
     doorObject.transform = {20, 30, 20, 16, 0};
     objects.push_back(doorObject);
     objectCanvas.setObjects(&objects);
+    objectCanvas.setSelectedObject(0);
+    int keyboardObjectSelection = -2;
+    QObject::connect(&objectCanvas, &LevelCanvas::objectSelectionChanged,
+                     [&](const int index) { keyboardObjectSelection = index; });
+    sendKey(objectCanvas.viewport(), Qt::Key_Escape);
+    ok &= expect(keyboardObjectSelection == -1,
+                 "Escape should deselect a selected canvas object");
     objectCanvas.setSelectedObject(0);
     OverThrustTransform requestedTransform;
     int transformRequests = 0;
@@ -1068,7 +1136,9 @@ int main(int argc, char *argv[])
                         .isNull() &&
                    !QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_polygon.png"))
                         .isNull() &&
-                   !QIcon(QStringLiteral(":/icons/overthrust/tool-team-base.png"))
+                   !QIcon(QStringLiteral(":/icons/icons/magic-wand.svg"))
+                        .isNull() &&
+                   !QIcon(QStringLiteral(":/icons/overthrust/tool-flag.png"))
                         .isNull(),
                "embedded toolbox icons should load from resources");
 

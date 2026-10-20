@@ -51,7 +51,7 @@ The current milestone supports:
   category filters, an optional normalized true-color background with a
   parallax flag and preview, typed level
   settings, and non-rasterized sliding gates, teleporters, service orbs, and polygonal
-  team-base areas
+  independently placed capture flags and polygonal team-base areas
 - publishing deterministic `.OLV` level-package directories containing
   `manifest.json`, `materials.pcx`, `objects.json`, and optional
   `background.png`
@@ -104,8 +104,10 @@ The current milestone supports:
   accepts and `Esc` cancels
 - Paint-style polygons made by clicking corners and completed with a double
   click or `Enter`; `Esc` cancels an unfinished polygon
-- rectangular, elliptical, and freehand selections stored as temporary indexed
-  layers; selections can be moved, deleted, or edited with the drawing tools
+- rectangular, elliptical, freehand, and active-layer magic-wand selections
+  stored as temporary indexed layers; the wand can match one connected area or
+  every occurrence of the same material, and selections can be moved, deleted,
+  or edited with the drawing tools
 - selection shapes can be combined: `Shift` adds, `Ctrl` subtracts, and
   `Shift+Ctrl` intersects with the existing selection
 - lossless indexed selection copy/paste with `Ctrl+C` and `Ctrl+V`; `Enter`

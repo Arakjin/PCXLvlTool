@@ -20,6 +20,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <utility>
 
@@ -35,13 +36,13 @@ const QImage& overthrustObjectImage(const std::string& type)
         QStringLiteral(":/icons/overthrust/canvas-teleporter.png"));
     static const QImage serviceOrb(
         QStringLiteral(":/icons/overthrust/canvas-service-orb.png"));
-    static const QImage teamBase(
-        QStringLiteral(":/icons/overthrust/canvas-team-base.png"));
+    static const QImage captureFlag(
+        QStringLiteral(":/icons/overthrust/canvas-flag.png"));
     static const QImage empty;
     if (type == "sliding_door") return door;
     if (type == "teleporter") return teleporter;
     if (type == "service_orb") return serviceOrb;
-    if (type == "team_base") return teamBase;
+    if (type == "capture_flag") return captureFlag;
     return empty;
 }
 
@@ -570,6 +571,16 @@ void LevelCanvas::setShapeMode(const ShapeMode mode) { shapeMode_ = mode; }
 
 ShapeMode LevelCanvas::shapeMode() const { return shapeMode_; }
 
+void LevelCanvas::setMaterialSelectionMode(const MaterialSelectionMode mode)
+{
+    materialSelectionMode_ = mode;
+}
+
+MaterialSelectionMode LevelCanvas::materialSelectionMode() const
+{
+    return materialSelectionMode_;
+}
+
 void LevelCanvas::setTextFontFamily(const QString& family)
 {
     textFontFamily_ = family;
@@ -1064,9 +1075,10 @@ void LevelCanvas::beginTeamBasePolygon(const int objectIndex)
     teamBasePolygonActive_ = true;
     teamBasePolygonObject_ = objectIndex;
     teamBasePolygonPoints_.clear();
-    setFocus(Qt::OtherFocusReason);
+    viewport()->setFocus(Qt::OtherFocusReason);
     viewport()->setCursor(Qt::CrossCursor);
     viewport()->update();
+    emit teamBasePolygonActiveChanged(true);
 }
 
 void LevelCanvas::commitTeamBasePolygon()
@@ -1081,11 +1093,13 @@ void LevelCanvas::commitTeamBasePolygon()
 
 void LevelCanvas::cancelTeamBasePolygon()
 {
+    const bool wasActive = teamBasePolygonActive_;
     teamBasePolygonActive_ = false;
     teamBasePolygonObject_ = -1;
     teamBasePolygonPoints_.clear();
     updateToolCursor();
     viewport()->update();
+    if (wasActive) emit teamBasePolygonActiveChanged(false);
 }
 
 void LevelCanvas::paintObjects(QPainter& painter) const
@@ -1149,20 +1163,6 @@ void LevelCanvas::paintObjects(QPainter& painter) const
                                 selected ? 2 : 1));
             painter.setBrush(QColor(70, 130, 255, 85));
             painter.drawPolygon(polygon);
-            const QImage& flag = overthrustObjectImage(object.type);
-            const double markerSize = std::clamp(
-                std::min(transform.width, transform.height) *
-                    zoom_ * 0.65,
-                12.0, 64.0);
-            const QPointF anchor(
-                (x + object.objectiveAnchorX) * zoom_,
-                (y + object.objectiveAnchorY) * zoom_);
-            const QRectF markerBounds(anchor.x() - markerSize / 2.0,
-                                      anchor.y() - markerSize / 2.0,
-                                      markerSize, markerSize);
-            painter.setOpacity(0.95);
-            painter.drawImage(fittedImageRect(markerBounds, flag, 1.0), flag);
-            painter.setOpacity(1.0);
             continue;
         }
         if (object.type == "sliding_door" && selected) {
@@ -1626,6 +1626,8 @@ void LevelCanvas::mousePressEvent(QMouseEvent* event)
                 beginStroke(tr("Flood fill"));
                 floodFill(point, strokePaintIndex_);
                 commitStroke();
+            } else if (strokeTool_ == DrawTool::MagicWand) {
+                selectMatchingMaterial(point);
             } else if (isSelectionTool(strokeTool_)) {
                 drawing_ = true;
                 freehandSelectionPoints_.clear();
@@ -2011,6 +2013,16 @@ void LevelCanvas::keyPressEvent(QKeyEvent* event)
             event->accept();
             return;
         }
+    }
+    if (event->key() == Qt::Key_Escape && objectEditingEnabled_ &&
+        selectedObject_ >= 0) {
+        selectedObject_ = -1;
+        objectDragMode_ = ObjectDragMode::None;
+        emit objectSelectionChanged(-1);
+        updateToolCursor();
+        viewport()->update();
+        event->accept();
+        return;
     }
     if (event->key() == Qt::Key_Escape &&
         (textDraftActive_ ||
@@ -2814,6 +2826,67 @@ void LevelCanvas::createSelection()
         }
     }
 
+    freehandSelectionPoints_.clear();
+    applySelectionCandidate(std::move(candidate));
+}
+
+void LevelCanvas::selectMatchingMaterial(const QPoint& point)
+{
+    if (level_ == nullptr || point.x() < 0 || point.y() < 0 ||
+        point.x() >= static_cast<int>(level_->width) ||
+        point.y() >= static_cast<int>(level_->height)) {
+        return;
+    }
+    const Level::Layer& layer = level_->layers[level_->activeLayer];
+    const std::size_t start = static_cast<std::size_t>(point.y()) *
+                                  level_->width +
+                              point.x();
+    const std::uint8_t material = layer.pixels[start];
+    const std::uint8_t opacity = layer.mask[start];
+    std::vector<std::uint8_t> candidate(level_->pixelCount(), 0);
+    const auto matches = [&](const std::size_t offset) {
+        return layer.pixels[offset] == material &&
+               layer.mask[offset] == opacity;
+    };
+    if (materialSelectionMode_ == MaterialSelectionMode::AllMatching) {
+        for (std::size_t offset = 0; offset < candidate.size(); ++offset) {
+            candidate[offset] = matches(offset) ? 1 : 0;
+        }
+    } else {
+        std::vector<QPoint> pending;
+        pending.reserve(level_->pixelCount());
+        pending.push_back(point);
+        candidate[start] = 1;
+        for (std::size_t next = 0; next < pending.size(); ++next) {
+            const QPoint current = pending[next];
+            const std::array<QPoint, 4> neighbors{{
+                {current.x() - 1, current.y()},
+                {current.x() + 1, current.y()},
+                {current.x(), current.y() - 1},
+                {current.x(), current.y() + 1},
+            }};
+            for (const QPoint& neighbor : neighbors) {
+                if (neighbor.x() < 0 || neighbor.y() < 0 ||
+                    neighbor.x() >= static_cast<int>(level_->width) ||
+                    neighbor.y() >= static_cast<int>(level_->height)) {
+                    continue;
+                }
+                const std::size_t offset =
+                    static_cast<std::size_t>(neighbor.y()) * level_->width +
+                    neighbor.x();
+                if (candidate[offset] == 0 && matches(offset)) {
+                    candidate[offset] = 1;
+                    pending.push_back(neighbor);
+                }
+            }
+        }
+    }
+    applySelectionCandidate(std::move(candidate));
+}
+
+void LevelCanvas::applySelectionCandidate(
+    std::vector<std::uint8_t> candidate)
+{
     if (strokeSelectionCombineMode_ != SelectionCombineMode::Replace) {
         std::vector<std::uint8_t> previous(level_->pixelCount(), 0);
         if (selectionActive_) {
@@ -2866,7 +2939,6 @@ void LevelCanvas::createSelection()
         }
     }
 
-    freehandSelectionPoints_.clear();
     if (right < left || bottom < top) {
         clearSelection();
         return;
@@ -2943,7 +3015,8 @@ void LevelCanvas::setSelectionPosition(const QPoint& position)
 bool LevelCanvas::isSelectionTool(const DrawTool tool) const
 {
     return tool == DrawTool::SelectRectangle ||
-           tool == DrawTool::SelectEllipse || tool == DrawTool::SelectFreehand;
+           tool == DrawTool::SelectEllipse || tool == DrawTool::SelectFreehand ||
+           tool == DrawTool::MagicWand;
 }
 
 void LevelCanvas::updateToolCursor()
@@ -3236,6 +3309,8 @@ QString LevelCanvas::commandText() const
         return tr("Ellipse selection");
     case DrawTool::SelectFreehand:
         return tr("Freehand selection");
+    case DrawTool::MagicWand:
+        return tr("Magic wand selection");
     case DrawTool::MoveSelection:
         return tr("Move selection");
     case DrawTool::BezierCurve:
