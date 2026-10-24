@@ -196,14 +196,23 @@ void writeDocument(std::ostream& output, const std::string_view role,
     writeU32(output, static_cast<std::uint32_t>(document.height));
     writeU32(output, static_cast<std::uint32_t>(document.layers.size()));
     writeU32(output, static_cast<std::uint32_t>(document.activeLayer));
-    for (const Level::Layer& layer : document.layers) {
+    for (std::size_t layerIndex = 0;
+         layerIndex < document.layers.size(); ++layerIndex) {
+        const Level::Layer& layer = document.layers[layerIndex];
         writeString(output, layer.name);
         output.put(static_cast<char>((layer.visible ? 1 : 0) |
                                      (layer.locked ? 2 : 0)));
         output.write(reinterpret_cast<const char*>(layer.pixels.data()),
                      static_cast<std::streamsize>(layer.pixels.size()));
-        output.write(reinterpret_cast<const char*>(layer.mask.data()),
-                     static_cast<std::streamsize>(layer.mask.size()));
+        std::vector<std::uint8_t> canonicalMask = layer.mask;
+        for (std::size_t pixel = 0; pixel < canonicalMask.size(); ++pixel) {
+            canonicalMask[pixel] =
+                layerIndex > 0 && layer.pixels[pixel] == 0
+                    ? 0
+                    : canonicalMask[pixel] == 0 ? 0 : 1;
+        }
+        output.write(reinterpret_cast<const char*>(canonicalMask.data()),
+                     static_cast<std::streamsize>(canonicalMask.size()));
     }
 }
 
@@ -226,7 +235,9 @@ std::pair<std::string, std::unique_ptr<Level>> readDocument(std::istream& input)
     document->resize(width, height);
     document->layers.resize(layerCount);
     document->activeLayer = activeLayer;
-    for (Level::Layer& layer : document->layers) {
+    for (std::size_t layerIndex = 0; layerIndex < document->layers.size();
+         ++layerIndex) {
+        Level::Layer& layer = document->layers[layerIndex];
         layer.name = readString(input);
         const int flags = input.get();
         if (flags == std::char_traits<char>::eof()) {
@@ -240,8 +251,11 @@ std::pair<std::string, std::unique_ptr<Level>> readDocument(std::istream& input)
                     layer.pixels.size());
         requireRead(input, reinterpret_cast<char*>(layer.mask.data()),
                     layer.mask.size());
-        for (std::uint8_t& mask : layer.mask) {
-            mask = mask == 0 ? 0 : 1;
+        for (std::size_t pixel = 0; pixel < layer.mask.size(); ++pixel) {
+            layer.mask[pixel] =
+                layerIndex > 0 && layer.pixels[pixel] == 0
+                    ? 0
+                    : layer.mask[pixel] == 0 ? 0 : 1;
         }
     }
     document->layers.front().name = "Background";

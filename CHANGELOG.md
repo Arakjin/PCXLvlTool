@@ -47,6 +47,9 @@ All notable changes to PCX Level Tool are documented in this file.
 - Preserve every indexed background layer separately inside the distinct
   OverThrust Layered PCX (`background.opcx`) format, while retaining the
   visible composite as its ordinary PCX compatibility image.
+- Treat palette index 0 as automatic transparency on every editable upper
+  layer across all game profiles and PXLP documents, including copied and
+  pasted selections; the bottom Background layer remains opaque.
 - Simplify OverThrust settings by removing level player-count, spawn-policy,
   and boundary-policy fields; author world dimensions and object measurements
   directly in pixels without editor-side cell conversion; and add a background

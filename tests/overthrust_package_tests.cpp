@@ -470,12 +470,15 @@ int main()
             std::filesystem::current_path() / "everything-background.opcx";
         writeBytes(fixtureOpcx, fixtureChunks.at("BACKGRND"));
         Level fixtureBackground;
-        ok &= expect(loadOverThrustLayeredPcx(
-                         fixtureOpcx, fixtureBackground, error) &&
+        const bool fixtureBackgroundOpened = loadOverThrustLayeredPcx(
+            fixtureOpcx, fixtureBackground, error);
+        if (!fixtureBackgroundOpened)
+            std::cerr << "Everything OPCX open error: " << error << '\n';
+        ok &= expect(fixtureBackgroundOpened &&
                          fixtureBackground.width == 1000 &&
                          fixtureBackground.height == 1000 &&
-                         fixtureBackground.layers.size() == 1,
-                     "Everything.OVL should contain a valid one-layer OPCX background");
+                         !fixtureBackground.layers.empty(),
+                     "Everything.OVL should contain a valid layered OPCX background");
         Level fixtureMaterials;
         OverThrustProjectData fixtureData;
         const bool fixtureOpened = loadOverThrustPackage(

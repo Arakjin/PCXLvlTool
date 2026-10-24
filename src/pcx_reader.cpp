@@ -189,6 +189,12 @@ void readLayerExtension(const std::vector<std::uint8_t>& bytes,
     const Level::PixelBuffer flattened = level.pixels;
     level.layers = std::move(layers);
     level.activeLayer = activeLayer;
+    for (std::size_t index = 1; index < level.layers.size(); ++index) {
+        Level::Layer& layer = level.layers[index];
+        for (std::size_t pixel = 0; pixel < level.pixelCount(); ++pixel) {
+            if (layer.pixels[pixel] == 0) layer.mask[pixel] = 0;
+        }
+    }
     flattenLayers(level);
     if (level.pixels != flattened) {
         throw std::runtime_error(

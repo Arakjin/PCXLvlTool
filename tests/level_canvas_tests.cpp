@@ -1,4 +1,5 @@
 #include "level_canvas.h"
+#include "layer_model.h"
 #include "palette_widget.h"
 
 #include <QApplication>
@@ -1184,6 +1185,31 @@ int main(int argc, char *argv[])
     clipboardCanvas.commitSelection();
     ok &= expect(clipboardDestination.layers[0].pixels[5] == 77,
                  "selection clipboard should survive switching documents");
+
+    Level opcxLevel;
+    opcxLevel.resize(4, 4);
+    initializeBackgroundLayer(opcxLevel);
+    opcxLevel.layers.emplace_back();
+    opcxLevel.layers.back().name = "OPCX upper";
+    opcxLevel.layers.back().pixels.resize(opcxLevel.pixelCount());
+    opcxLevel.layers.back().mask.resize(opcxLevel.pixelCount());
+    opcxLevel.layers[0].pixels[1] = 42;
+    LevelCanvas opcxCanvas;
+    opcxCanvas.setLevel(&opcxLevel);
+    opcxCanvas.selectAll();
+    opcxCanvas.copySelection();
+    opcxCanvas.commitSelection();
+    opcxLevel.layers[0].pixels[0] = 9;
+    opcxCanvas.setActiveLayer(1);
+    opcxCanvas.pasteSelection();
+    opcxCanvas.commitSelection();
+    ok &= expect(opcxLevel.layers[1].pixels[0] == 0 &&
+                     opcxLevel.layers[1].mask[0] == 0 &&
+                     opcxLevel.layers[1].pixels[1] == 42 &&
+                     opcxLevel.layers[1].mask[1] == 1 &&
+                     opcxLevel.pixels[0] == 9 &&
+                     opcxLevel.pixels[1] == 42,
+                 "pasting should treat upper-layer index 0 as transparent");
 
     ok &=
         expect(!QIcon(QStringLiteral(":/icons/icons/kolourpaint/tool_pen.png")).isNull() &&

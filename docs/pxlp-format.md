@@ -13,6 +13,12 @@ Version 1 stores:
 - each document's dimensions and active layer
 - up to five layers with names, visibility, locks, indexed pixels, and masks
 
+For every editable document, the bottom Background layer is opaque. Palette
+index `0` is always transparent on every higher layer. PXLP writers canonicalize
+the corresponding mask bytes to zero, so copied empty pixels reveal the layers
+below consistently in V-Wing, Wings, AUTS, and OverThrust projects. Publishing
+still flattens the visible result into the target game's runtime format.
+
 V-Wing, Wings, and AUTS projects use `.pxlp`. Wings' variable-size level,
 gameplay settings, and optional parallax document, as well as AUTS' fixed-size
 indexed image, therefore survive editing in the same extensible container.

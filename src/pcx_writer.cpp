@@ -195,7 +195,14 @@ bool saveOverThrustLayeredPcx(const std::filesystem::path& path,
             }
         }
 
-        Level flattened = level;
+        Level canonical = level;
+        for (std::size_t index = 1; index < canonical.layers.size(); ++index) {
+            Level::Layer& layer = canonical.layers[index];
+            for (std::size_t pixel = 0; pixel < canonical.pixelCount(); ++pixel) {
+                if (layer.pixels[pixel] == 0) layer.mask[pixel] = 0;
+            }
+        }
+        Level flattened = canonical;
         flattenLayers(flattened);
         if (!savePcx(path, flattened, error)) {
             throw std::runtime_error(error);
@@ -212,7 +219,7 @@ bool saveOverThrustLayeredPcx(const std::filesystem::path& path,
         std::vector<std::uint8_t> payload;
         appendU32(payload, static_cast<std::uint32_t>(level.layers.size()));
         appendU32(payload, static_cast<std::uint32_t>(level.activeLayer));
-        for (const Level::Layer& layer : level.layers) {
+        for (const Level::Layer& layer : canonical.layers) {
             const std::vector<std::uint8_t> pixels = encodeLayerBuffer(
                 layer.pixels, level.width, level.height, bytesPerLine);
             const std::vector<std::uint8_t> mask = encodeLayerBuffer(

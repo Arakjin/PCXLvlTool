@@ -200,6 +200,7 @@ int main()
     upper.mask.resize(layered.pixelCount());
     upper.pixels[1] = 42;
     upper.pixels[4] = 77;
+    upper.mask[0] = 1; // OPCX canonicalizes upper-layer index 0 to transparent.
     upper.mask[1] = 1;
     upper.mask[4] = 1;
     layered.activeLayer = 1;
@@ -214,6 +215,8 @@ int main()
     ok &= expect(loadOverThrustLayeredPcx(layeredFile.path(), layeredLoaded,
                                           error),
                  "OPCX could not be loaded: " + error);
+    Level::PixelBuffer expectedUpperMask = upper.mask;
+    expectedUpperMask[0] = 0;
     ok &= expect(layeredLoaded.pixels == layered.pixels &&
                      layeredLoaded.palette == layered.palette &&
                      layeredLoaded.layers.size() == 2 &&
@@ -225,8 +228,8 @@ int main()
                      !layeredLoaded.layers[1].visible &&
                      layeredLoaded.layers[1].locked &&
                      layeredLoaded.layers[1].pixels == upper.pixels &&
-                     layeredLoaded.layers[1].mask == upper.mask,
-                 "OPCX did not preserve separate layer records");
+                     layeredLoaded.layers[1].mask == expectedUpperMask,
+                 "OPCX did not preserve layers or index-0 transparency");
     error.clear();
     ok &= expect(!loadPcx(layeredFile.path(), layeredLoaded, error),
                  "ordinary PCX loader accepted an OPCX file");

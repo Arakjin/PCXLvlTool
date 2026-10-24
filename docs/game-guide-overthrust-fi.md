@@ -91,7 +91,10 @@ erillinen, vapaasti muokattava 256 värin paletti. Tätä taustaa ei vieritetä
 eikä parallaksoida. Sen avulla voi piirtää esimerkiksi veden alta näkyvän
 kuvituksen vaikuttamatta `materials.pcx`-soluihin. Pikselivalinnan voi kopioida
 Materials- ja OPCX Background -välilehtien välillä; liitetyt indeksit käyttävät
-kohdevälilehden omaa palettia.
+kohdevälilehden omaa palettia. OPCX-taustan alin Background-taso on peittävä,
+mutta kaikilla ylemmillä tasoilla paletti-indeksi 0 tarkoittaa aina
+läpinäkyvyyttä. Siksi kopioidun alueen nollaindeksejä ei tarvitse pyyhkiä
+käsin liittämisen jälkeen.
 
 Valinnainen esitystausta voidaan tuoda PNG-, JPEG- tai staattisesta
 WebP-kuvasta. Kuvan ei tarvitse käyttää samaa kuvasuhdetta tai pikselikokoa kuin

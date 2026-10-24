@@ -77,8 +77,9 @@ The current milestone supports:
   `ä`, `ö`, and `å` are blocked, and the name is forced to uppercase when saved
 - saving editable work as `.pxlp`, plus a separate **Publish LEV** action that
   flattens the visible layers into a game-compatible `.LEV` file
-- up to five reorderable, binary visible/hidden layers; transparent pixels in
-  upper layers reveal the layers below
+- up to five reorderable, binary visible/hidden layers; palette index 0 is
+  automatically transparent on every upper layer, so pasted empty pixels reveal
+  the layers below in every game profile
 - a fixed, always-visible Background layer at the bottom; its eraser writes
   file/palette index 0, while erasing upper layers makes them
   transparent

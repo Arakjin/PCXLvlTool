@@ -42,6 +42,9 @@ int main()
     level.layers.back().mask.resize(level.pixelCount());
     level.layers.back().pixels[5678] = 80;
     level.layers.back().mask[5678] = 1;
+    level.layers[0].pixels[5679] = 81;
+    level.layers.back().pixels[5679] = 0;
+    level.layers.back().mask[5679] = 1;
     level.activeLayer = 1;
     flattenLayers(level);
 
@@ -94,8 +97,10 @@ int main()
                      loaded.layers[0].pixels[1234] == 128 &&
                      loaded.layers[1].pixels[5678] == 80 &&
                      loaded.layers[1].mask[5678] == 1 &&
-                     loaded.pixels[5678] == 80,
-                 "PXLP main layers should round-trip");
+                     loaded.layers[1].mask[5679] == 0 &&
+                     loaded.pixels[5678] == 80 &&
+                     loaded.pixels[5679] == 81,
+                 "PXLP layers should round-trip with index-0 transparency");
     ok &= expect(loadedBackground &&
                      loadedBackground->width ==
                          static_cast<std::size_t>(parallaxSize.first) &&

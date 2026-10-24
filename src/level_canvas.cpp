@@ -669,10 +669,15 @@ void LevelCanvas::commitSelection()
             }
             if (selectionOpacity_[localOffset] != 0) {
                 const QPoint destination = selectionPosition_ + QPoint(x, y);
+                const std::uint8_t pixel = selectionPixels_[localOffset];
+                const std::uint8_t opacity =
+                    level_->activeLayer > 0 && pixel == 0
+                        ? 0
+                        : 1;
                 finalValues[static_cast<std::size_t>(destination.y()) *
                                 level_->width +
                             destination.x()] =
-                    {selectionPixels_[localOffset], 1};
+                    {pixel, opacity};
             }
         }
     }
@@ -806,6 +811,9 @@ void LevelCanvas::pasteSelection()
         mask[index] = maskValue == 0 ? 0 : 1;
         pixels[index] = pixelValue;
         opacity[index] = opacityValue == 0 ? 0 : 1;
+        if (level_->activeLayer > 0 && pixels[index] == 0) {
+            opacity[index] = 0;
+        }
         containsPixels |= mask[index] != 0;
     }
     if (stream.status() != QDataStream::Ok || !containsPixels) {
@@ -847,6 +855,11 @@ void LevelCanvas::selectAll()
     const Level::Layer& layer = level_->layers[level_->activeLayer];
     selectionPixels_.assign(layer.pixels.begin(), layer.pixels.end());
     selectionOpacity_.assign(layer.mask.begin(), layer.mask.end());
+    if (level_->activeLayer > 0) {
+        for (std::size_t index = 0; index < selectionOpacity_.size(); ++index) {
+            if (selectionPixels_[index] == 0) selectionOpacity_[index] = 0;
+        }
+    }
     selectionHasSource_ = true;
     selectionActive_ = true;
     selectionEditPending_ = false;
@@ -945,7 +958,8 @@ bool LevelCanvas::mergeActiveLayerDown()
     Level::Layer& source = level_->layers[sourceIndex];
     Level::Layer& destination = level_->layers[destinationIndex];
     for (std::size_t offset = 0; offset < level_->pixelCount(); ++offset) {
-        if (source.mask[offset] == 0) {
+        if (source.mask[offset] == 0 ||
+            (sourceIndex > 0 && source.pixels[offset] == 0)) {
             continue;
         }
         destination.pixels[offset] = source.pixels[offset];
@@ -2180,7 +2194,11 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
             localX;
         const bool eraseToTransparency =
             strokeTool_ == DrawTool::Eraser && level_->activeLayer > 0;
-        const std::uint8_t newMask = eraseToTransparency ? 0 : 1;
+        const std::uint8_t newMask =
+            eraseToTransparency ||
+                    (level_->activeLayer > 0 && index == 0)
+                ? 0
+                : 1;
         if (selectionPixels_[localOffset] == index &&
             selectionOpacity_[localOffset] == newMask) {
             return false;
@@ -2199,9 +2217,13 @@ bool LevelCanvas::setPixel(const int x, const int y, const std::uint8_t index)
     Level::Layer& layer = level_->layers[level_->activeLayer];
     const bool eraseToTransparency =
         strokeTool_ == DrawTool::Eraser && level_->activeLayer > 0;
-    const std::uint8_t newMask = eraseToTransparency ? 0 : 1;
     const std::uint8_t newValue = eraseToTransparency ? layer.pixels[offset]
                                                        : index;
+    const std::uint8_t newMask =
+        eraseToTransparency ||
+                (level_->activeLayer > 0 && newValue == 0)
+            ? 0
+            : 1;
     if (layer.pixels[offset] == newValue && layer.mask[offset] == newMask) {
         return false;
     }
@@ -3006,7 +3028,10 @@ void LevelCanvas::applySelectionCandidate(
                 static_cast<std::size_t>(y) * combinedWidth + x;
             selectionMask_[localOffset] = 1;
             selectionPixels_[localOffset] = layer.pixels[levelOffset];
-            selectionOpacity_[localOffset] = layer.mask[levelOffset];
+            selectionOpacity_[localOffset] =
+                level_->activeLayer > 0 && layer.pixels[levelOffset] == 0
+                    ? 0
+                    : layer.mask[levelOffset];
         }
     }
     selectionActive_ = true;

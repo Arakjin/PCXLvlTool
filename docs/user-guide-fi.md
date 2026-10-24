@@ -92,6 +92,9 @@ Työkalut:
 - **Eraser** tekee pyyhityn kohdan ylemmillä tasoilla läpinäkyväksi, jolloin
   alemmat tasot näkyvät sen läpi. Alimmalla Background-tasolla kumi palauttaa
   kohdan pelin taustaksi.
+- Kaikkien pelien muokattavissa `.pxlp`-tasoissa indeksi 0 on ylemmillä
+  tasoilla aina läpinäkyvä. Tämä koskee myös kopioituja ja liitettyjä alueita;
+  alin Background-taso pysyy peittävänä.
 - **Spray** lisää hajanaisia pikseleitä valitulla säteellä.
 - **Line** piirtää suoran viivan. `Shift` rajoittaa suunnan vaaka-, pysty- tai
   45 asteen linjaan.

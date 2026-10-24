@@ -24,7 +24,9 @@ std::uint8_t compositeLayerPixel(const Level& level, const std::size_t offset,
 {
     for (std::size_t index = level.layers.size(); index-- > 0;) {
         const Level::Layer& layer = level.layers[index];
-        if (index != skippedLayer && layer.visible && layer.mask[offset] != 0) {
+        const bool transparentZero = index > 0 && layer.pixels[offset] == 0;
+        if (index != skippedLayer && layer.visible &&
+            layer.mask[offset] != 0 && !transparentZero) {
             return layer.pixels[offset];
         }
     }
