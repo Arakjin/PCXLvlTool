@@ -195,6 +195,7 @@ int main()
     door.type = "sliding_door";
     door.transform = {10, 20, 3, 8, 45000};
     door.openOffsetY = -10;
+    door.travelDurationSeconds = 0.75;
     door.materialId = "core:aluminium";
     door.appearanceId = "appearance:door/aluminium";
     door.unknownProperties.push_back({"future", "string", "retained"});
@@ -240,12 +241,14 @@ int main()
                      loadedOverThrust->objects.size() == 3 &&
                      loadedOverThrust->objects[0].transform.rotationMillidegrees ==
                          45000 &&
+                     loadedOverThrust->objects[0].travelDurationSeconds ==
+                         0.75 &&
                      loadedOverThrust->objects[0].unknownProperties.size() == 1 &&
                      loadedOverThrust->objects[1].areaPolygon ==
                          teamBase.areaPolygon &&
                      loadedOverThrust->objects[2].type == "capture_flag" &&
                      loadedOverThrust->objects[2].transform.x == 35,
-                 "OverThrust PXLP v3 documents and v4 data should round-trip");
+                 "OverThrust PXLP v3 documents and v5 data should round-trip");
 
     // Corrupt the first object's serialized X coordinate without disturbing
     // the surrounding framing. The bounded reader must reject it before

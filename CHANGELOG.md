@@ -44,6 +44,9 @@ All notable changes to PCX Level Tool are documented in this file.
 - Open native `.OVL` levels through **File > Open**, restoring their editable
   materials, separate OPCX background layers, settings, objects, and optional
   presentation background, with full container and CRC validation.
+- Publish `OBJECTS` as strict OverThrust schema v4, replacing sliding-door
+  speed with a total opening/closing duration; migrate v2/v3 speed fields with
+  `duration = distance / speed` and retain the duration in PXLP projects.
 - Preserve every indexed background layer separately inside the distinct
   OverThrust Layered PCX (`background.opcx`) format, while retaining the
   visible composite as its ordinary PCX compatibility image.

@@ -42,7 +42,7 @@ The standard chunk order and payloads are:
 | `MATERIAL` | yes | ordinary indexed PCX material raster |
 | `BACKGRND` | yes | OverThrust Layered PCX (`.OPCX`) background |
 | `PRESENT` | no | canonical RGBA PNG presentation background |
-| `OBJECTS` | yes | UTF-8 JSON object data |
+| `OBJECTS` | yes | UTF-8 JSON conforming to `overthrust-objects-v4.schema.json` |
 
 The manifest refers to chunk IDs rather than filenames. There is deliberately
 no compatibility path for the earlier folder or ZIP prototypes.
@@ -51,3 +51,13 @@ PCX Level Tool opens this native format directly. A successful read validates
 the header, contiguous chunk table, supported chunk set, bounds, flags and
 CRC-32 values before decoding the manifest, objects, PCX, OPCX and optional
 PNG payloads.
+
+Newly published `OBJECTS` chunks always use schema version 4. Sliding doors
+store `travel_duration_seconds` in the inclusive upper range `(0, 3600]` and
+never store `speed_pixels_per_second`. When opening schema-v2 or schema-v3
+object data, PCX Level Tool migrates legacy speed with
+`duration = slide_distance_pixels / speed_pixels_per_second`; republishing
+then writes strict v4 JSON. Schema v2 predates `slide_direction`, so it migrates
+as `positive_local_x`; schema v3 retains its explicit direction. The generated JSON is validated against the v4
+field, type, enum, count, and numeric constraints before its exact bytes are
+embedded in the OVL.

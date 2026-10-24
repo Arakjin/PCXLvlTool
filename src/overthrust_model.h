@@ -53,7 +53,7 @@ struct OverThrustObject {
     // Sliding door fields.
     int openOffsetX = 0;
     int openOffsetY = 0;
-    double speedPixelsPerSecond = 4.0;
+    double travelDurationSeconds = 0.75;
     std::string initialState = "closed";
     std::string activationMode = "proximity";
     double activationRadiusPixels = 4.0;

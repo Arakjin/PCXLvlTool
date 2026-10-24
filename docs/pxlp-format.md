@@ -47,3 +47,8 @@ Version 3 is written for current OverThrust projects. It adds an always-present
 editing background colors never changes material preview colors. The indexed
 background is distinct from the optional embedded RGBA presentation background:
 it is fixed to world bounds and has no parallax or scroll settings.
+
+The current typed OverThrust data section is `overthrust-data-v5`. Sliding
+doors store their total opening/closing duration in seconds. Earlier typed
+sections remain readable; their stored pixels-per-second value is migrated to
+duration using the door's slide distance, and the next project save writes v5.

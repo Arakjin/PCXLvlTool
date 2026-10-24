@@ -1219,8 +1219,16 @@ void LevelCanvas::paintObjects(QPainter& painter) const
             continue;
         }
         if (object.type == "sliding_door" && selected) {
-            const double slideDistance = std::hypot(
+            double slideDistance = std::hypot(
                 object.openOffsetX, object.openOffsetY);
+            const double originalRadians =
+                object.transform.rotationMillidegrees *
+                3.14159265358979323846 / 180000.0;
+            if (object.openOffsetX * std::cos(originalRadians) +
+                    object.openOffsetY * std::sin(originalRadians) <
+                0.0) {
+                slideDistance = -slideDistance;
+            }
             const double slideRadians = transform.rotationMillidegrees *
                 3.14159265358979323846 / 180000.0;
             const double slideX = slideDistance * std::cos(slideRadians);

@@ -124,6 +124,66 @@ void writeBytes(const std::filesystem::path& path,
                  static_cast<std::streamsize>(bytes.size()));
 }
 
+void writeU32(std::ostream& output, const std::uint32_t value)
+{
+    for (int shift = 0; shift < 32; shift += 8)
+        output.put(static_cast<char>(value >> shift));
+}
+
+void writeU64(std::ostream& output, const std::uint64_t value)
+{
+    writeU32(output, static_cast<std::uint32_t>(value));
+    writeU32(output, static_cast<std::uint32_t>(value >> 32U));
+}
+
+void writeOvlChunks(
+    const std::filesystem::path& path,
+    const std::map<std::string, std::vector<std::uint8_t>>& chunks)
+{
+    const std::vector<std::string> order{
+        "MANIFEST", "MATERIAL", "BACKGRND", "PRESENT", "OBJECTS"};
+    std::vector<std::string> present;
+    for (const std::string& id : order) {
+        if (chunks.count(id)) present.push_back(id);
+    }
+    const std::uint64_t dataOffset = 32 + 40 * present.size();
+    std::uint64_t offset = dataOffset;
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    const std::array<char, 8> magic{{'O', 'V', 'L', 'P', 'K', 'G', '1', 0}};
+    output.write(magic.data(), static_cast<std::streamsize>(magic.size()));
+    writeU32(output, 1);
+    writeU32(output, static_cast<std::uint32_t>(present.size()));
+    writeU64(output, 32);
+    writeU64(output, dataOffset);
+    for (const std::string& idValue : present) {
+        std::array<char, 8> id{};
+        std::copy(idValue.begin(), idValue.end(), id.begin());
+        const auto& contents = chunks.at(idValue);
+        output.write(id.data(), static_cast<std::streamsize>(id.size()));
+        writeU64(output, offset);
+        writeU64(output, contents.size());
+        writeU64(output, contents.size());
+        writeU32(output, crc32(contents));
+        writeU32(output, 0);
+        offset += contents.size();
+    }
+    for (const std::string& id : present) {
+        const auto& contents = chunks.at(id);
+        output.write(reinterpret_cast<const char*>(contents.data()),
+                     static_cast<std::streamsize>(contents.size()));
+    }
+    if (!output) throw std::runtime_error("could not write test OVL");
+}
+
+void replaceOnce(std::string& value, const std::string& oldText,
+                 const std::string& newText)
+{
+    const std::size_t offset = value.find(oldText);
+    if (offset == std::string::npos)
+        throw std::runtime_error("test JSON replacement target is missing");
+    value.replace(offset, oldText.size(), newText);
+}
+
 } // namespace
 
 int main()
@@ -171,6 +231,20 @@ int main()
     for (std::size_t index = 0; index < data.background.rgba.size(); ++index) {
         data.background.rgba[index] = static_cast<std::uint8_t>(index * 7);
     }
+    OverThrustObject durationDoor;
+    durationDoor.id = "duration_door";
+    durationDoor.type = "sliding_door";
+    durationDoor.transform = {1, 1, 1, 1, 0};
+    durationDoor.openOffsetX = -1;
+    durationDoor.travelDurationSeconds = 0.75;
+    durationDoor.activationMode = "channel";
+    durationDoor.activationChannel = "level:duration_door";
+    durationDoor.access.everyone = false;
+    durationDoor.access.playerSlots = {1, 3};
+    durationDoor.materialId = "core:aluminium";
+    durationDoor.appearanceId = "appearance:door/aluminium";
+    data.channels = {{"level:duration_door", true}};
+    data.objects = {durationDoor};
 
     std::string error;
     ok &= expect(publishOverThrustPackage(first, level, background, data, error),
@@ -237,6 +311,20 @@ int main()
                      manifestText.find("\"material_id\": \"core:acidic_gas\"") !=
                          std::string::npos,
                  "manifest should publish simplified v3 settings and the complete registry");
+    const auto& initialObjectBytes = firstEntries.at("OBJECTS");
+    const std::string initialObjects(initialObjectBytes.begin(),
+                                     initialObjectBytes.end());
+    ok &= expect(initialObjects.find("\"schema_version\": 4") !=
+                         std::string::npos &&
+                     initialObjects.find(
+                         "\"travel_duration_seconds\": 0.75") !=
+                         std::string::npos &&
+                     initialObjects.find(
+                         "\"slide_direction\": \"negative_local_x\"") !=
+                         std::string::npos &&
+                     initialObjects.find("speed_pixels_per_second") ==
+                         std::string::npos,
+                 "new OBJECTS chunks should use v4 door duration fields");
     Level loaded;
     const auto extractedMaterials =
         std::filesystem::current_path() / "extracted-materials.pcx";
@@ -273,8 +361,76 @@ int main()
                      openedData.description == data.description &&
                      openedData.background.rgba == data.background.rgba &&
                      openedData.backgroundParallax == data.backgroundParallax &&
-                     openedData.allowedGameModes == data.allowedGameModes,
+                     openedData.allowedGameModes == data.allowedGameModes &&
+                     openedData.objects.size() == 1 &&
+                     openedData.objects[0].travelDurationSeconds == 0.75,
                  "opening OVL should restore editable raster and manifest data");
+    const auto v4RoundTrip =
+        std::filesystem::current_path() / "v4-round-trip.OVL";
+    std::filesystem::remove(v4RoundTrip, ignored);
+    ok &= expect(publishOverThrustPackage(
+                     v4RoundTrip, openedMaterials, openedBackground,
+                     openedData, error) &&
+                     readOvlChunks(v4RoundTrip).at("OBJECTS") ==
+                         firstEntries.at("OBJECTS"),
+                 "v4 OBJECTS JSON should survive open and republish unchanged");
+
+    for (const int legacyVersion : {2, 3}) {
+        auto legacyChunks = firstEntries;
+        std::string legacyObjects(legacyChunks.at("OBJECTS").begin(),
+                                  legacyChunks.at("OBJECTS").end());
+        replaceOnce(legacyObjects, "\"schema_version\": 4",
+                    "\"schema_version\": " +
+                        std::to_string(legacyVersion));
+        if (legacyVersion == 2) {
+            replaceOnce(
+                legacyObjects,
+                "      \"slide_direction\": \"negative_local_x\",\n",
+                "");
+        }
+        replaceOnce(legacyObjects,
+                    "\"travel_duration_seconds\": 0.75",
+                    "\"speed_pixels_per_second\": 2");
+        legacyChunks["OBJECTS"] = std::vector<std::uint8_t>(
+            legacyObjects.begin(), legacyObjects.end());
+        const auto legacyPath = std::filesystem::current_path() /
+            ("legacy-v" + std::to_string(legacyVersion) + ".OVL");
+        const auto migratedPath = std::filesystem::current_path() /
+            ("migrated-v" + std::to_string(legacyVersion) + ".OVL");
+        std::filesystem::remove(legacyPath, ignored);
+        std::filesystem::remove(migratedPath, ignored);
+        writeOvlChunks(legacyPath, legacyChunks);
+        OverThrustProjectData migratedData;
+        ok &= expect(loadOverThrustPackage(legacyPath, openedMaterials,
+                                            openedBackground, migratedData,
+                                            error) &&
+                         migratedData.objects.size() == 1 &&
+                         migratedData.objects[0].travelDurationSeconds == 0.5,
+                     "legacy v2/v3 speed should migrate to door duration");
+        ok &= expect(publishOverThrustPackage(
+                         migratedPath, openedMaterials, openedBackground,
+                         migratedData, error),
+                     "migrated v2/v3 OVL should republish as v4");
+        const auto migratedChunks = readOvlChunks(migratedPath);
+        const std::string migratedObjects(
+            migratedChunks.at("OBJECTS").begin(),
+            migratedChunks.at("OBJECTS").end());
+        ok &= expect(migratedObjects.find("\"schema_version\": 4") !=
+                             std::string::npos &&
+                         migratedObjects.find(
+                             "\"travel_duration_seconds\": 0.5") !=
+                             std::string::npos &&
+                         migratedObjects.find(
+                             legacyVersion == 2
+                                 ? "\"slide_direction\": \"positive_local_x\""
+                                 : "\"slide_direction\": \"negative_local_x\"") !=
+                             std::string::npos &&
+                         migratedObjects.find("speed_pixels_per_second") ==
+                             std::string::npos,
+                     "migrated objects should emit strict v4 JSON");
+        std::filesystem::remove(legacyPath, ignored);
+        std::filesystem::remove(migratedPath, ignored);
+    }
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::vector<std::uint8_t> rgba;
@@ -318,7 +474,7 @@ int main()
                  "polygonal team base should publish");
     const auto objectsBytes = readOvlChunks(polygonPackage).at("OBJECTS");
     const std::string objectsText(objectsBytes.begin(), objectsBytes.end());
-    ok &= expect(objectsText.find("\"schema_version\": 2") !=
+    ok &= expect(objectsText.find("\"schema_version\": 4") !=
                          std::string::npos &&
                      objectsText.find("\"area_polygon_pixels\"") !=
                          std::string::npos &&
@@ -376,6 +532,15 @@ int main()
                      openedData.teamModeSettings.size() == 1 &&
                      openedData.captureTheFlagPlayers == 3,
                  "opening OVL should restore objects and team-mode settings");
+    const auto captureRoundTrip =
+        std::filesystem::current_path() / "capture-round-trip.OVL";
+    std::filesystem::remove(captureRoundTrip, ignored);
+    ok &= expect(publishOverThrustPackage(
+                     captureRoundTrip, openedMaterials, openedBackground,
+                     openedData, error) &&
+                     readOvlChunks(captureRoundTrip).at("OBJECTS") ==
+                         readOvlChunks(capturePackage).at("OBJECTS"),
+                 "v4 transforms and polygons should round-trip unchanged");
     data.allowedGameModes = {"core:sandbox"};
     data.teamModeSettings.clear();
     data.objects.clear();
@@ -419,7 +584,7 @@ int main()
     door.type = "sliding_door";
     door.transform = {3, 3, 2, 2, 45000};
     door.openOffsetX = 1;
-    door.speedPixelsPerSecond = 4;
+    door.travelDurationSeconds = 0.75;
     door.activationRadiusPixels = 4;
     door.materialId = "core:aluminium";
     door.appearanceId = "appearance:door/aluminium";
@@ -430,6 +595,10 @@ int main()
     door.access.playerSlots = {5};
     data.objects = {door};
     expectInvalid("inaccessible player slot should be rejected");
+    door.access = {};
+    door.travelDurationSeconds = 3600.001;
+    data.objects = {door};
+    expectInvalid("door duration above the v4 schema maximum should be rejected");
     data.objects.clear();
     data.allowedGameModes = {"core:capture_the_flag"};
     data.teamModeSettings = {
@@ -524,6 +693,8 @@ int main()
     std::filesystem::remove_all(polygonPackage, ignored);
     std::filesystem::remove_all(capturePackage, ignored);
     std::filesystem::remove_all(flyThroughPackage, ignored);
+    std::filesystem::remove_all(v4RoundTrip, ignored);
+    std::filesystem::remove_all(captureRoundTrip, ignored);
     std::filesystem::remove(extractedMaterials, ignored);
     std::filesystem::remove(extractedBackground, ignored);
     return ok ? 0 : 1;

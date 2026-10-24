@@ -123,7 +123,9 @@ jäävät tarkkaa säätöä varten. Oven
 leveyttä ja korkeutta voi muuttaa erikseen. Portti liukuu oman pitkän sivunsa
 suuntaisesti kuvakkeessa olevan nuolen osoittamaan suuntaan. Valitun portin
 katkoviivahaamu näyttää sen avoimen sijainnin, ja **Slide distance along
-arrow** säätää liikkeen pituutta. Objektit näkyvät materiaalikuvan päällä, mutta niitä ei
+arrow** säätää liikkeen pituutta. **Opening / closing duration** määrittää koko
+avaus- tai sulkuliikkeen keston sekunteina (yli 0 ja enintään 3600).
+Objektit näkyvät materiaalikuvan päällä, mutta niitä ei
 piirretä `materials.pcx`-tiedostoon. Objektien luonti, siirto, ominaisuuden
 muutos, monistus ja poisto ovat kumottavia toimintoja.
 
@@ -153,3 +155,7 @@ teleportin kohde puuttuu, tukikohdan monikulmio leikkaa itsensä tai valittu
 joukkuetila ei sisällä vähintään kahta kelvollista tukikohtaa. CTF-julkaisu
 estetään myös, jos joltain sidotulta joukkueelta puuttuu erillinen lippu. Virhe ei jätä
 osittaista `.OVL`-pakettitiedostoa.
+Julkaistu `OBJECTS`-lohko validoidaan OverThrustin v4-objektiskeemaa vasten.
+Uudet liukuportit käyttävät `travel_duration_seconds`-kenttää; vanhojen v2/v3
+objektien `speed_pixels_per_second` muunnetaan avattaessa kestoksi kaavalla
+liukumatka / nopeus.

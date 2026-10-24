@@ -801,6 +801,15 @@ MainWindow::MainWindow(QWidget* parent)
                 const int oldWidth = moved.transform.width;
                 int slideDistance = static_cast<int>(std::round(std::hypot(
                     moved.openOffsetX, moved.openOffsetY)));
+                const double oldRadians =
+                    moved.transform.rotationMillidegrees *
+                    3.14159265358979323846 / 180000.0;
+                const int slideSign =
+                    moved.openOffsetX * std::cos(oldRadians) +
+                                moved.openOffsetY * std::sin(oldRadians) <
+                            0.0
+                        ? -1
+                        : 1;
                 const int deltaX = x - moved.transform.x;
                 const int deltaY = y - moved.transform.y;
                 moved.transform.x = x;
@@ -817,9 +826,9 @@ MainWindow::MainWindow(QWidget* parent)
                     const double radians = rotationMillidegrees *
                         3.14159265358979323846 / 180000.0;
                     moved.openOffsetX = static_cast<int>(std::round(
-                        slideDistance * std::cos(radians)));
+                        slideSign * slideDistance * std::cos(radians)));
                     moved.openOffsetY = static_cast<int>(std::round(
-                        slideDistance * std::sin(radians)));
+                        slideSign * slideDistance * std::sin(radians)));
                 }
                 for (OverThrustPoint& point : moved.areaPolygon) {
                     point.x += deltaX;
@@ -2000,7 +2009,7 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
         if (current >= 0) appearance->setCurrentIndex(current);
     };
     QSpinBox* slideDistance = nullptr;
-    QDoubleSpinBox* speed = nullptr;
+    QDoubleSpinBox* travelDuration = nullptr;
     QComboBox* initialState = nullptr;
     QComboBox* activationMode = nullptr;
     QDoubleSpinBox* activationRadius = nullptr;
@@ -2018,10 +2027,10 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
             1, static_cast<int>(std::round(std::hypot(
                    object.openOffsetX, object.openOffsetY))));
         slideDistance = integer(1, 4096, currentDistance);
-        speed = new QDoubleSpinBox(&dialog);
-        speed->setRange(0.001, 1024);
-        speed->setDecimals(6);
-        speed->setValue(object.speedPixelsPerSecond);
+        travelDuration = new QDoubleSpinBox(&dialog);
+        travelDuration->setRange(0.001, 3600.0);
+        travelDuration->setDecimals(6);
+        travelDuration->setValue(object.travelDurationSeconds);
         initialState = new QComboBox(&dialog);
         initialState->addItems({QStringLiteral("closed"), QStringLiteral("open")});
         initialState->setCurrentText(QString::fromStdString(object.initialState));
@@ -2044,7 +2053,7 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
                         "appearance:door/titanium",
                         "appearance:door/tungsten"});
         form->addRow(tr("Slide distance along arrow (px):"), slideDistance);
-        form->addRow(tr("Speed (px/s):"), speed);
+        form->addRow(tr("Opening / closing duration (s):"), travelDuration);
         form->addRow(tr("Initial state:"), initialState);
         form->addRow(tr("Activation:"), activationMode);
         form->addRow(tr("Proximity radius (px):"), activationRadius);
@@ -2142,6 +2151,16 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
     object.id = editedId.toStdString();
     const int moveX = x->value() - object.transform.x;
     const int moveY = y->value() - object.transform.y;
+    int slideSign = 1;
+    if (slideDistance) {
+        const double oldRadians = object.transform.rotationMillidegrees *
+            3.14159265358979323846 / 180000.0;
+        slideSign = object.openOffsetX * std::cos(oldRadians) +
+                            object.openOffsetY * std::sin(oldRadians) <
+                        0.0
+                    ? -1
+                    : 1;
+    }
     if (object.type == "team_base") {
         for (OverThrustPoint& point : object.areaPolygon) {
             point.x += moveX;
@@ -2158,10 +2177,10 @@ bool MainWindow::editOverThrustObject(OverThrustObject& object,
         const double radians = object.transform.rotationMillidegrees *
             3.14159265358979323846 / 180000.0;
         object.openOffsetX = static_cast<int>(std::round(
-            slideDistance->value() * std::cos(radians)));
+            slideSign * slideDistance->value() * std::cos(radians)));
         object.openOffsetY = static_cast<int>(std::round(
-            slideDistance->value() * std::sin(radians)));
-        object.speedPixelsPerSecond = speed->value();
+            slideSign * slideDistance->value() * std::sin(radians)));
+        object.travelDurationSeconds = travelDuration->value();
         object.initialState = initialState->currentText().toStdString();
         object.activationMode = activationMode->currentText().toStdString();
         object.activationRadiusPixels = activationRadius->value();

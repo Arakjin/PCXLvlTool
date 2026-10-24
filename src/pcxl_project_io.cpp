@@ -268,7 +268,7 @@ std::pair<std::string, std::unique_ptr<Level>> readDocument(std::istream& input)
 void writeOverThrustData(std::ostream& output,
                          const OverThrustProjectData& data)
 {
-    writeString(output, "overthrust-data-v4");
+    writeString(output, "overthrust-data-v5");
     writeString(output, data.displayName);
     writeString(output, data.author);
     writeString(output, data.description);
@@ -326,7 +326,7 @@ void writeOverThrustData(std::ostream& output,
         writeString(output, object.appearanceId);
         writeI32(output, object.openOffsetX);
         writeI32(output, object.openOffsetY);
-        writeDouble(output, object.speedPixelsPerSecond);
+        writeDouble(output, object.travelDurationSeconds);
         writeString(output, object.initialState);
         writeString(output, object.activationMode);
         writeDouble(output, object.activationRadiusPixels);
@@ -405,10 +405,14 @@ std::unique_ptr<OverThrustProjectData> readOverThrustData(std::istream& input)
     const std::string sectionVersion = readString(input);
     const bool hasAreaPolygons = sectionVersion == "overthrust-data-v2" ||
                                  sectionVersion == "overthrust-data-v3" ||
-                                 sectionVersion == "overthrust-data-v4";
+                                 sectionVersion == "overthrust-data-v4" ||
+                                 sectionVersion == "overthrust-data-v5";
     const bool hasParallaxFlag = sectionVersion == "overthrust-data-v3" ||
-                                 sectionVersion == "overthrust-data-v4";
-    const bool hasUnifiedName = sectionVersion == "overthrust-data-v4";
+                                 sectionVersion == "overthrust-data-v4" ||
+                                 sectionVersion == "overthrust-data-v5";
+    const bool hasUnifiedName = sectionVersion == "overthrust-data-v4" ||
+                                sectionVersion == "overthrust-data-v5";
+    const bool hasTravelDuration = sectionVersion == "overthrust-data-v5";
     if (!hasAreaPolygons && sectionVersion != "overthrust-data-v1") {
         throw std::runtime_error("unsupported PXLP OverThrust data section");
     }
@@ -500,7 +504,7 @@ std::unique_ptr<OverThrustProjectData> readOverThrustData(std::istream& input)
         object.appearanceId = readString(input);
         object.openOffsetX = readI32(input);
         object.openOffsetY = readI32(input);
-        if (object.type == "sliding_door") {
+        if (object.type == "sliding_door" && !hasTravelDuration) {
             const double distance = std::hypot(object.openOffsetX,
                                                object.openOffsetY);
             const double radians = object.transform.rotationMillidegrees *
@@ -510,7 +514,7 @@ std::unique_ptr<OverThrustProjectData> readOverThrustData(std::istream& input)
             object.openOffsetY = static_cast<int>(std::round(
                 distance * std::sin(radians)));
         }
-        object.speedPixelsPerSecond = readDouble(input);
+        double doorTimingValue = readDouble(input);
         object.initialState = readString(input);
         object.activationMode = readString(input);
         object.activationRadiusPixels = readDouble(input);
@@ -521,9 +525,21 @@ std::unique_ptr<OverThrustProjectData> readOverThrustData(std::istream& input)
             // v1/v2 stored these three measurements in world units. The v3
             // authoring model uses source pixels and leaves runtime cell
             // conversion to the game.
-            object.speedPixelsPerSecond *= 4.0;
+            doorTimingValue *= 4.0;
             object.activationRadiusPixels *= 4.0;
             object.radiusPixels *= 4.0;
+        }
+        if (object.type == "sliding_door") {
+            if (hasTravelDuration) {
+                object.travelDurationSeconds = doorTimingValue;
+            } else {
+                const double distance = std::hypot(object.openOffsetX,
+                                                   object.openOffsetY);
+                if (doorTimingValue <= 0)
+                    throw std::runtime_error(
+                        "invalid legacy PXLP sliding-door speed");
+                object.travelDurationSeconds = distance / doorTimingValue;
+            }
         }
         object.targetObjectId = readString(input);
         object.velocityMode = readString(input);

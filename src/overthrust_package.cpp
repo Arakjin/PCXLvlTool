@@ -84,6 +84,21 @@ bool validId(const std::string& id, const std::size_t maximum = 256)
     });
 }
 
+bool validChannelId(const std::string& id)
+{
+    constexpr std::string_view prefix = "level:";
+    if (id.size() < 7 || id.size() > 64 || id.rfind(prefix, 0) != 0 ||
+        !std::isalnum(static_cast<unsigned char>(id[prefix.size()]))) {
+        return false;
+    }
+    return std::all_of(id.begin() + static_cast<std::ptrdiff_t>(prefix.size()),
+                       id.end(), [](const char character) {
+        const unsigned char byte = static_cast<unsigned char>(character);
+        return std::isalnum(byte) || character == '.' || character == '_' ||
+               character == '/' || character == '-';
+    });
+}
+
 void validateTransform(const OverThrustTransform& transform,
                        const std::size_t levelWidth,
                        const std::size_t levelHeight, const int offsetX = 0,
@@ -181,7 +196,7 @@ void validateTeamBasePolygon(const OverThrustObject& object,
                              const std::size_t levelHeight)
 {
     const auto& polygon = object.areaPolygon;
-    if (polygon.size() < 3 || polygon.size() > 256) {
+    if (polygon.size() < 3 || polygon.size() > 64) {
         throw std::runtime_error(
             "team base polygon must contain 3 to 256 points");
     }
@@ -189,8 +204,8 @@ void validateTeamBasePolygon(const OverThrustObject& object,
     for (std::size_t index = 0; index < polygon.size(); ++index) {
         const OverThrustPoint& point = polygon[index];
         const OverThrustPoint& next = polygon[(index + 1) % polygon.size()];
-        if (point.x < 0 || point.y < 0 ||
-            point.x > static_cast<int>(levelWidth) ||
+        if (point.x < 0 || point.y < 0 || point.x > 4095 ||
+            point.y > 4095 || point.x > static_cast<int>(levelWidth) ||
             point.y > static_cast<int>(levelHeight) || point == next) {
             throw std::runtime_error("team base polygon point is invalid");
         }
@@ -272,10 +287,13 @@ void validate(const Level& level, const Level& background,
             "background dimensions are outside the allowed range for the world size");
     }
 
+    if (data.channels.size() > 256 || data.objects.size() > 4096) {
+        throw std::runtime_error("OverThrust object registry is too large");
+    }
     std::set<std::string> channels;
     for (const OverThrustChannel& channel : data.channels) {
-        if (channel.id.rfind("level:", 0) != 0 ||
-            !validId(channel.id, 64) || !channels.insert(channel.id).second) {
+        if (!validChannelId(channel.id) ||
+            !channels.insert(channel.id).second) {
             throw std::runtime_error("invalid or duplicate activation channel");
         }
     }
@@ -300,8 +318,9 @@ void validate(const Level& level, const Level& background,
                 "appearance:door/aluminium", "appearance:door/titanium",
                 "appearance:door/tungsten"};
             if ((object.openOffsetX == 0 && object.openOffsetY == 0) ||
-                object.speedPixelsPerSecond <= 0 ||
-                object.speedPixelsPerSecond > 4096 ||
+                std::hypot(object.openOffsetX, object.openOffsetY) > 4096 ||
+                object.travelDurationSeconds <= 0 ||
+                object.travelDurationSeconds > 3600 ||
                 (object.initialState != "open" &&
                  object.initialState != "closed") ||
                 !materials.count(object.materialId) ||
@@ -558,7 +577,7 @@ std::string accessJson(const OverThrustAccess& access)
 std::string objectsJson(const OverThrustProjectData& data)
 {
     std::ostringstream output;
-    output << "{\n  \"schema_version\": 2,\n"
+    output << "{\n  \"schema_version\": 4,\n"
               "  \"coordinate_space\": \"world_pixels_top_left\",\n"
               "  \"channels\": [";
     for (std::size_t index = 0; index < data.channels.size(); ++index) {
@@ -594,8 +613,8 @@ std::string objectsJson(const OverThrustProjectData& data)
                    << jsonString(localDirection < 0.0
                                      ? "negative_local_x"
                                      : "positive_local_x") << ",\n"
-                   << "      \"speed_pixels_per_second\": "
-                   << decimal(object.speedPixelsPerSecond) << ",\n"
+                   << "      \"travel_duration_seconds\": "
+                   << decimal(object.travelDurationSeconds) << ",\n"
                    << "      \"initial_state\": "
                    << jsonString(object.initialState) << ",\n"
                    << "      \"activation\": ";
@@ -656,6 +675,252 @@ std::string objectsJson(const OverThrustProjectData& data)
     if (!data.objects.empty()) output << '\n';
     output << "  ]\n}\n";
     return output.str();
+}
+
+void requireV4Keys(const QJsonObject& object,
+                   const std::initializer_list<const char*> keys,
+                   const char* context)
+{
+    if (object.size() != static_cast<qsizetype>(keys.size()))
+        throw std::runtime_error(std::string("v4 objects schema rejects fields in ") +
+                                 context);
+    for (const char* key : keys) {
+        if (!object.contains(QLatin1String(key)))
+            throw std::runtime_error(std::string("v4 objects schema requires ") +
+                                     context + "." + key);
+    }
+}
+
+std::string v4String(const QJsonObject& object, const char* key)
+{
+    const QJsonValue value = object.value(QLatin1String(key));
+    if (!value.isString())
+        throw std::runtime_error(std::string("v4 objects schema requires string ") + key);
+    return value.toString().toStdString();
+}
+
+double v4Number(const QJsonObject& object, const char* key,
+                const double minimum, const double maximum,
+                const bool exclusiveMinimum = false,
+                const bool integer = false)
+{
+    const QJsonValue value = object.value(QLatin1String(key));
+    const double number = value.toDouble(std::numeric_limits<double>::quiet_NaN());
+    if (!value.isDouble() || !std::isfinite(number) ||
+        (exclusiveMinimum ? number <= minimum : number < minimum) ||
+        number > maximum || (integer && std::floor(number) != number)) {
+        throw std::runtime_error(std::string("v4 objects schema rejects number ") + key);
+    }
+    return number;
+}
+
+QJsonObject v4Object(const QJsonObject& object, const char* key)
+{
+    const QJsonValue value = object.value(QLatin1String(key));
+    if (!value.isObject())
+        throw std::runtime_error(std::string("v4 objects schema requires object ") + key);
+    return value.toObject();
+}
+
+QJsonArray v4Array(const QJsonObject& object, const char* key)
+{
+    const QJsonValue value = object.value(QLatin1String(key));
+    if (!value.isArray())
+        throw std::runtime_error(std::string("v4 objects schema requires array ") + key);
+    return value.toArray();
+}
+
+void validateV4Id(const std::string& id, const std::size_t maximum = 256)
+{
+    if (!validId(id, maximum))
+        throw std::runtime_error("v4 objects schema rejects identifier");
+}
+
+void validateV4Point(const QJsonObject& point)
+{
+    requireV4Keys(point, {"x", "y"}, "point");
+    v4Number(point, "x", 0, 4095, false, true);
+    v4Number(point, "y", 0, 4095, false, true);
+}
+
+void validateV4Transform(const QJsonObject& transform)
+{
+    requireV4Keys(transform,
+                  {"position_pixels", "size_pixels",
+                   "rotation_millidegrees"},
+                  "transform");
+    validateV4Point(v4Object(transform, "position_pixels"));
+    const QJsonObject size = v4Object(transform, "size_pixels");
+    requireV4Keys(size, {"width", "height"}, "size_pixels");
+    v4Number(size, "width", 1, 4096, false, true);
+    v4Number(size, "height", 1, 4096, false, true);
+    v4Number(transform, "rotation_millidegrees", -359999, 359999,
+             false, true);
+}
+
+void validateV4Access(const QJsonObject& access)
+{
+    const std::string mode = v4String(access, "mode");
+    if (mode == "everyone") {
+        requireV4Keys(access, {"mode"}, "access");
+        return;
+    }
+    if (mode != "player_slots")
+        throw std::runtime_error("v4 objects schema rejects access mode");
+    requireV4Keys(access, {"mode", "player_slots"}, "access");
+    const QJsonArray playerSlotValues = v4Array(access, "player_slots");
+    if (playerSlotValues.empty() || playerSlotValues.size() > 4)
+        throw std::runtime_error("v4 objects schema rejects player slots");
+    std::set<int> unique;
+    for (const QJsonValue value : playerSlotValues) {
+        if (!value.isDouble() || std::floor(value.toDouble()) != value.toDouble() ||
+            value.toDouble() < 1 || value.toDouble() > 4 ||
+            !unique.insert(static_cast<int>(value.toDouble())).second) {
+            throw std::runtime_error("v4 objects schema rejects player slots");
+        }
+    }
+}
+
+void validateV4Activation(const QJsonObject& activation)
+{
+    const std::string mode = v4String(activation, "mode");
+    if (mode == "proximity") {
+        requireV4Keys(activation, {"mode", "radius_pixels"}, "activation");
+        v4Number(activation, "radius_pixels", 0, 4096, true);
+    } else if (mode == "channel") {
+        requireV4Keys(activation, {"mode", "channel"}, "activation");
+        if (!validChannelId(v4String(activation, "channel")))
+            throw std::runtime_error("v4 objects schema rejects channel ID");
+    } else {
+        throw std::runtime_error("v4 objects schema rejects activation mode");
+    }
+}
+
+void validateObjectsV4Json(const std::string& json)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(
+        QByteArray(json.data(), static_cast<qsizetype>(json.size())),
+        &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+        throw std::runtime_error("generated v4 objects JSON is invalid");
+    const QJsonObject root = document.object();
+    requireV4Keys(root,
+                  {"schema_version", "coordinate_space", "channels",
+                   "objects"},
+                  "root");
+    if (v4Number(root, "schema_version", 4, 4, false, true) != 4 ||
+        v4String(root, "coordinate_space") != "world_pixels_top_left")
+        throw std::runtime_error("generated objects JSON is not schema v4");
+
+    const QJsonArray channels = v4Array(root, "channels");
+    if (channels.size() > 256)
+        throw std::runtime_error("v4 objects schema rejects channel count");
+    for (const QJsonValue value : channels) {
+        if (!value.isObject())
+            throw std::runtime_error("v4 objects schema rejects channel");
+        const QJsonObject channel = value.toObject();
+        requireV4Keys(channel, {"id", "initial_state"}, "channel");
+        const std::string id = v4String(channel, "id");
+        if (!validChannelId(id))
+            throw std::runtime_error("v4 objects schema rejects channel ID");
+        const std::string state = v4String(channel, "initial_state");
+        if (state != "inactive" && state != "active")
+            throw std::runtime_error("v4 objects schema rejects channel state");
+    }
+
+    const QJsonArray objects = v4Array(root, "objects");
+    if (objects.size() > 4096)
+        throw std::runtime_error("v4 objects schema rejects object count");
+    for (const QJsonValue value : objects) {
+        if (!value.isObject())
+            throw std::runtime_error("v4 objects schema rejects object");
+        const QJsonObject object = value.toObject();
+        const std::string id = v4String(object, "id");
+        const std::string type = v4String(object, "type");
+        validateV4Id(id);
+        validateV4Transform(v4Object(object, "transform"));
+        if (type == "sliding_door") {
+            requireV4Keys(
+                object,
+                {"id", "type", "transform", "slide_distance_pixels",
+                 "slide_direction", "travel_duration_seconds",
+                 "initial_state", "activation", "access", "material_id",
+                 "appearance_id"},
+                "sliding_door");
+            v4Number(object, "slide_distance_pixels", 0, 4096, true);
+            v4Number(object, "travel_duration_seconds", 0, 3600, true);
+            const std::string direction = v4String(object, "slide_direction");
+            if (direction != "negative_local_x" &&
+                direction != "positive_local_x")
+                throw std::runtime_error("v4 objects schema rejects slide direction");
+            const std::string state = v4String(object, "initial_state");
+            if (state != "open" && state != "closed")
+                throw std::runtime_error("v4 objects schema rejects door state");
+            validateV4Activation(v4Object(object, "activation"));
+            validateV4Access(v4Object(object, "access"));
+            validateV4Id(v4String(object, "material_id"));
+            validateV4Id(v4String(object, "appearance_id"));
+        } else if (type == "teleporter") {
+            requireV4Keys(object,
+                          {"id", "type", "transform", "radius_pixels",
+                           "target_object_id", "velocity_mode", "access",
+                           "appearance_id"},
+                          "teleporter");
+            v4Number(object, "radius_pixels", 0, 4096, true);
+            validateV4Id(v4String(object, "target_object_id"));
+            const std::string velocity = v4String(object, "velocity_mode");
+            if (velocity != "preserve" && velocity != "zero" &&
+                velocity != "rotate_to_exit")
+                throw std::runtime_error("v4 objects schema rejects velocity mode");
+            validateV4Access(v4Object(object, "access"));
+            validateV4Id(v4String(object, "appearance_id"));
+        } else if (type == "service_orb") {
+            requireV4Keys(object,
+                          {"id", "type", "transform", "radius_pixels",
+                           "service_profile_id", "services", "access",
+                           "appearance_id"},
+                          "service_orb");
+            v4Number(object, "radius_pixels", 0, 4096, true);
+            validateV4Id(v4String(object, "service_profile_id"));
+            const QJsonArray services = v4Array(object, "services");
+            std::set<std::string> unique;
+            if (services.empty())
+                throw std::runtime_error("v4 objects schema rejects services");
+            for (const QJsonValue service : services) {
+                if (!service.isString() ||
+                    (service.toString() != QStringLiteral("heal") &&
+                     service.toString() != QStringLiteral("weapon_change")) ||
+                    !unique.insert(service.toString().toStdString()).second)
+                    throw std::runtime_error("v4 objects schema rejects services");
+            }
+            validateV4Access(v4Object(object, "access"));
+            validateV4Id(v4String(object, "appearance_id"));
+        } else if (type == "team_base") {
+            requireV4Keys(object,
+                          {"id", "type", "transform", "team_slot",
+                           "base_profile_id", "area_polygon_pixels",
+                           "appearance_id"},
+                          "team_base");
+            v4Number(object, "team_slot", 1, 4, false, true);
+            validateV4Id(v4String(object, "base_profile_id"));
+            validateV4Id(v4String(object, "appearance_id"));
+            const QJsonArray polygon = v4Array(object, "area_polygon_pixels");
+            if (polygon.size() < 3 || polygon.size() > 64)
+                throw std::runtime_error("v4 objects schema rejects polygon size");
+            for (const QJsonValue point : polygon) {
+                if (!point.isObject())
+                    throw std::runtime_error("v4 objects schema rejects polygon point");
+                validateV4Point(point.toObject());
+            }
+        } else if (type == "capture_flag") {
+            requireV4Keys(object, {"id", "type", "transform", "team_slot"},
+                          "capture_flag");
+            v4Number(object, "team_slot", 1, 4, false, true);
+        } else {
+            throw std::runtime_error("v4 objects schema rejects object type");
+        }
+    }
 }
 
 std::string manifestJson(const Level& level,
@@ -825,7 +1090,9 @@ bool publishOverThrustPackage(const std::filesystem::path& file,
         if (!data.background.empty()) {
             writeFile(staging / "background.png", png);
         }
-        writeFile(staging / "objects.json", objectsJson(data));
+        const std::string v4Objects = objectsJson(data);
+        validateObjectsV4Json(v4Objects);
+        writeFile(staging / "objects.json", v4Objects);
         std::vector<OvlChunk> chunks;
         chunks.push_back({"MANIFEST", readFile(staging / "manifest.json")});
         chunks.push_back({"MATERIAL", readFile(staging / "materials.pcx")});
@@ -1106,10 +1373,18 @@ void parseManifest(const QJsonObject& manifest, OverThrustProjectData& data,
 
 void parseObjects(const QJsonObject& root, OverThrustProjectData& data)
 {
-    if (requiredInt(root, "schema_version") != 2 ||
+    const int schemaVersion = requiredInt(root, "schema_version");
+    if ((schemaVersion != 2 && schemaVersion != 3 && schemaVersion != 4) ||
         requiredString(root, "coordinate_space") !=
             "world_pixels_top_left") {
         throw std::runtime_error("unsupported OverThrust objects schema");
+    }
+    if (schemaVersion == 4) {
+        const QByteArray canonical =
+            QJsonDocument(root).toJson(QJsonDocument::Compact);
+        validateObjectsV4Json(
+            std::string(canonical.constData(),
+                        static_cast<std::size_t>(canonical.size())));
     }
     for (const QJsonValue channelValue : requiredArray(root, "channels")) {
         if (!channelValue.isObject())
@@ -1138,7 +1413,10 @@ void parseObjects(const QJsonObject& root, OverThrustProjectData& data)
                             requiredInt(transform, "rotation_millidegrees")};
         if (object.type == "sliding_door") {
             const double distance = requiredNumber(value, "slide_distance_pixels");
-            const std::string direction = requiredString(value, "slide_direction");
+            const std::string direction =
+                schemaVersion == 2
+                    ? "positive_local_x"
+                    : requiredString(value, "slide_direction");
             if (direction != "positive_local_x" &&
                 direction != "negative_local_x")
                 throw std::runtime_error("invalid OVL door slide direction");
@@ -1150,8 +1428,19 @@ void parseObjects(const QJsonObject& root, OverThrustProjectData& data)
                 std::round(signedDistance * std::cos(radians)));
             object.openOffsetY = static_cast<int>(
                 std::round(signedDistance * std::sin(radians)));
-            object.speedPixelsPerSecond =
-                requiredNumber(value, "speed_pixels_per_second");
+            if (schemaVersion == 4) {
+                if (value.contains(QStringLiteral("speed_pixels_per_second")))
+                    throw std::runtime_error(
+                        "v4 OVL door contains obsolete speed field");
+                object.travelDurationSeconds =
+                    requiredNumber(value, "travel_duration_seconds");
+            } else {
+                const double speed =
+                    requiredNumber(value, "speed_pixels_per_second");
+                if (speed <= 0)
+                    throw std::runtime_error("invalid legacy OVL door speed");
+                object.travelDurationSeconds = distance / speed;
+            }
             object.initialState = requiredString(value, "initial_state");
             const QJsonObject activation = requiredObject(value, "activation");
             object.activationMode = requiredString(activation, "mode");
