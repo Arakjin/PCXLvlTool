@@ -4,7 +4,7 @@ project(PCXLvlTool VERSION 0.2.5 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Svg Widgets)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Svg Widgets)
 
 add_library(vwing_level_format
     src/auts_io.cpp
@@ -24,6 +24,7 @@ add_library(vwing_level_format
     src/wings_lev_writer.cpp
 )
 target_include_directories(vwing_level_format PUBLIC src)
+target_link_libraries(vwing_level_format PRIVATE Qt6::Core)
 
 add_executable(levdump
     tools/levdump/main.cpp
@@ -133,6 +134,8 @@ install(FILES
     docs/game-guide-overthrust-fi.md
     docs/licenses-fi.md
     docs/pxlp-format.md
+    docs/overthrust-ovl.md
+    docs/overthrust-layered-pcx.md
     docs/auts-format.md
     DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/PCXLvlTool
 )

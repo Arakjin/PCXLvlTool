@@ -3,10 +3,19 @@
 OverThrust-kenttäprojektissa on indeksoitu materiaalikuva, erillinen
 indeksoitu piirrettävä tausta, valinnainen RGBA-esitystausta ja rasterista
 riippumattomat peliobjektit. Muokattava projekti tallennetaan
-`.pxlp`-tiedostoksi. **Publish OverThrust Level…** luo
-`<level-id>.OLV`-pakettihakemiston, jossa ovat `manifest.json`, `materials.pcx`,
-`background.pcx` ja `objects.json`. Jos esitystausta on tuotu, mukana on lisäksi
-`background.png`.
+`.pxlp`-tiedostoksi. **Publish OverThrust Level…** luo yhden natiivin
+`<level-id>.OVL`-binääritiedoston. Sen tyypitetyt lohkot sisältävät manifestin,
+materiaalien PCX-kuvan, taustan OPCX-kuvan ja objektit. Jos esitystausta on
+tuotu, mukana on lisäksi PNG-lohko. OVL ei ole ZIP-tiedosto eikä hakemisto.
+Valmiin OVL-tiedoston voi avata suoraan **File > Open** -toiminnolla, jolloin
+materiaalit, erilliset OPCX-taustatasot, asetukset ja objektit palautuvat
+editoriin.
+
+OverThrust Layered PCX -muotoinen `background.opcx` sisältää kaikki piirrettävän
+taustan tasot erillisinä: kunkin
+tason paletti-indeksit, läpinäkyvyysmaski, nimi, näkyvyys ja lukitus säilyvät.
+Tiedoston tavallinen PCX-kuva on näkyvien tasojen yhdistetty yhteensopivuuskuva,
+mutta se ei korvaa erillisiä tasotietoja.
 
 Kentän leveys ja korkeus annetaan suoraan pikseleinä. Esimerkiksi 400 × 400
 tarkoittaa editorissa 400 × 400 pikselin maailmaa. PCX Level Tool ei muuta
@@ -76,12 +85,12 @@ vapaasti, mutta niiden RGB-väri ei muuta niitä kiinteäksi materiaaliksi.
 
 ## Taustakuva
 
-Editorin **PCX Background** -välilehdellä piirretään `background.pcx`. Se on
+Editorin **OPCX Background** -välilehdellä piirretään `background.opcx`. Se on
 aina käytössä ja täsmälleen kentän kokoinen. Sillä on materiaalikuvasta täysin
 erillinen, vapaasti muokattava 256 värin paletti. Tätä taustaa ei vieritetä
 eikä parallaksoida. Sen avulla voi piirtää esimerkiksi veden alta näkyvän
 kuvituksen vaikuttamatta `materials.pcx`-soluihin. Pikselivalinnan voi kopioida
-Materials- ja PCX Background -välilehtien välillä; liitetyt indeksit käyttävät
+Materials- ja OPCX Background -välilehtien välillä; liitetyt indeksit käyttävät
 kohdevälilehden omaa palettia.
 
 Valinnainen esitystausta voidaan tuoda PNG-, JPEG- tai staattisesta
@@ -125,7 +134,7 @@ Team base luodaan merkitsemällä alueen monikulmion kulmat. Monikulmio
 päätetään kaksoisnapsautuksella, hiiren oikealla painikkeella tai Enterillä;
 Escape peruu luonnoksen. Luotu tukikohta poistuu valinnasta automaattisesti.
 Jokainen napsautettu kulmapiste tallennetaan järjestyksessä julkaistun
-`objects.json`-tiedoston `area_polygon_pixels`-taulukkoon. **Redraw area**
+OVL-tiedoston `OBJECTS`-lohkon `area_polygon_pixels`-taulukkoon. **Redraw area**
 korvaa valitun tukikohdan alueen.
 Capture the flag käyttää tukikohdasta erillistä **capture flag** -objektia.
 Luo kullekin joukkueelle oma lippu, valitse sama team slot kuin tukikohdalla ja
@@ -140,4 +149,4 @@ objektit ovat kentän ulkopuolella, tunnisteita on kahteen kertaan,
 teleportin kohde puuttuu, tukikohdan monikulmio leikkaa itsensä tai valittu
 joukkuetila ei sisällä vähintään kahta kelvollista tukikohtaa. CTF-julkaisu
 estetään myös, jos joltain sidotulta joukkueelta puuttuu erillinen lippu. Virhe ei jätä
-osittaista `.OLV`-pakettihakemistoa.
+osittaista `.OVL`-pakettitiedostoa.

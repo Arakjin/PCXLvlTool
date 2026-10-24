@@ -2417,9 +2417,10 @@ void MainWindow::openLevel()
 
     const QString filename = QFileDialog::getOpenFileName(
         this, tr("Open project or level"), QString(),
-        tr("PCX Level Tool projects, levels and PCX (*.pxlp *.PXLP *.lev *.LEV *.pcx *.PCX);;"
+        tr("PCX Level Tool projects and levels (*.pxlp *.PXLP *.ovl *.OVL *.lev *.LEV *.pcx *.PCX);;"
            "PCX Level Tool projects (*.pxlp *.PXLP);;"
-           "Supported game levels (*.lev *.LEV);;"
+           "Supported game levels (*.ovl *.OVL *.lev *.LEV);;"
+           "OverThrust levels (*.ovl *.OVL);;"
            "Indexed PCX images (*.pcx *.PCX)"));
     if (filename.isEmpty()) {
         return;
@@ -2435,6 +2436,9 @@ void MainWindow::openLevel()
     const bool isPcx =
         QString::compare(suffix, QStringLiteral("pcx"),
                          Qt::CaseInsensitive) == 0;
+    const bool isOvl =
+        QString::compare(suffix, QStringLiteral("ovl"),
+                         Qt::CaseInsensitive) == 0;
     const bool isProject = isPxlProject;
     std::unique_ptr<Level> loadedBackground;
     std::unique_ptr<OverThrustProjectData> loadedOverThrust;
@@ -2444,6 +2448,21 @@ void MainWindow::openLevel()
         loadedSuccessfully = loadPxlProject(
             path, *loaded, loadedBackground, loadedSettings, loadedOverThrust,
             error);
+    } else if (isOvl) {
+        loadedBackground = std::make_unique<Level>();
+        loadedOverThrust = std::make_unique<OverThrustProjectData>();
+        loadedSuccessfully = loadOverThrustPackage(
+            path, *loaded, *loadedBackground, *loadedOverThrust, error);
+        if (loadedSuccessfully) {
+            loadedSettings.game = GameId::OverThrust;
+            loadedSettings.name = loadedOverThrust->displayName;
+            loadedSettings.width = static_cast<int>(loaded->width);
+            loadedSettings.height = static_cast<int>(loaded->height);
+            loadedSettings.backgroundMode =
+                loadedOverThrust->background.empty()
+                    ? BackgroundMode::None
+                    : BackgroundMode::ExternalTrueColor;
+        }
     } else if (isPcx) {
         loadedSuccessfully = loadPcx(path, *loaded, error);
         if (loadedSuccessfully) {
@@ -2516,7 +2535,7 @@ void MainWindow::openLevel()
     backgroundLevel_ = std::move(loadedBackground);
     overthrustData_ = std::move(loadedOverThrust);
     creationSettings_ = loadedSettings;
-    if (!isPxlProject && !isPcx) {
+    if (!isPxlProject && !isPcx && !isOvl) {
         if (creationSettings_.game != GameId::Auts) {
             creationSettings_.game = GameId::VWing;
         }
@@ -3245,7 +3264,7 @@ void MainWindow::configureProfileDocuments()
     documentTabs_->setVisible(wings || overthrust);
     documentTabs_->setTabText(0, overthrust ? tr("Materials") : tr("Level"));
     documentTabs_->setTabText(
-        1, overthrust ? tr("PCX Background") : tr("Background"));
+        1, overthrust ? tr("OPCX Background") : tr("Background"));
     if (!wings && !overthrust) {
         backgroundLevel_.reset();
         return;
@@ -3437,7 +3456,7 @@ void MainWindow::switchProfileDocument(const int index)
     const bool overthrust = creationSettings_.game == GameId::OverThrust;
     statusBar()->showMessage(
         index == 1
-            ? (overthrust ? tr("Editing OverThrust PCX background: %1 x %2")
+            ? (overthrust ? tr("Editing OverThrust OPCX background: %1 x %2")
                               : tr("Editing Wings background: %1 x %2"))
                   .arg(document->width)
                   .arg(document->height)
@@ -3490,7 +3509,7 @@ void MainWindow::updateMaterialDetails(const int index)
     if (editable) {
         editColorButton_->setToolTip(
             overthrustBackground
-                ? tr("Change this color only in the PCX background palette")
+                ? tr("Change this color only in the OPCX background palette")
                 : tr("Change this palette color globally"));
     } else if (creationSettings_.game == GameId::Auts) {
         editColorButton_->setToolTip(tr("AUTS uses a fixed game palette"));
@@ -3603,7 +3622,7 @@ bool MainWindow::publishLevel()
                         },
                         '_');
         if (suggested.empty()) {
-            suggested = std::filesystem::path(safeName + ".OLV");
+            suggested = std::filesystem::path(safeName + ".OVL");
         }
         QSettings settings;
         const QString configuredDirectory =
@@ -3615,11 +3634,11 @@ bool MainWindow::publishLevel()
         QString filename = QFileDialog::getSaveFileName(
             this, tr("Publish OverThrust level package"),
             toQString(suggested),
-            tr("OverThrust level packages (*.OLV *.olv)"));
+            tr("OverThrust level packages (*.OVL *.ovl)"));
         if (filename.isEmpty()) return false;
-        if (!filename.endsWith(QStringLiteral(".olv"),
+        if (!filename.endsWith(QStringLiteral(".ovl"),
                                Qt::CaseInsensitive)) {
-            filename += QStringLiteral(".OLV");
+            filename += QStringLiteral(".OVL");
         }
         return writePublishedLevel(toPath(filename));
     }
@@ -3677,7 +3696,7 @@ bool MainWindow::writePublishedLevel(const std::filesystem::path& path)
         flattenLayers(*level_);
         if (!backgroundLevel_) {
             QMessageBox::critical(this, tr("Publish failed"),
-                                  tr("OverThrust PCX background is missing."));
+                                  tr("OverThrust OPCX background is missing."));
             return false;
         }
         flattenLayers(*backgroundLevel_);

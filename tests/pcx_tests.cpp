@@ -1,5 +1,6 @@
 #include "pcx_reader.h"
 #include "pcx_writer.h"
+#include "layer_model.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -187,6 +188,48 @@ int main()
                      oddLoaded.pixels == oddWidth.pixels &&
                      oddLoaded.palette == oddWidth.palette,
                  "odd-width PCX round-trip changed indexed data");
+
+    Level layered = oddWidth;
+    initializeBackgroundLayer(layered);
+    layered.layers.emplace_back();
+    Level::Layer& upper = layered.layers.back();
+    upper.name = "Upper details";
+    upper.visible = false;
+    upper.locked = true;
+    upper.pixels.resize(layered.pixelCount());
+    upper.mask.resize(layered.pixelCount());
+    upper.pixels[1] = 42;
+    upper.pixels[4] = 77;
+    upper.mask[1] = 1;
+    upper.mask[4] = 1;
+    layered.activeLayer = 1;
+    flattenLayers(layered);
+    const TestFile layeredFile(std::filesystem::current_path() /
+                               "pcx-layered-test.opcx");
+    error.clear();
+    ok &= expect(saveOverThrustLayeredPcx(layeredFile.path(), layered, error),
+                 "OPCX could not be written: " + error);
+    Level layeredLoaded;
+    error.clear();
+    ok &= expect(loadOverThrustLayeredPcx(layeredFile.path(), layeredLoaded,
+                                          error),
+                 "OPCX could not be loaded: " + error);
+    ok &= expect(layeredLoaded.pixels == layered.pixels &&
+                     layeredLoaded.palette == layered.palette &&
+                     layeredLoaded.layers.size() == 2 &&
+                     layeredLoaded.activeLayer == 1 &&
+                     layeredLoaded.layers[0].pixels ==
+                         layered.layers[0].pixels &&
+                     layeredLoaded.layers[0].mask == layered.layers[0].mask &&
+                     layeredLoaded.layers[1].name == "Upper details" &&
+                     !layeredLoaded.layers[1].visible &&
+                     layeredLoaded.layers[1].locked &&
+                     layeredLoaded.layers[1].pixels == upper.pixels &&
+                     layeredLoaded.layers[1].mask == upper.mask,
+                 "OPCX did not preserve separate layer records");
+    error.clear();
+    ok &= expect(!loadPcx(layeredFile.path(), layeredLoaded, error),
+                 "ordinary PCX loader accepted an OPCX file");
 
     Level fourHundred;
     fourHundred.resize(400, 400);

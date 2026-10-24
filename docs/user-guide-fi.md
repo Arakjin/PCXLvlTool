@@ -1,7 +1,7 @@
 # PCX Level Tool – käyttöohje
 
 PCX Level Tool on pikselintarkka kenttäeditori V-Wingille, Wingsille, AUTSille
-ja OverThrustille. Ohjelma avaa tuettuja `.LEV`-, `.pcx`- ja
+ja OverThrustille. Ohjelma avaa tuettuja `.LEV`-, `.OVL`-, `.pcx`- ja
 `.pxlp`-tiedostoja ja tallentaa monitasoisen työn muokattavana
 `.pxlp`-projektina.
 
@@ -17,8 +17,9 @@ luodessa ja kuvaa tuodessa aina oikea kohdepeli.
 
 - **File > New level** (`Ctrl+N`) kysyy pelin ja luo sille oikeankokoisen tyhjän
   kentän sekä oletuspaletin.
-- **File > Open** (`Ctrl+O`) avaa `.LEV`-kentän, `.pcx`-kuvan tai
-  `.pxlp`-projektin. PCX-kuvalle valitaan yhteensopiva peliprofiili.
+- **File > Open** (`Ctrl+O`) avaa `.LEV`- tai `.OVL`-kentän, `.pcx`-kuvan tai
+  `.pxlp`-projektin. OVL avautuu suoraan muokattavaksi OverThrust-kentäksi
+  erillisine taustatasoineen. PCX-kuvalle valitaan yhteensopiva peliprofiili.
 - **File > Export current image as PCX** kirjoittaa aktiivisen indeksoidun
   dokumentin suoraan PCX-kuvaksi täsmällisine indekseineen ja paletteineen.
 - V-Wingissä yläpalkin **Level name** määrittää pelissä näkyvän kentän nimen.
@@ -186,12 +187,18 @@ Help-valikon erillisistä V-Wing-, Wings-, AUTS- ja OverThrust-ohjeista.
 
 ## Kentän julkaiseminen peliin
 
-OverThrustissa valitaan **File > Publish OverThrust Level**. Ohjelma luo
-`.OLV`-pakettihakemiston, jonka tiedostot ovat suoraan pelin/cookerin käyttämä
-julkaisu. Aina käytössä oleva piirrettävä tausta julkaistaan
-`background.pcx`-tiedostona. Valinnainen esitystausta lisätään erillisenä
-`background.png`-tiedostona. Julkaisu tarkistaa ensin materiaalit, taustat, objektit ja
-viittaukset eikä jätä virhetilanteessa osittaista hakemistoa.
+OverThrustissa valitaan **File > Publish OverThrust Level**. Ohjelma luo yhden
+natiivin `.OVL`-binääritiedoston, jonka tyypitetyt lohkot ovat suoraan
+pelin/cookerin käyttämä julkaisu. OVL ei ole ZIP-tiedosto. Aina käytössä oleva
+piirrettävä tausta julkaistaan OVL:n `BACKGRND`-lohkoon OverThrust Layered PCX
+-muodossa. Valinnainen esitystausta lisätään erilliseen `PRESENT`-lohkoon.
+OPCX-sisältö säilyttää piirrettävän taustan tasot erillisinä
+paletti-indekseineen ja läpinäkyvyysmaskeineen. Julkaisu
+tarkistaa ensin materiaalit, taustat, objektit ja
+viittaukset eikä jätä virhetilanteessa osittaista pakettitiedostoa.
+Valmiin OVL-kentän voi avata uudelleen valinnalla **File > Open**. Sen voi
+julkaista takaisin samaan tiedostoon tiedostodialogin korvausvahvistuksen
+jälkeen; **Save project** tallentaa siitä erillisen muokattavan `.pxlp`-projektin.
 
 V-Wing-, Wings- ja AUTS-kentät julkaistaan seuraavasti:
 

@@ -6,10 +6,10 @@ All notable changes to PCX Level Tool are documented in this file.
 
 - Keep copied pixel selections available while switching between the main and
   background documents in Wings and OverThrust.
-- Add an always-enabled, world-sized OverThrust `background.pcx` editing tab
+- Add an always-enabled, world-sized OverThrust `background.opcx` editing tab
   with an independent, fully editable 256-color palette. Keep parallax and
   scrolling exclusive to the optional imported `background.png`, publish both
-  assets distinctly in manifest schema v5, and persist the extra document and
+  assets distinctly in manifest schema v3, and persist the extra document and
   palette in PXLP v3.
 - Show only the dynamically calculated maximum OverThrust background
   dimensions in level settings, allow any smaller positive dimensions and
@@ -25,7 +25,7 @@ All notable changes to PCX Level Tool are documented in this file.
   sized sliding-gate previews, editable teleporter targets, automatic pairing for new
   unpaired teleporters, and dotted connection overlays.
 - Define team-base gameplay coverage with editable canvas polygons, retain the
-  polygon in PXLP, and publish it in deterministic objects schema version 4.
+  polygon in PXLP, and publish it in deterministic objects schema version 2.
 - Separate capture flags from team-base polygons so each flag has its own
   draggable object position and explicit CTF team binding in the manifest.
 - Deselect a newly created team base automatically, preserve an empty object
@@ -37,9 +37,16 @@ All notable changes to PCX Level Tool are documented in this file.
   explicitly labelled optional canvas-preview toggle.
 - Add direct object move, separate width/height resize, corner resize, and
   rotation handles while retaining numeric properties for precision.
-- Publish deterministic `.OLV` level-package directories containing canonical
-  `manifest.json`, `materials.pcx`, `background.pcx`, and `objects.json` files,
-  plus `background.png` when an optional presentation background is supplied.
+- Publish deterministic native `.OVL` binary containers with a versioned
+  header, typed chunk table, explicit offsets and sizes, and per-chunk CRC-32.
+  Payload chunks contain the manifest, materials PCX, background OPCX, objects,
+  and an optional presentation PNG without a ZIP or directory layer.
+- Open native `.OVL` levels through **File > Open**, restoring their editable
+  materials, separate OPCX background layers, settings, objects, and optional
+  presentation background, with full container and CRC validation.
+- Preserve every indexed background layer separately inside the distinct
+  OverThrust Layered PCX (`background.opcx`) format, while retaining the
+  visible composite as its ordinary PCX compatibility image.
 - Simplify OverThrust settings by removing level player-count, spawn-policy,
   and boundary-policy fields; author world dimensions and object measurements
   directly in pixels without editor-side cell conversion; and add a background

@@ -2,7 +2,7 @@
 
 `.pxlp` is PCX Level Tool's versioned, game-tagged editable project format.
 It is not a game level file. A project must be published separately to the
-selected game's runtime format (`.LEV` or an OverThrust `.OLV` package directory).
+selected game's runtime format (`.LEV` or a single-file OverThrust `.OVL` package).
 
 Version 1 stores:
 

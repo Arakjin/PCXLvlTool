@@ -44,7 +44,8 @@ Run:
 
 The current milestone supports:
 
-- opening `.LEV`, indexed `.pcx`, and layered `.pxlp` files, plus exporting
+- opening `.LEV`, native OverThrust `.OVL`, indexed `.pcx`, and layered `.pxlp`
+  files, plus exporting
   the current indexed document directly as deterministic PCX
 - authoring OverThrust material grids with expanded rock, bedrock, soil, and
   rubble appearances plus editable fly-through colors through index 255,
@@ -53,10 +54,14 @@ The current milestone supports:
   parallax flag and preview, typed level
   settings, and non-rasterized sliding gates, teleporters, service orbs, and polygonal
   independently placed capture flags and polygonal team-base areas
-- publishing deterministic `.OLV` level-package directories containing
-  `manifest.json`, `materials.pcx`, `background.pcx`, `objects.json`, and
-  optional `background.png`
-- PXLP v3 persistence for OverThrust's independently paletted background PCX,
+- publishing deterministic native `.OVL` binary containers with typed chunks
+  for the manifest, materials PCX, background OPCX, objects, and optional
+  presentation PNG; the OverThrust Layered PCX (`.OPCX`) background retains
+  its separate editable layers
+- reopening `.OVL` levels for editing through **File > Open**, including their
+  material image, separate OPCX background layers, settings, objects, and
+  optional presentation background
+- PXLP v3 persistence for OverThrust's independently paletted OPCX background,
   embedded presentation background, and object records, while retaining older
   project loading
 - saving and reopening Wings work, including parallax layers and settings, as
